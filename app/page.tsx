@@ -1577,7 +1577,7 @@ function Records({
         </small>
       </div>
       <div className={kind === "cash" ? "" : "recordsGrid"}>
-        <div className="table">
+        <div className="recordsTable">
           <table>
           <thead>
             <tr>
@@ -1623,7 +1623,7 @@ function Records({
               <tr key={x.id}>
                 <td>{date(x.date, language)}</td>
                 <td>
-                  <b>{localizeData(x.source, language)}</b>
+                  <b className="cellTitle" title={localizeData(x.source, language)}>{localizeData(x.source, language)}</b>
                 </td>
                 <td>
                   {showListColumn ? (
@@ -2547,7 +2547,7 @@ function Archive({
           }}
         />
       </div>
-      <div className="table">
+      <div className="recordsTable">
         <table>
           <thead>
             <tr>
@@ -3144,7 +3144,7 @@ function TemplateTable({ title, kind, lines, total, language }: { title: string;
 }
 
 function ReportLines({ lines, language }: { lines: ReportLine[]; language: Language }) {
-  return <div className="table compactReportTable"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Başlık", "Category", "Sernav")}</th><th>{tx(language, "Detay / Not", "Detail / Note", "Hûrgulî / Nîşe")}</th><th>{tx(language, "Tutar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || line.note || "—"}</td><td className="amount">{money(line.amount)}</td></tr>)}</tbody></table></div>;
+  return <div className="recordsTable compactReportTable"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Başlık", "Category", "Sernav")}</th><th>{tx(language, "Detay / Not", "Detail / Note", "Hûrgulî / Nîşe")}</th><th>{tx(language, "Tutar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || line.note || "—"}</td><td className="amount">{money(line.amount)}</td></tr>)}</tbody></table></div>;
 }
 
 function AnnualReports({
@@ -3223,7 +3223,7 @@ function AnnualReports({
         </div>
         <strong>{money(selectedTotal)}</strong>
       </div>
-      <div className="table">
+      <div className="recordsTable">
         <table>
           <thead>
             <tr>
