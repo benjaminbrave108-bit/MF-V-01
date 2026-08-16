@@ -49,7 +49,18 @@ type FinanceNote = {
   updatedAt: string;
 };
 type Language = "tr" | "en" | "ku";
-type Profile = { name: string; username: string; role: string; avatar: string };
+type Profile = { name: string; username: string; role: string; avatar: string; isAdmin: boolean; permissions: Page[] };
+type UserAccount = {
+  id: number;
+  name: string;
+  username: string;
+  password: string;
+  roleLabel: string;
+  isAdmin: boolean;
+  permissions: Page[];
+};
+const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "archive"];
+const adminOnlyPages: Page[] = ["users", "settings"];
 type ReportLine = { date: string; title: string; detail: string; note: string; amount: number };
 type PreparedReport = {
   id: string;
@@ -90,20 +101,10 @@ const defaultTypography: TypographySettings = {
 
 const monthNames = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"];
 
-const previewUsers = [
-  { username: "admin", password: "admin123", name: "Admin", role: "Yönetici" },
-  {
-    username: "manager",
-    password: "manager123",
-    name: "Finans Müdürü",
-    role: "Yönetici",
-  },
-  {
-    username: "user",
-    password: "user123",
-    name: "Veri Girişi",
-    role: "Kullanıcı",
-  },
+const defaultUsers: UserAccount[] = [
+  { id: 1, username: "admin", password: "admin123", name: "Admin", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
+  { id: 2, username: "manager", password: "manager123", name: "Finans Müdürü", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
+  { id: 3, username: "user", password: "user123", name: "Veri Girişi", roleLabel: "Kullanıcı", isAdmin: false, permissions: ["cash", "income", "expense"] },
 ];
 
 const seed: RecordItem[] = [];
@@ -181,7 +182,10 @@ export default function Home() {
     username: "admin",
     role: "Yönetici",
     avatar: "",
+    isAdmin: true,
+    permissions: [],
   });
+  const [users, setUsers] = useState<UserAccount[]>(defaultUsers);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
   const [preparedReports, setPreparedReports] = useState<PreparedReport[]>([]);
@@ -215,9 +219,10 @@ export default function Home() {
         setCompany(data.company ?? "Maliye-Finans");
         setLanguage(data.language ?? "tr");
         setProfile({
-          ...{ name: "Admin", username: "admin", role: "Yönetici", avatar: "" },
+          ...{ name: "Admin", username: "admin", role: "Yönetici", avatar: "", isAdmin: true, permissions: [] },
           ...(data.profile ?? {}),
         });
+        if (Array.isArray(data.users) && data.users.length) setUsers(data.users);
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
         if (data.typography) setTypography({ ...defaultTypography, ...data.typography });
         setActiveDatabase(localStorage.getItem("mf-active-database") || "Ana Şirket Veritabanı");
@@ -274,11 +279,23 @@ export default function Home() {
         company,
         language,
         profile,
+        users,
         preparedReports,
         typography,
       }),
     );
-  }, [storageReady, records, archive, notes, logo, company, language, profile, preparedReports, typography]);
+  }, [storageReady, records, archive, notes, logo, company, language, profile, users, preparedReports, typography]);
+
+  function canAccess(pageId: Page) {
+    if (profile.isAdmin) return true;
+    if (pageId === "dashboard") return true;
+    if (adminOnlyPages.includes(pageId)) return false;
+    return profile.permissions.includes(pageId);
+  }
+
+  useEffect(() => {
+    if (signedIn && !canAccess(page)) setPage("dashboard");
+  }, [signedIn, page, profile]);
 
   function saveRecord(next: Omit<RecordItem, "id">, id?: number) {
     const fallbackKasaName =
@@ -352,7 +369,7 @@ export default function Home() {
     ];
   }
   function checkPassword(password: string) {
-    return previewUsers.some(
+    return users.some(
       (x) => x.username === profile.username && x.password === password,
     );
   }
@@ -383,7 +400,7 @@ export default function Home() {
   }
 
   function signIn(username: string, password: string) {
-    const account = previewUsers.find(
+    const account = users.find(
       (x) => x.username === username.trim() && x.password === password,
     );
     if (!account) return false;
@@ -391,7 +408,9 @@ export default function Home() {
       ...current,
       name: account.name,
       username: account.username,
-      role: account.role,
+      role: account.roleLabel,
+      isAdmin: account.isAdmin,
+      permissions: account.permissions,
     }));
     sessionStorage.setItem("mf-preview-session", "active");
     setSignedIn(true);
@@ -439,7 +458,7 @@ export default function Home() {
           </div>
         </div>
         <nav>
-          {nav.map((n) => (
+          {nav.filter((n) => canAccess(n.id)).map((n) => (
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
@@ -469,7 +488,6 @@ export default function Home() {
             {nav.find((n) => n.id === page)?.label[language]}
           </h1>
           <div className="headerActions">
-            <span className="activeDatabaseBadge" title={tx(language, "Aktif veritabanı", "Active database", "Danegeha çalak")}>▣ {activeDatabase}</span>
             <div className="zoomControl" title={tx(language, "Ekran ölçeği (Ctrl + / Ctrl -)", "Interface zoom (Ctrl + / Ctrl -)", "Mezinahiya dîmenderê (Ctrl + / Ctrl -)")}>
               <button type="button" onClick={() => setUiZoom((current) => [125, 110, 100, 90, 80].find((level) => level < current) ?? 80)} aria-label={tx(language, "Küçült", "Zoom out", "Biçûk bike")}>−</button>
               <select value={uiZoom} onChange={(e) => setUiZoom(Number(e.target.value))} aria-label={tx(language, "Ekran ölçeği", "Interface zoom", "Mezinahiya dîmenderê")}>
@@ -589,7 +607,15 @@ export default function Home() {
             <Notes language={language} notes={notes} setNotes={setNotes} />
           )}
           {page === "archive" && <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} />}
-          {page === "users" && <Users language={language} />}
+          {page === "users" && (
+            <Users
+              language={language}
+              users={users}
+              setUsers={setUsers}
+              currentUsername={profile.username}
+              checkPassword={checkPassword}
+            />
+          )}
           {page === "settings" && (
             <Settings
               language={language}
@@ -896,18 +922,11 @@ function ProfileModal({
           </label>
           <label>
             {text.user}
-            <input
-              required
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-            />
+            <input value={form.username} readOnly disabled />
           </label>
           <label className="wide">
             {text.role}
-            <input
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-            />
+            <input value={form.role} readOnly disabled />
           </label>
         </div>
         <div className="modalActions">
@@ -3334,7 +3353,22 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
     <div className="modalActions"><button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal Bike")}</button><button className="primary" disabled={!title.trim() || !content.trim()}>{initialNote ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Notu Kaydet", "Save Note", "Nîşeyê Tomar Bike")}</button></div>
   </form></div>;
 }
-function Users({ language }: { language: Language }) {
+function Users({
+  language,
+  users,
+  setUsers,
+  currentUsername,
+  checkPassword,
+}: {
+  language: Language;
+  users: UserAccount[];
+  setUsers: (items: UserAccount[]) => void;
+  currentUsername: string;
+  checkPassword: (password: string) => boolean;
+}) {
+  const [editing, setEditing] = useState<UserAccount | "new" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null);
+  const adminCount = users.filter((u) => u.isAdmin).length;
   return (
     <div className="panel">
       <div className="toolbar">
@@ -3342,38 +3376,189 @@ function Users({ language }: { language: Language }) {
           title={tx(language, "Kullanıcılar", "Users", "Bikarhêner")}
           sub={tx(
             language,
-            "Uygulama kullanıcıları ve rolleri",
-            "Application users and roles",
-            "Bikarhêner û rolên bernameyê",
+            "Uygulama kullanıcıları, rolleri ve erişim izinleri",
+            "Application users, roles and access permissions",
+            "Bikarhêner, rol û destûrên gihîştinê yên bernameyê",
           )}
         />
-        <button className="primary">
+        <button className="primary" onClick={() => setEditing("new")}>
           ＋{" "}
           {tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}
         </button>
       </div>
       <div className="users">
-        <User
-          name="Benjamin"
-          username="admin"
-          role={tx(language, "Admin", "Admin", "Rêveber")}
-        />
-        <User
-          name={tx(
-            language,
-            "Finans Müdürü",
-            "Finance Manager",
-            "Birêvebirê Darayî",
-          )}
-          username="manager"
-          role={tx(language, "Yönetici", "Manager", "Birêvebir")}
-        />
-        <User
-          name={tx(language, "Veri Girişi", "Data Entry", "Têketina Daneyan")}
-          username="user"
-          role={tx(language, "Kullanıcı", "User", "Bikarhêner")}
-        />
+        {users.map((u) => {
+          const isSelf = u.username === currentUsername;
+          const isLastAdmin = u.isAdmin && adminCount <= 1;
+          return (
+            <article key={u.id}>
+              <b>{u.name.slice(0, 1).toUpperCase()}</b>
+              <span>
+                <strong>{u.name}</strong>
+                <small>@{u.username}</small>
+                <em>{u.roleLabel}</em>
+                <div className="userPermissions">
+                  {u.isAdmin ? (
+                    <span className="userPermTag userPermTagAdmin">
+                      {tx(language, "Tüm bölümlere erişim", "Access to all sections", "Gihîştina hemû beşan")}
+                    </span>
+                  ) : u.permissions.length ? (
+                    u.permissions.map((p) => (
+                      <span key={p} className="userPermTag">
+                        {nav.find((n) => n.id === p)?.label[language] ?? p}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="userPermTag userPermTagEmpty">
+                      {tx(language, "Erişim yok", "No access", "Destûr tune")}
+                    </span>
+                  )}
+                </div>
+                <div className="userActions">
+                  <button type="button" onClick={() => setEditing(u)}>
+                    ✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}
+                  </button>
+                  {!isSelf && !isLastAdmin && (
+                    <button type="button" className="redText" onClick={() => setDeleteTarget(u)}>
+                      🗑 {tx(language, "Sil", "Delete", "Jêbibe")}
+                    </button>
+                  )}
+                </div>
+              </span>
+            </article>
+          );
+        })}
       </div>
+      {editing && (
+        <UserModal
+          language={language}
+          initial={editing === "new" ? null : editing}
+          existingUsernames={users.filter((u) => u !== editing).map((u) => u.username.toLowerCase())}
+          onClose={() => setEditing(null)}
+          onSave={(account) => {
+            setUsers(
+              editing === "new"
+                ? [...users, account]
+                : users.map((u) => (u.id === account.id ? account : u)),
+            );
+            setEditing(null);
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          language={language}
+          itemLabel={`${deleteTarget.name} (@${deleteTarget.username})`}
+          checkPassword={checkPassword}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            setUsers(users.filter((u) => u.id !== deleteTarget.id));
+            setDeleteTarget(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+function UserModal({
+  language,
+  initial,
+  existingUsernames,
+  onClose,
+  onSave,
+}: {
+  language: Language;
+  initial: UserAccount | null;
+  existingUsernames: string[];
+  onClose: () => void;
+  onSave: (account: UserAccount) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [username, setUsername] = useState(initial?.username ?? "");
+  const [password, setPassword] = useState("");
+  const [roleLabel, setRoleLabel] = useState(initial?.roleLabel ?? "");
+  const [isAdmin, setIsAdmin] = useState(initial?.isAdmin ?? false);
+  const [permissions, setPermissions] = useState<Page[]>(initial?.permissions ?? []);
+  const togglePermission = (p: Page) =>
+    setPermissions((current) => current.includes(p) ? current.filter((x) => x !== p) : [...current, p]);
+  const usernameTaken = existingUsernames.includes(username.trim().toLowerCase());
+  const valid = Boolean(name.trim()) && Boolean(username.trim()) && !usernameTaken && Boolean(roleLabel.trim()) && (Boolean(initial) || Boolean(password.trim()));
+  return (
+    <div className="overlay">
+      <form
+        className="modal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) return;
+          onSave({
+            id: initial?.id ?? Date.now(),
+            name: name.trim(),
+            username: username.trim(),
+            password: password.trim() || initial?.password || "",
+            roleLabel: roleLabel.trim(),
+            isAdmin,
+            permissions: isAdmin ? [] : permissions,
+          });
+        }}
+      >
+        <div className="modalHead">
+          <div>
+            <h2>{initial ? tx(language, "Kullanıcıyı Düzenle", "Edit User", "Bikarhênerê Biguherîne") : tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}</h2>
+            <p>{tx(language, "Kullanıcı bilgilerini ve erişebileceği bölümleri belirleyin.", "Set the user's details and which sections they can access.", "Agahiyên bikarhêner û beşên ku ew dikare gihîje diyar bike.")}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="formGrid">
+          <label>
+            {tx(language, "Ad Soyad", "Full Name", "Nav û Paşnav")}
+            <input required value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Kullanıcı Adı", "Username", "Navê Bikarhêner")}
+            <input required value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          {usernameTaken && (
+            <small className="wide formWarning">
+              {tx(language, "Bu kullanıcı adı zaten kullanılıyor.", "This username is already in use.", "Ev navê bikarhêner jixwe tê bikaranîn.")}
+            </small>
+          )}
+          <label>
+            {tx(language, "Şifre", "Password", "Şîfre")}
+            <input
+              type="password"
+              required={!initial}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={initial ? tx(language, "Değiştirmek için yazın", "Type to change", "Ji bo guherînê binivîse") : ""}
+            />
+          </label>
+          <label>
+            {tx(language, "Rol Etiketi", "Role Label", "Nîşana Rolê")}
+            <input required value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder={tx(language, "Örn. Finans Müdürü", "e.g. Finance Manager", "Mînak: Birêvebirê Darayî")} />
+          </label>
+          <label className="wide relationTypeOption">
+            <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
+            {tx(language, "Tam Yetkili (Yönetici) — tüm bölümlere erişebilir", "Full access (Admin) — can reach every section", "Destûra Tevahî (Rêveber) — dikare bighêje hemû beşan")}
+          </label>
+          {!isAdmin && (
+            <div className="wide userPermissionGrid">
+              <small>{tx(language, "Erişebileceği bölümler", "Sections this user can access", "Beşên ku ev bikarhêner dikare bighêje")}</small>
+              <div className="userPermissionOptions">
+                {restrictablePages.map((p) => (
+                  <label key={p} className="userPermissionOption">
+                    <input type="checkbox" checked={permissions.includes(p)} onChange={() => togglePermission(p)} />
+                    {nav.find((n) => n.id === p)?.label[language] ?? p}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+          <button className="primary" disabled={!valid}>{tx(language, "Kaydet", "Save", "Tomar Bike")}</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -3863,26 +4048,6 @@ function Bar({
         ></em>
       </i>
     </div>
-  );
-}
-function User({
-  name,
-  username,
-  role,
-}: {
-  name: string;
-  username: string;
-  role: string;
-}) {
-  return (
-    <article>
-      <b>{name[0]}</b>
-      <span>
-        <strong>{name}</strong>
-        <small>@{username}</small>
-        <em>{role}</em>
-      </span>
-    </article>
   );
 }
 function total(rows: RecordItem[]) {
