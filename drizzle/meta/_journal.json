@@ -36,6 +36,13 @@
       "when": 1786974165035,
       "tag": "0004_past_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786999690679,
+      "tag": "0005_tough_star_brand",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
-import { boolean, index, integer, jsonb, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -57,6 +58,7 @@ export const records = pgTable("records", {
   index("records_kind_idx").on(table.kind),
   index("records_date_idx").on(table.date),
   index("records_cash_account_idx").on(table.cashAccount),
+  check("records_kind_check", sql`${table.kind} IN ('cash', 'income', 'expense')`),
 ]);
 
 export const archive = pgTable("archive", {
@@ -65,7 +67,9 @@ export const archive = pgTable("archive", {
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   userName: text("user_name").notNull(),
   oldRecord: jsonb("old_record").notNull(),
-});
+}, (table) => [
+  index("archive_at_idx").on(table.at.desc()),
+]);
 
 export const financeNotes = pgTable("finance_notes", {
   id: serial("id").primaryKey(),
@@ -76,7 +80,9 @@ export const financeNotes = pgTable("finance_notes", {
   relationDetail: text("relation_detail").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  check("finance_notes_status_check", sql`${table.status} IN ('important', 'urgent', 'pending', 'completed')`),
+]);
 
 export const preparedReports = pgTable("prepared_reports", {
   id: text("id").primaryKey(),
