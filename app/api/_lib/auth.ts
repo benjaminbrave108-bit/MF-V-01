@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, ne } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sessions, users } from "../../../db/schema";
 import type { Page } from "./types";
@@ -65,6 +65,13 @@ export async function destroySession(token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.id, token));
 }
 
+// Invalidates every other session for this user (e.g. after a password
+// change) so a stolen/leftover token elsewhere stops working immediately.
+export async function destroyOtherSessions(userId: number, exceptToken: string): Promise<void> {
+  const db = getDb();
+  await db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.id, exceptToken)));
+}
+
 function toSessionUser(user: typeof users.$inferSelect): SessionUser {
   return {
     id: user.id,
@@ -102,4 +109,15 @@ export async function requireAdmin(request: Request): Promise<{ user: SessionUse
   if ("response" in result) return result;
   if (!result.user.isAdmin) return { response: Response.json({ error: "Forbidden" }, { status: 403 }) };
   return result;
+}
+
+// Admins implicitly have every page's access; non-admins need the page in
+// their `permissions` list. Mirrors the client-side `canAccess` gate in
+// app/page.tsx, but this is the copy that actually matters — the client
+// check only hides menu items, it can't stop a direct API request.
+export async function requirePermission(request: Request, page: Page): Promise<{ user: SessionUser } | { response: Response }> {
+  const result = await requireSession(request);
+  if ("response" in result) return result;
+  if (result.user.isAdmin || result.user.permissions.includes(page)) return result;
+  return { response: Response.json({ error: "Forbidden" }, { status: 403 }) };
 }

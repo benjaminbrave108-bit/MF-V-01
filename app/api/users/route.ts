@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { users } from "../../../db/schema";
-import { hashPassword } from "../../../db/passwords";
+import { hashPassword, validatePasswordPolicy } from "../../../db/passwords";
 import { requireAdmin } from "../_lib/auth";
+import { json } from "../_lib/http";
 
 function toClientUser(row: typeof users.$inferSelect) {
   return {
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
 
   const db = getDb();
   const rows = await db.select().from(users).orderBy(users.id);
-  return Response.json({ users: rows.map(toClientUser) });
+  return json({ users: rows.map(toClientUser) });
 }
 
 export async function POST(request: Request) {
@@ -32,18 +33,20 @@ export async function POST(request: Request) {
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const username = String(payload.username ?? "").trim();
   const password = String(payload.password ?? "");
   if (!username || !password) {
-    return Response.json({ error: "Username and password are required" }, { status: 400 });
+    return json({ error: "Username and password are required" }, { status: 400 });
   }
+  const policyError = validatePasswordPolicy(password, username);
+  if (policyError) return json({ error: policyError }, { status: 400 });
 
   const db = getDb();
   const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
-  if (existing[0]) return Response.json({ error: "Username already exists" }, { status: 409 });
+  if (existing[0]) return json({ error: "Username already exists" }, { status: 409 });
 
   const [account] = await db
     .insert(users)
@@ -57,5 +60,5 @@ export async function POST(request: Request) {
     })
     .returning();
 
-  return Response.json({ user: toClientUser(account) }, { status: 201 });
+  return json({ user: toClientUser(account) }, { status: 201 });
 }

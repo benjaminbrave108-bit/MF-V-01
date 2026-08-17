@@ -1,9 +1,10 @@
 import { getSessionUser } from "../../_lib/auth";
+import { json } from "../../_lib/http";
 
 export async function GET(request: Request) {
   const user = await getSessionUser(request);
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  return Response.json({
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  return json({
     profile: {
       name: user.name,
       username: user.username,

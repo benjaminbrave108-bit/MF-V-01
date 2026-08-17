@@ -1,28 +1,29 @@
 import { desc } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { preparedReports } from "../../../db/schema";
-import { requireSession } from "../_lib/auth";
+import { requirePermission } from "../_lib/auth";
+import { json } from "../_lib/http";
 
 export async function GET(request: Request) {
-  const session = await requireSession(request);
+  const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
 
   const db = getDb();
   const rows = await db.select().from(preparedReports).orderBy(desc(preparedReports.createdAt));
-  return Response.json({ preparedReports: rows });
+  return json({ preparedReports: rows });
 }
 
 export async function POST(request: Request) {
-  const session = await requireSession(request);
+  const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
 
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
   }
-  const id = String(payload.id ?? "").trim() || `${Date.now()}`;
+  const id = String(payload.id ?? "").trim() || crypto.randomUUID();
 
   const db = getDb();
   const [report] = await db
@@ -40,5 +41,5 @@ export async function POST(request: Request) {
     })
     .returning();
 
-  return Response.json({ preparedReport: report }, { status: 201 });
+  return json({ preparedReport: report }, { status: 201 });
 }

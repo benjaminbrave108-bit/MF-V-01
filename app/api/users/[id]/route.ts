@@ -1,8 +1,9 @@
 import { and, count, eq, ne } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { users } from "../../../../db/schema";
-import { hashPassword } from "../../../../db/passwords";
+import { hashPassword, validatePasswordPolicy } from "../../../../db/passwords";
 import { requireAdmin } from "../../_lib/auth";
+import { json } from "../../_lib/http";
 
 function toClientUser(row: typeof users.$inferSelect) {
   return {
@@ -21,29 +22,33 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const { id: idParam } = await params;
   const id = Number(idParam);
-  if (!Number.isFinite(id)) return Response.json({ error: "Invalid id" }, { status: 400 });
+  if (!Number.isFinite(id)) return json({ error: "Invalid id" }, { status: 400 });
 
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const db = getDb();
   const existingRows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   const existing = existingRows[0];
-  if (!existing) return Response.json({ error: "User not found" }, { status: 404 });
+  if (!existing) return json({ error: "User not found" }, { status: 404 });
 
   const isAdmin = Boolean(payload.isAdmin);
   if (existing.isAdmin && !isAdmin) {
     const [{ value: adminCount }] = await db.select({ value: count() }).from(users).where(and(eq(users.isAdmin, true), ne(users.id, id)));
     if (adminCount === 0) {
-      return Response.json({ error: "At least one admin account must remain" }, { status: 400 });
+      return json({ error: "At least one admin account must remain" }, { status: 400 });
     }
   }
 
   const password = String(payload.password ?? "").trim();
+  if (password) {
+    const policyError = validatePasswordPolicy(password, String(payload.username ?? existing.username));
+    if (policyError) return json({ error: policyError }, { status: 400 });
+  }
   const [account] = await db
     .update(users)
     .set({
@@ -57,7 +62,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .where(eq(users.id, id))
     .returning();
 
-  return Response.json({ user: toClientUser(account) });
+  return json({ user: toClientUser(account) });
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,24 +71,24 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const { id: idParam } = await params;
   const id = Number(idParam);
-  if (!Number.isFinite(id)) return Response.json({ error: "Invalid id" }, { status: 400 });
+  if (!Number.isFinite(id)) return json({ error: "Invalid id" }, { status: 400 });
 
   if (id === session.user.id) {
-    return Response.json({ error: "You cannot delete your own account" }, { status: 400 });
+    return json({ error: "You cannot delete your own account" }, { status: 400 });
   }
 
   const db = getDb();
   const existingRows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   const existing = existingRows[0];
-  if (!existing) return Response.json({ error: "User not found" }, { status: 404 });
+  if (!existing) return json({ error: "User not found" }, { status: 404 });
 
   if (existing.isAdmin) {
     const [{ value: adminCount }] = await db.select({ value: count() }).from(users).where(and(eq(users.isAdmin, true), ne(users.id, id)));
     if (adminCount === 0) {
-      return Response.json({ error: "At least one admin account must remain" }, { status: 400 });
+      return json({ error: "At least one admin account must remain" }, { status: 400 });
     }
   }
 
   await db.delete(users).where(eq(users.id, id));
-  return Response.json({ ok: true });
+  return json({ ok: true });
 }

@@ -1,5 +1,5 @@
 // One-off script: seeds the default accounts into Postgres with hashed
-// passwords. Run manually after Stage 0/1 setup:
+// passwords read from env (never hardcoded). Run manually after Stage 0/1 setup:
 //   node --env-file=.env.local scripts/seed-users.mjs
 // Safe to re-run: existing usernames are updated (upsert), not duplicated.
 import { randomBytes, scrypt } from "node:crypto";
@@ -15,9 +15,9 @@ async function hashPassword(password) {
 }
 
 const defaultAccounts = [
-  { username: "admin", password: "admin123", name: "Admin", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
-  { username: "manager", password: "manager123", name: "Finans Müdürü", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
-  { username: "user", password: "user123", name: "Veri Girişi", roleLabel: "Kullanıcı", isAdmin: false, permissions: ["cash", "income", "expense"] },
+  { username: "admin", passwordEnv: "SEED_ADMIN_PASSWORD", name: "Admin", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
+  { username: "manager", passwordEnv: "SEED_MANAGER_PASSWORD", name: "Finans Müdürü", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
+  { username: "user", passwordEnv: "SEED_USER_PASSWORD", name: "Veri Girişi", roleLabel: "Kullanıcı", isAdmin: false, permissions: ["cash", "income", "expense"] },
 ];
 
 async function main() {
@@ -25,10 +25,24 @@ async function main() {
     console.error("DATABASE_URL is not set. Run with --env-file=.env.local.");
     process.exit(1);
   }
+
+  const accounts = [];
+  for (const account of defaultAccounts) {
+    const password = process.env[account.passwordEnv];
+    if (!password || password.length < 10) {
+      console.error(
+        `${account.passwordEnv} is not set (or shorter than 10 characters). ` +
+        `Set it in .env.local before seeding the "${account.username}" account.`,
+      );
+      process.exit(1);
+    }
+    accounts.push({ ...account, password });
+  }
+
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
-    for (const account of defaultAccounts) {
+    for (const account of accounts) {
       const passwordHash = await hashPassword(account.password);
       await client.query(
         `INSERT INTO users (username, password_hash, name, role_label, is_admin, permissions)

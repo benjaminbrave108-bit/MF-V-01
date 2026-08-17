@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { settings } from "../../../db/schema";
 import { requireAdmin, requireSession } from "../_lib/auth";
+import { json } from "../_lib/http";
+import { isDataUriWithinLimit } from "../_lib/limits";
 
 const SINGLETON_ID = 1;
 
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
   if ("response" in session) return session.response;
 
   const row = await getOrCreateSettings();
-  return Response.json({ settings: row });
+  return json({ settings: row });
 }
 
 export async function PUT(request: Request) {
@@ -32,7 +34,12 @@ export async function PUT(request: Request) {
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const logo = String(payload.logo ?? "");
+  if (logo && !isDataUriWithinLimit(logo)) {
+    return json({ error: "Logo must be a data:image/(png|jpeg|webp|svg+xml) URI under 512KB" }, { status: 413 });
   }
 
   await getOrCreateSettings();
@@ -49,5 +56,5 @@ export async function PUT(request: Request) {
     .where(eq(settings.id, SINGLETON_ID))
     .returning();
 
-  return Response.json({ settings: row });
+  return json({ settings: row });
 }

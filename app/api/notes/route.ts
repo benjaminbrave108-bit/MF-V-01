@@ -1,26 +1,27 @@
 import { desc } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { financeNotes } from "../../../db/schema";
-import { requireSession } from "../_lib/auth";
+import { requirePermission } from "../_lib/auth";
+import { json } from "../_lib/http";
 
 export async function GET(request: Request) {
-  const session = await requireSession(request);
+  const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
   const db = getDb();
   const rows = await db.select().from(financeNotes).orderBy(desc(financeNotes.updatedAt), desc(financeNotes.id));
-  return Response.json({ notes: rows });
+  return json({ notes: rows });
 }
 
 export async function POST(request: Request) {
-  const session = await requireSession(request);
+  const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
   } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const db = getDb();
@@ -35,5 +36,5 @@ export async function POST(request: Request) {
     })
     .returning();
 
-  return Response.json({ note }, { status: 201 });
+  return json({ note }, { status: 201 });
 }

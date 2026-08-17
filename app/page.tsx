@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import ExcelJS from "exceljs";
-import * as XLSX from "xlsx";
 
 type Kind = "cash" | "income" | "expense";
 type Page =
@@ -850,6 +849,13 @@ function ProfileModal({
           remove: "Kaldır",
           cancel: "Vazgeç",
           save: "Değişiklikleri Kaydet",
+          pwTitle: "Şifre Değiştir",
+          pwCurrent: "Mevcut Şifre",
+          pwNew: "Yeni Şifre",
+          pwConfirm: "Yeni Şifre (Tekrar)",
+          pwSave: "Şifreyi Güncelle",
+          pwMismatch: "Yeni şifreler eşleşmiyor",
+          pwSuccess: "Şifre güncellendi",
         }
       : language === "en"
         ? {
@@ -863,6 +869,13 @@ function ProfileModal({
             remove: "Remove",
             cancel: "Cancel",
             save: "Save Changes",
+            pwTitle: "Change Password",
+            pwCurrent: "Current Password",
+            pwNew: "New Password",
+            pwConfirm: "New Password (again)",
+            pwSave: "Update Password",
+            pwMismatch: "New passwords do not match",
+            pwSuccess: "Password updated",
           }
         : {
             title: "Profîla Min",
@@ -875,12 +888,53 @@ function ProfileModal({
             remove: "Rake",
             cancel: "Betal",
             save: "Guherînan Tomar Bike",
+            pwTitle: "Şîfreyê Biguherîne",
+            pwCurrent: "Şîfreya Heyî",
+            pwNew: "Şîfreya Nû",
+            pwConfirm: "Şîfreya Nû (dîsa)",
+            pwSave: "Şîfreyê Nûve Bike",
+            pwMismatch: "Şîfreyên nû li hev nakin",
+            pwSuccess: "Şîfre hate nûvekirin",
           };
   function pickAvatar(file?: File) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setForm({ ...form, avatar: String(reader.result) });
     reader.readAsDataURL(file);
+  }
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwStatus, setPwStatus] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [pwSaving, setPwSaving] = useState(false);
+  async function changePassword() {
+    if (pwSaving) return;
+    if (newPassword !== confirmPassword) {
+      setPwStatus({ kind: "error", text: text.pwMismatch });
+      return;
+    }
+    setPwSaving(true);
+    setPwStatus(null);
+    try {
+      const response = await fetch("/api/profile/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPwStatus({ kind: "error", text: data.error || "Hata oluştu" });
+      } else {
+        setPwStatus({ kind: "success", text: text.pwSuccess });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    } catch {
+      setPwStatus({ kind: "error", text: "Hata oluştu" });
+    } finally {
+      setPwSaving(false);
+    }
   }
   return (
     <div className="overlay">
@@ -954,6 +1008,51 @@ function ProfileModal({
             {text.cancel}
           </button>
           <button className="primary">{text.save}</button>
+        </div>
+        <div className="passwordEditor">
+          <h3>{text.pwTitle}</h3>
+          <div className="formGrid">
+            <label>
+              {text.pwCurrent}
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </label>
+            <label>
+              {text.pwNew}
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </label>
+            <label>
+              {text.pwConfirm}
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </label>
+          </div>
+          {pwStatus && (
+            <p className={pwStatus.kind === "error" ? "loginError" : "successText"}>{pwStatus.text}</p>
+          )}
+          <div className="modalActions">
+            <button
+              type="button"
+              className="light"
+              disabled={pwSaving || !currentPassword || !newPassword}
+              onClick={changePassword}
+            >
+              {text.pwSave}
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1238,40 +1337,74 @@ function Records({
         ? tx(language, "Gelirler", "Income", "Dahat")
         : tx(language, "Giderler", "Expenses", "Mesref");
   const recordWord = tx(language, "kayıt", "records", "qeyd");
-  function exportExcel() {
-    const data = rows.map((x) => ({
-      [tx(language, "Tarih", "Date", "Tarîx")]: date(x.date),
-      [kind === "cash"
+  async function exportExcel() {
+    const columns = [
+      tx(language, "Tarih", "Date", "Tarîx"),
+      kind === "cash"
         ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
-        : tx(language, "Ana Başlık", "Category", "Sernav")]: x.source,
-      [tx(language, "Detay", "Detail", "Hûragahî")]: x.detail,
-      [tx(language, "Not", "Note", "Nîşe")]: x.note,
-      [tx(language, "Kişi", "Person", "Kes")]: x.person,
-      [tx(language, "Miktar", "Amount", "Meblağ")]: x.amount,
-      [tx(language, "Para Birimi", "Currency", "Yekeya Pere")]: x.currency,
-      [tx(language, "Proje / Birim", "Project / Unit", "Proje / Yekîne")]:
+        : tx(language, "Ana Başlık", "Category", "Sernav"),
+      tx(language, "Detay", "Detail", "Hûragahî"),
+      tx(language, "Not", "Note", "Nîşe"),
+      tx(language, "Kişi", "Person", "Kes"),
+      tx(language, "Miktar", "Amount", "Meblağ"),
+      tx(language, "Para Birimi", "Currency", "Yekeya Pere"),
+      tx(language, "Proje / Birim", "Project / Unit", "Proje / Yekîne"),
+      tx(language, "Etiketler", "Tags", "Etîket"),
+    ];
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Kayitlar");
+    sheet.addRow(columns);
+    for (const x of rows) {
+      sheet.addRow([
+        date(x.date),
+        x.source,
+        x.detail,
+        x.note,
+        x.person,
+        x.amount,
+        x.currency,
         x.project,
-      [tx(language, "Etiketler", "Tags", "Etîket")]: x.tags.join(", "),
-    }));
-    const sheet = XLSX.utils.json_to_sheet(data);
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Kayitlar");
-    XLSX.writeFile(
-      book,
-      `${source === "Tümü" ? title : source}-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    );
+        x.tags.join(", "),
+      ]);
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeName = (source === "Tümü" ? title : source).replace(/[\\/:*?"<>|]/g, "-");
+    link.href = url;
+    link.download = `${safeName}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
   async function importExcel(file?: File) {
     if (!file) return;
     try {
-      const book = XLSX.read(await file.arrayBuffer(), {
-        type: "array",
-        cellDates: true,
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new Error();
+      const headerRow = sheet.getRow(1);
+      const headers: string[] = [];
+      headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        headers[colNumber] = String(cell.value ?? "").trim();
       });
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-        book.Sheets[book.SheetNames[0]],
-        { defval: "" },
-      );
+      const raw: Record<string, unknown>[] = [];
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const record: Record<string, unknown> = {};
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          const header = headers[colNumber];
+          if (!header) return;
+          const value = cell.value;
+          record[header] = value && typeof value === "object" && "text" in (value as object)
+            ? (value as { text: string }).text
+            : value ?? "";
+        });
+        raw.push(record);
+      });
       const imported = raw
         .map((row): Omit<RecordItem, "id"> => {
           const values = Object.values(row);
@@ -1282,26 +1415,27 @@ function Records({
           };
           const excelDate = get("Tarih", "Date", "Tarîx");
           const parsedDate = parseStoredDate(
-            excelDate || values[0] || new Date().toISOString().slice(0, 10),
+            String(excelDate || values[0] || new Date().toISOString().slice(0, 10)),
           );
+          const resolvedSource =
+            source !== "Tümü"
+              ? source
+              : String(
+                  get(
+                    "Kasa Adı",
+                    "Cash Account",
+                    "Navê Qaseyê",
+                    "Ana Başlık",
+                    "Category",
+                    "Sernav",
+                  ) ||
+                    values[1] ||
+                    "Excel Aktarımı",
+                );
           return {
             kind,
             date: parsedDate,
-            source:
-              source !== "Tümü"
-                ? source
-                : String(
-                    get(
-                      "Kasa Adı",
-                      "Cash Account",
-                      "Navê Qaseyê",
-                      "Ana Başlık",
-                      "Category",
-                      "Sernav",
-                    ) ||
-                      values[1] ||
-                      "Excel Aktarımı",
-                  ),
+            source: resolvedSource,
             detail: String(
               get("Detay", "Detail", "Hûragahî") || values[2] || "",
             ),
@@ -1319,6 +1453,8 @@ function Records({
               .map((x) => x.trim())
               .filter(Boolean),
             monthlyExpense: false,
+            cashAccount: kind === "cash" ? "" : resolvedSource,
+            listName: "",
           };
         })
         .filter((x) => x.source && Number.isFinite(x.amount));
@@ -1336,9 +1472,9 @@ function Records({
       alert(
         tx(
           language,
-          "Excel dosyası okunamadı. Lütfen ilk satırda sütun başlıkları bulunan .xlsx veya .xls dosyası seçin.",
-          "The Excel file could not be read. Choose an .xlsx or .xls file with column headers in the first row.",
-          "Pelê Excelê nehat xwendin. Pelek .xlsx an .xls ku di rêza yekem de sernavên stûnan heye hilbijêre.",
+          "Excel dosyası okunamadı. Lütfen ilk satırda sütun başlıkları bulunan .xlsx dosyası seçin.",
+          "The Excel file could not be read. Choose an .xlsx file with column headers in the first row.",
+          "Pelê Excelê nehat xwendin. Pelek .xlsx ku di rêza yekem de sernavên stûnan heye hilbijêre.",
         ),
       );
     }
@@ -1371,7 +1507,7 @@ function Records({
             <input
               hidden
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx"
               onChange={(e) => {
                 importExcel(e.target.files?.[0]);
                 e.target.value = "";

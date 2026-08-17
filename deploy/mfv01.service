@@ -1,0 +1,20 @@
+# Example systemd unit for running MF-V-01 with server.mjs.
+# Copy to /etc/systemd/system/mfv01.service, adjust paths/user, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mfv01
+[Unit]
+Description=MF-V-01 Finans Uygulamasi
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=mfv01
+WorkingDirectory=/opt/mfv01
+EnvironmentFile=/opt/mfv01/.env.local
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=5
+# App listens on 127.0.0.1 only; put nginx/caddy in front for TLS.
+
+[Install]
+WantedBy=multi-user.target
