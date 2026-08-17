@@ -1101,10 +1101,26 @@ function Dashboard({
   language: Language;
   goTo: (page: Page) => void;
 }) {
-  const cashIn = total(records.filter((x) => x.kind === "cash"));
-  const income = total(records.filter((x) => x.kind === "income")) + cashIn,
-    expense = total(records.filter((x) => x.kind === "expense"));
-  const cashBalance = cashIn + total(records.filter((x) => x.kind === "income" && x.cashAccount)) - total(records.filter((x) => x.kind === "expense" && x.cashAccount));
+  const cashRows = records.filter((x) => x.kind === "cash");
+  const incomeRows = records.filter((x) => x.kind === "income");
+  const expenseRows = records.filter((x) => x.kind === "expense");
+  const linkedIncomeRows = records.filter((x) => x.kind === "income" && x.cashAccount);
+  const linkedExpenseRows = records.filter((x) => x.kind === "expense" && x.cashAccount);
+  const cashIn = total(cashRows);
+  const income = total(incomeRows) + cashIn,
+    expense = total(expenseRows);
+  const cashBalance = cashIn + total(linkedIncomeRows) - total(linkedExpenseRows);
+  // Per-currency breakdowns for the card text (see combineByCurrency) — the
+  // scalar values above stay blended and are only used for the bar chart's
+  // relative widths, never shown to the user as a money figure.
+  const incomeByCurrency = combineByCurrency([{ rows: incomeRows }, { rows: cashRows }]);
+  const expenseByCurrency = combineByCurrency([{ rows: expenseRows }]);
+  const netByCurrency = combineByCurrency([{ rows: incomeRows }, { rows: cashRows }, { rows: expenseRows, sign: -1 }]);
+  const cashBalanceByCurrency = combineByCurrency([
+    { rows: cashRows },
+    { rows: linkedIncomeRows },
+    { rows: linkedExpenseRows, sign: -1 },
+  ]);
   const recent = [...records]
     .filter((x) => x.kind !== "cash")
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -1160,7 +1176,7 @@ function Dashboard({
         <Stat
           label={labels.income}
           linkLabel={labels.all}
-          value={income}
+          display={moneyBreakdown(incomeByCurrency)}
           tone="green"
           icon="↗"
           onClick={() => goTo("income")}
@@ -1168,7 +1184,7 @@ function Dashboard({
         <Stat
           label={labels.expense}
           linkLabel={labels.all}
-          value={expense}
+          display={moneyBreakdown(expenseByCurrency)}
           tone="orange"
           icon="↘"
           onClick={() => goTo("expense")}
@@ -1176,7 +1192,7 @@ function Dashboard({
         <Stat
           label={labels.net}
           linkLabel={labels.all}
-          value={income - expense}
+          display={moneyBreakdown(netByCurrency)}
           tone="blue"
           icon="="
           onClick={() => goTo("reportBuilder")}
@@ -1184,7 +1200,7 @@ function Dashboard({
         <Stat
           label={labels.cash}
           linkLabel={labels.all}
-          value={cashBalance}
+          display={moneyBreakdown(cashBalanceByCurrency)}
           tone="purple"
           icon="▣"
           onClick={() => goTo("cash")}
@@ -1227,7 +1243,7 @@ function Dashboard({
                 </span>
                 <strong>
                   {x.kind === "income" ? "+" : "-"}
-                  {money(x.amount)}
+                  {money(x.amount, x.currency)}
                 </strong>
               </div>
             ))}
@@ -1287,23 +1303,18 @@ function Records({
   const groups = useMemo(
     () =>
       [...new Set(records.map((x) => x.source))].map((name) => {
-        const directAmount = total(records.filter((x) => x.source === name));
-        const linkedIncome =
+        const directRows = records.filter((x) => x.source === name);
+        const linkedIncomeRows =
           kind === "cash"
-            ? total(
-                allRecords.filter(
-                  (x) => x.kind === "income" && x.cashAccount === name,
-                ),
-              )
-            : 0;
-        const linkedExpense =
+            ? allRecords.filter((x) => x.kind === "income" && x.cashAccount === name)
+            : [];
+        const linkedExpenseRows =
           kind === "cash"
-            ? total(
-                allRecords.filter(
-                  (x) => x.kind === "expense" && x.cashAccount === name,
-                ),
-              )
-            : 0;
+            ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount === name)
+            : [];
+        const directAmount = total(directRows);
+        const linkedIncome = total(linkedIncomeRows);
+        const linkedExpense = total(linkedExpenseRows);
         return {
           name,
           kind: records.find((x) => x.source === name)?.kind ?? kind,
@@ -1311,42 +1322,61 @@ function Records({
           totalIn: directAmount + linkedIncome,
           totalOut: linkedExpense,
           total: directAmount + linkedIncome - linkedExpense,
+          totalInByCurrency: combineByCurrency([{ rows: directRows }, { rows: linkedIncomeRows }]),
+          totalOutByCurrency: combineByCurrency([{ rows: linkedExpenseRows }]),
+          totalByCurrency: combineByCurrency([
+            { rows: directRows },
+            { rows: linkedIncomeRows },
+            { rows: linkedExpenseRows, sign: -1 },
+          ]),
         };
       }),
     [records, allRecords, kind],
   );
   const visibleGroups = groups.slice(0, 4);
   const overflowGroups = groups.slice(4);
+  // Overall pill total, computed per currency directly from the record
+  // arrays (not by summing groups' already-blended totals) so mixed
+  // currencies show as separate amounts instead of one wrong number.
+  const overallByCurrency = useMemo(
+    () =>
+      combineByCurrency([
+        { rows: records },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount) : [] },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount) : [], sign: -1 },
+      ]),
+    [records, allRecords, kind],
+  );
   const listedRecords = records.filter((x) => x.listName);
   const listGroups = useMemo(
     () =>
       [...new Set(records.map((x) => x.listName).filter(Boolean))].map(
         (name) => {
-          const directAmount = total(
-            records.filter((x) => x.listName === name),
-          );
-          const linkedIncome =
+          const directRows = records.filter((x) => x.listName === name);
+          const linkedIncomeRows =
             kind === "cash"
-              ? total(
-                  allRecords.filter(
-                    (x) => x.kind === "income" && x.listName === name,
-                  ),
-                )
-              : 0;
-          const linkedExpense =
+              ? allRecords.filter((x) => x.kind === "income" && x.listName === name)
+              : [];
+          const linkedExpenseRows =
             kind === "cash"
-              ? total(
-                  allRecords.filter(
-                    (x) => x.kind === "expense" && x.listName === name,
-                  ),
-                )
-              : 0;
+              ? allRecords.filter((x) => x.kind === "expense" && x.listName === name)
+              : [];
+          const directAmount = total(directRows);
+          const linkedIncome = total(linkedIncomeRows);
+          const linkedExpense = total(linkedExpenseRows);
           return {
             name,
             count: records.filter((x) => x.listName === name).length,
             totalIn: directAmount + linkedIncome,
             totalOut: linkedExpense,
             total: directAmount + linkedIncome - linkedExpense,
+            totalInByCurrency: combineByCurrency([{ rows: directRows }, { rows: linkedIncomeRows }]),
+            totalOutByCurrency: combineByCurrency([{ rows: linkedExpenseRows }]),
+            totalByCurrency: combineByCurrency([
+              { rows: directRows },
+              { rows: linkedIncomeRows },
+              { rows: linkedExpenseRows, sign: -1 },
+            ]),
           };
         },
       ),
@@ -1354,6 +1384,15 @@ function Records({
   );
   const visibleListGroups = listGroups.slice(0, 4);
   const overflowListGroups = listGroups.slice(4);
+  const overallListByCurrency = useMemo(
+    () =>
+      combineByCurrency([
+        { rows: listedRecords },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.listName) : [] },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.listName) : [], sign: -1 },
+      ]),
+    [listedRecords, allRecords, kind],
+  );
   const rows = records.filter(
     (x) =>
       (source === "Tümü" || x.source === source) &&
@@ -1574,7 +1613,7 @@ function Records({
             {records.length} {recordWord}
           </small>
           <strong>
-            {money(groups.reduce((sum, g) => sum + g.total, 0))}
+            {moneyBreakdown(overallByCurrency)}
           </strong>
         </button>
         {visibleGroups.map((g) => (
@@ -1596,7 +1635,7 @@ function Records({
                   "qeydên bi tarîx",
                 )}
               </small>
-              <strong>{money(g.total)}</strong>
+              <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
             </button>
             {source === g.name && (
               <button
@@ -1613,15 +1652,15 @@ function Records({
                 <>
                   <div>
                     <small>{tx(language, "Toplam Kasa", "Total In", "Giştî")}</small>
-                    <strong>{money(g.totalIn)}</strong>
+                    <strong>{moneyBreakdown(g.totalInByCurrency)}</strong>
                   </div>
                   <div>
                     <small>{tx(language, "Gider", "Expense", "Mesref")}</small>
-                    <strong className="negative">{money(g.totalOut)}</strong>
+                    <strong className="negative">{moneyBreakdown(g.totalOutByCurrency)}</strong>
                   </div>
                   <div>
                     <small>{tx(language, "Sonuç", "Result", "Encam")}</small>
-                    <strong>{money(g.total)}</strong>
+                    <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
                   </div>
                 </>
               ) : (
@@ -1633,7 +1672,7 @@ function Records({
                         : tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî")}
                     </small>
                     <strong className={g.kind === "expense" ? "negative" : ""}>
-                      {money(g.total)}
+                      {moneyBreakdown(g.totalByCurrency)}
                     </strong>
                   </div>
                   <div>
@@ -1664,7 +1703,7 @@ function Records({
               </option>
               {overflowGroups.map((g) => (
                 <option key={g.name} value={g.name}>
-                  {localizeData(g.name, language)} · {money(g.total)}
+                  {localizeData(g.name, language)} · {moneyBreakdown(g.totalByCurrency)}
                 </option>
               ))}
             </select>
@@ -1693,7 +1732,7 @@ function Records({
               {listedRecords.length} {recordWord}
             </small>
             <strong>
-              {money(listGroups.reduce((sum, g) => sum + g.total, 0))}
+              {moneyBreakdown(overallListByCurrency)}
             </strong>
           </button>
           {visibleListGroups.map((g) => (
@@ -1706,7 +1745,7 @@ function Records({
                 <small>
                   {g.count} {tx(language, "kayıt", "records", "qeyd")}
                 </small>
-                <strong>{money(g.total)}</strong>
+                <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
               </button>
               {activeList === g.name && (
                 <button
@@ -1722,15 +1761,15 @@ function Records({
                 <div className="groupCardTooltip">
                   <div>
                     <small>{tx(language, "Toplam Kasa", "Total In", "Giştî")}</small>
-                    <strong>{money(g.totalIn)}</strong>
+                    <strong>{moneyBreakdown(g.totalInByCurrency)}</strong>
                   </div>
                   <div>
                     <small>{tx(language, "Gider", "Expense", "Mesref")}</small>
-                    <strong className="negative">{money(g.totalOut)}</strong>
+                    <strong className="negative">{moneyBreakdown(g.totalOutByCurrency)}</strong>
                   </div>
                   <div>
                     <small>{tx(language, "Sonuç", "Result", "Encam")}</small>
-                    <strong>{money(g.total)}</strong>
+                    <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
                   </div>
                 </div>
               )}
@@ -1748,7 +1787,7 @@ function Records({
                 </option>
                 {overflowListGroups.map((g) => (
                   <option key={g.name} value={g.name}>
-                    {localizeData(g.name, language)} · {money(g.total)}
+                    {localizeData(g.name, language)} · {moneyBreakdown(g.totalByCurrency)}
                   </option>
                 ))}
               </select>
@@ -1862,7 +1901,7 @@ function Records({
                   )}
                 </td>
                 <td>{localizeData(x.person, language)}</td>
-                <td className="amount">{money(x.amount)}</td>
+                <td className="amount">{money(x.amount, x.currency)}</td>
                 <td>{localizeData(x.project, language)}{x.cashAccount && <small className="subNote">▣ {localizeData(x.cashAccount, language)}</small>}</td>
                 <td>
                   <div className="tagRow">
@@ -1915,7 +1954,7 @@ function Records({
                     <b>{localizeData(x.source, language)}</b>
                     <small>{date(x.date, language)} · {localizeData(x.person, language)}</small>
                   </span>
-                  <strong>{kind === "income" ? "+" : "−"}{money(x.amount)}</strong>
+                  <strong>{kind === "income" ? "+" : "−"}{money(x.amount, x.currency)}</strong>
                 </article>
               ))}
             </div>
@@ -1925,7 +1964,7 @@ function Records({
       {deleteTarget && (
         <DeleteConfirmModal
           language={language}
-          itemLabel={`${localizeData(deleteTarget.source, language)} · ${money(deleteTarget.amount)}`}
+          itemLabel={`${localizeData(deleteTarget.source, language)} · ${money(deleteTarget.amount, deleteTarget.currency)}`}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
           onConfirm={() => {
@@ -2559,7 +2598,7 @@ function RecordModal({
                     <span>{localizeData(x.source, language)}</span>
                     <strong className={x.kind === "expense" ? "negative" : ""}>
                       {x.kind === "income" ? "+" : "−"}
-                      {money(x.amount)}
+                      {money(x.amount, x.currency)}
                     </strong>
                   </div>
                 ))}
@@ -2599,8 +2638,8 @@ function RecordModal({
           language={language}
           message={tx(
             language,
-            `Aynı tarih ve tutarla benzer bir kayıt bulundu (${form.date} · ${money(form.amount)}). Bu kaydı yine de eklemek istediğinizden emin misiniz?`,
-            `A similar record exists with the same date and amount (${form.date} · ${money(form.amount)}). Save anyway?`,
+            `Aynı tarih ve tutarla benzer bir kayıt bulundu (${form.date} · ${money(form.amount, form.currency)}). Bu kaydı yine de eklemek istediğinizden emin misiniz?`,
+            `A similar record exists with the same date and amount (${form.date} · ${money(form.amount, form.currency)}). Save anyway?`,
             `Qeydek mîna vê bi heman tarîx û meblağê heye. Dîsa tomar bike?`,
           )}
           onClose={() => setDuplicateConfirmOpen(false)}
@@ -4085,14 +4124,14 @@ function typographyVariables(settings: TypographySettings): CSSProperties {
 function Stat({
   label,
   linkLabel,
-  value,
+  display,
   tone,
   icon,
   onClick,
 }: {
   label: string;
   linkLabel: string;
-  value: number;
+  display: string;
   tone: string;
   icon: string;
   onClick: () => void;
@@ -4101,7 +4140,7 @@ function Stat({
     <button className={`stat ${tone}`} onClick={onClick} title={linkLabel}>
       <span>
         <small>{label}</small>
-        <b>{money(value)}</b>
+        <b>{display}</b>
         <em>{linkLabel} →</em>
       </span>
       <i>{icon}</i>
@@ -4161,11 +4200,33 @@ function Bar({
 function total(rows: RecordItem[]) {
   return rows.reduce((a, b) => a + b.amount, 0);
 }
-function money(v: number) {
+// Sums by currency instead of blending unlike units into one number.
+// Used for the top-level totals (Dashboard cards, list "Tümü" pills) where
+// silently adding e.g. USD and TRY amounts together would show a wrong
+// figure; per-record/per-group displays elsewhere still use total()/money()
+// since a single named cash account or category is virtually always one
+// currency in practice.
+function combineByCurrency(parts: { rows: RecordItem[]; sign?: number }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const part of parts) {
+    const sign = part.sign ?? 1;
+    for (const r of part.rows) out[r.currency] = (out[r.currency] ?? 0) + sign * r.amount;
+  }
+  return out;
+}
+function money(v: number, currency: string = "USD") {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
-    currency: "USD",
+    currency,
   }).format(v);
+}
+function moneyBreakdown(byCurrency: Record<string, number>): string {
+  const entries = Object.entries(byCurrency).filter(([, v]) => v !== 0);
+  if (!entries.length) return money(0);
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([currency, v]) => money(v, currency))
+    .join(" + ");
 }
 function date(v: string, _language: Language = "tr") {
   const stored = parseStoredDate(v);
