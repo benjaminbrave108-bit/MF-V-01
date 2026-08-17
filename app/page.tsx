@@ -2233,25 +2233,17 @@ function RecordModal({
         cashAccount: "",
         listName: "",
       };
-  const [form, setForm] = useState<Omit<RecordItem, "id">>(
-    language === "ku"
-      ? {
-          ...base,
-          source: localizeData(base.source, language),
-          detail: localizeData(base.detail, language),
-          note: localizeData(base.note, language),
-          person: localizeData(base.person, language),
-          project: localizeData(base.project, language),
-          listName: localizeData(base.listName, language),
-          tags: base.tags.map((x) => localizeData(x, language)),
-        }
-      : base,
-  );
+  // Always seed the form with the raw stored values, never the display-only
+  // Kurdish demo translations — otherwise saving without touching a field
+  // (or picking a translated autocomplete suggestion below) would write the
+  // translated string back to the database, breaking cashAccount name
+  // matching and silently corrupting data across languages.
+  const [form, setForm] = useState<Omit<RecordItem, "id">>(base);
   const previous = (field: "source" | "person" | "project" | "listName") => [
     ...new Set(
       records
         .filter((x) => field !== "source" || x.kind === kind)
-        .map((x) => localizeData(x[field], language))
+        .map((x) => x[field])
         .filter(Boolean),
     ),
   ];
