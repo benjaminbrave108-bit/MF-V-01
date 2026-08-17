@@ -54,7 +54,6 @@ type UserAccount = {
   id: number;
   name: string;
   username: string;
-  password: string;
   roleLabel: string;
   isAdmin: boolean;
   permissions: Page[];
@@ -77,16 +76,6 @@ type PreparedReport = {
 type TypographyKey = "pageTitle" | "sectionTitle" | "cardTitle" | "body" | "tableHeader" | "formText";
 type TypographyRule = { size: number; font: string; color: string };
 type TypographySettings = Record<TypographyKey, TypographyRule>;
-type DataSection = "cash" | "income" | "expense" | "reports" | "notes" | "archive" | "settings";
-type DatabasePackage = {
-  id: string;
-  name: string;
-  company: string;
-  createdAt: string;
-  updatedAt: string;
-  sections: DataSection[];
-  data: Record<string, unknown>;
-};
 
 const kbGroupLogo = "/kb-logo.png";
 
@@ -100,12 +89,6 @@ const defaultTypography: TypographySettings = {
 };
 
 const monthNames = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"];
-
-const defaultUsers: UserAccount[] = [
-  { id: 1, username: "admin", password: "admin123", name: "Admin", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
-  { id: 2, username: "manager", password: "manager123", name: "Finans Müdürü", roleLabel: "Yönetici", isAdmin: true, permissions: [] },
-  { id: 3, username: "user", password: "user123", name: "Veri Girişi", roleLabel: "Kullanıcı", isAdmin: false, permissions: ["cash", "income", "expense"] },
-];
 
 const seed: RecordItem[] = [];
 
@@ -185,24 +168,44 @@ export default function Home() {
     isAdmin: true,
     permissions: [],
   });
-  const [users, setUsers] = useState<UserAccount[]>(defaultUsers);
+  const [users, setUsers] = useState<UserAccount[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
   const [preparedReports, setPreparedReports] = useState<PreparedReport[]>([]);
   const [typography, setTypography] = useState<TypographySettings>(defaultTypography);
-  const [activeDatabase, setActiveDatabase] = useState("Ana Şirket Veritabanı");
   const [uiZoom, setUiZoom] = useState(100);
   const [sidebarCompact, setSidebarCompact] = useState(false);
-  const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
-    setSignedIn(sessionStorage.getItem("mf-preview-session") === "active");
-    const savedZoom = Number(localStorage.getItem("mf-ui-zoom") || "100");
-    if ([80, 90, 100, 110, 125].includes(savedZoom)) setUiZoom(savedZoom);
-    const saved = localStorage.getItem("mf-preview");
-    if (saved)
+    let cancelled = false;
+    (async () => {
       try {
-        const data = JSON.parse(saved);
+        const response = await fetch("/api/auth/session");
+        if (cancelled) return;
+        if (response.ok) {
+          const data = await response.json();
+          setProfile((current) => ({ ...current, ...data.profile }));
+          setSignedIn(true);
+        } else {
+          setSignedIn(false);
+        }
+      } catch {
+        if (!cancelled) setSignedIn(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/bootstrap");
+        if (cancelled || !response.ok) return;
+        const data = await response.json();
         setRecords((data.records ?? []).map(normalizeRecord));
         setArchive(
           (data.archive ?? []).map((x: ArchiveItem) => ({
@@ -215,20 +218,24 @@ export default function Home() {
             ? { id: Date.now() + index, title: "Mali Not", content: note, status: "important" as NoteStatus, relation: "none" as NoteRelation, relationDetail: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
             : { ...note, relation: note.relation ?? "none", relationDetail: note.relationDetail ?? "" },
         ));
-        setLogo(data.logo ?? "");
-        setCompany(data.company ?? "Maliye-Finans");
-        setLanguage(data.language ?? "tr");
-        setProfile({
-          ...{ name: "Admin", username: "admin", role: "Yönetici", avatar: "", isAdmin: true, permissions: [] },
-          ...(data.profile ?? {}),
-        });
-        if (Array.isArray(data.users) && data.users.length) setUsers(data.users);
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
-        if (data.typography) setTypography({ ...defaultTypography, ...data.typography });
-        setActiveDatabase(localStorage.getItem("mf-active-database") || "Ana Şirket Veritabanı");
+        if (Array.isArray(data.users)) setUsers(data.users);
+        if (data.settings) {
+          setCompany(data.settings.company ?? "Maliye-Finans");
+          setLogo(data.settings.logo ?? "");
+          setLanguage(data.settings.language ?? "tr");
+          setTypography({ ...defaultTypography, ...(data.settings.typography ?? {}) });
+        }
       } catch {}
-    localStorage.removeItem("mf-monthly-report-documents");
-    setStorageReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [signedIn]);
+
+  useEffect(() => {
+    const savedZoom = Number(localStorage.getItem("mf-ui-zoom") || "100");
+    if ([80, 90, 100, 110, 125].includes(savedZoom)) setUiZoom(savedZoom);
   }, []);
 
   useEffect(() => {
@@ -267,25 +274,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    if (!storageReady) return;
-    localStorage.setItem(
-      "mf-preview",
-      JSON.stringify({
-        records,
-        archive,
-        notes,
-        logo,
-        company,
-        language,
-        profile,
-        users,
-        preparedReports,
-        typography,
-      }),
-    );
-  }, [storageReady, records, archive, notes, logo, company, language, profile, users, preparedReports, typography]);
-
   function canAccess(pageId: Page) {
     if (profile.isAdmin) return true;
     if (pageId === "dashboard") return true;
@@ -297,100 +285,72 @@ export default function Home() {
     if (signedIn && !canAccess(page)) setPage("dashboard");
   }, [signedIn, page, profile]);
 
-  function saveRecord(next: Omit<RecordItem, "id">, id?: number) {
-    const fallbackKasaName =
-      next.kind === "income"
-        ? "Diğer"
-        : next.kind === "expense"
-          ? "Diğer Giderler"
-          : "";
-    const finalRecord =
-      fallbackKasaName && !next.cashAccount
-        ? { ...next, cashAccount: fallbackKasaName }
-        : next;
-    if (id) {
-      const old = records.find((x) => x.id === id);
-      if (old)
-        setArchive((a) => [
-          {
-            id: Date.now(),
-            action: "Düzenlendi",
-            at: new Date().toISOString(),
-            user: "Admin",
-            old,
-          },
-          ...a,
-        ]);
-      const renamedCashAccount =
-        old && old.kind === "cash" && old.source !== finalRecord.source
-          ? old.source
-          : null;
-      setRecords((r) =>
-        ensureFallbackKasa(
-          r.map((x) => {
-            if (x.id === id) return { ...finalRecord, id };
-            if (renamedCashAccount && x.cashAccount === renamedCashAccount)
-              return { ...x, cashAccount: finalRecord.source };
-            return x;
-          }),
-          fallbackKasaName,
-        ),
-      );
-    } else
-      setRecords((r) =>
-        ensureFallbackKasa(
-          [{ ...finalRecord, id: Date.now() }, ...r],
-          fallbackKasaName,
-        ),
-      );
-    setModal(null);
+  async function saveRecord(next: Omit<RecordItem, "id">, id?: number) {
+    try {
+      const response = await fetch(id ? `/api/records/${id}` : "/api/records", {
+        method: id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (!response.ok) {
+        alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
+        return;
+      }
+      const data = await response.json();
+      setRecords((r) => {
+        const next = id ? r.map((x) => (x.id === id ? data.record : x)) : [data.record, ...r];
+        return data.ensuredCash ? [data.ensuredCash, ...next] : next;
+      });
+      if (data.archiveEntry) setArchive((a) => [data.archiveEntry, ...a]);
+      setModal(null);
+    } catch {
+      alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
+    }
   }
-  function ensureFallbackKasa(list: RecordItem[], name: string): RecordItem[] {
-    if (!name) return list;
-    if (list.some((x) => x.kind === "cash" && x.source === name)) return list;
-    return [
-      {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        kind: "cash",
-        date: new Date().toISOString().slice(0, 10),
-        source: name,
-        detail: "",
-        note: "",
-        person: "",
-        amount: 0,
-        currency: "USD",
-        project: "",
-        tags: [],
-        monthlyExpense: false,
-        cashAccount: "",
-        listName: "",
-      },
-      ...list,
-    ];
+  async function checkPassword(password: string) {
+    try {
+      const response = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      return Boolean(data.valid);
+    } catch {
+      return false;
+    }
   }
-  function checkPassword(password: string) {
-    return users.some(
-      (x) => x.username === profile.username && x.password === password,
-    );
+  async function removeRecord(item: RecordItem) {
+    try {
+      const response = await fetch(`/api/records/${item.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        alert(tx(language, "Kayıt silinemedi. Lütfen tekrar deneyin.", "The record could not be deleted. Please try again.", "Qeyd nehat jêbirin. Ji kerema xwe dîsa biceribîne."));
+        return;
+      }
+      const data = await response.json();
+      if (data.archiveEntry) setArchive((a) => [data.archiveEntry, ...a]);
+      setRecords((r) => r.filter((x) => x.id !== item.id));
+    } catch {
+      alert(tx(language, "Kayıt silinemedi. Lütfen tekrar deneyin.", "The record could not be deleted. Please try again.", "Qeyd nehat jêbirin. Ji kerema xwe dîsa biceribîne."));
+    }
   }
-  function removeRecord(item: RecordItem) {
-    setArchive((a) => [
-      {
-        id: Date.now(),
-        action: "Silindi",
-        at: new Date().toISOString(),
-        user: "Admin",
-        old: item,
-      },
-      ...a,
-    ]);
-    setRecords((r) => r.filter((x) => x.id !== item.id));
-  }
-  function importRecords(items: Omit<RecordItem, "id">[]) {
-    setRecords((r) => [
-      ...items.map((x, index) => ({ ...x, id: Date.now() + index })),
-      ...r,
-    ]);
+  async function importRecords(items: Omit<RecordItem, "id">[]) {
+    try {
+      const response = await fetch("/api/records/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      if (!response.ok) {
+        alert(tx(language, "Kayıtlar içe aktarılamadı. Lütfen tekrar deneyin.", "The records could not be imported. Please try again.", "Qeyd nehatin têxistin. Ji kerema xwe dîsa biceribîne."));
+        return;
+      }
+      const data = await response.json();
+      setRecords((r) => [...(data.records ?? []), ...r]);
+    } catch {
+      alert(tx(language, "Kayıtlar içe aktarılamadı. Lütfen tekrar deneyin.", "The records could not be imported. Please try again.", "Qeyd nehatin têxistin. Ji kerema xwe dîsa biceribîne."));
+    }
   }
   function uploadLogo(file?: File) {
     if (!file) return;
@@ -399,25 +359,104 @@ export default function Home() {
     reader.readAsDataURL(file);
   }
 
-  function signIn(username: string, password: string) {
-    const account = users.find(
-      (x) => x.username === username.trim() && x.password === password,
-    );
-    if (!account) return false;
-    setProfile((current) => ({
-      ...current,
-      name: account.name,
-      username: account.username,
-      role: account.roleLabel,
-      isAdmin: account.isAdmin,
-      permissions: account.permissions,
-    }));
-    sessionStorage.setItem("mf-preview-session", "active");
-    setSignedIn(true);
-    return true;
+  const noteSaveError = tx(language, "Not kaydedilemedi.", "The note could not be saved.", "Nîşe nehat tomarkirin.");
+  async function createNote(input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt">) {
+    try {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!response.ok) return alert(noteSaveError);
+      const data = await response.json();
+      setNotes((n) => [data.note, ...n]);
+    } catch {
+      alert(noteSaveError);
+    }
   }
-  function signOut() {
-    sessionStorage.removeItem("mf-preview-session");
+  async function updateNote(note: FinanceNote) {
+    try {
+      const response = await fetch(`/api/notes/${note.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(note),
+      });
+      if (!response.ok) return alert(noteSaveError);
+      const data = await response.json();
+      setNotes((n) => n.map((x) => (x.id === note.id ? data.note : x)));
+    } catch {
+      alert(noteSaveError);
+    }
+  }
+  async function deleteNote(id: number) {
+    try {
+      const response = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      if (!response.ok) return alert(noteSaveError);
+      setNotes((n) => n.filter((x) => x.id !== id));
+    } catch {
+      alert(noteSaveError);
+    }
+  }
+
+  const reportSaveError = tx(language, "Rapor kaydedilemedi.", "The report could not be saved.", "Rapor nehat tomarkirin.");
+  async function createPreparedReport(report: PreparedReport) {
+    try {
+      const response = await fetch("/api/prepared-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      if (!response.ok) return alert(reportSaveError);
+      const data = await response.json();
+      setPreparedReports((current) => [data.preparedReport, ...current]);
+    } catch {
+      alert(reportSaveError);
+    }
+  }
+  async function updatePreparedReport(report: PreparedReport) {
+    try {
+      const response = await fetch(`/api/prepared-reports/${report.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      if (!response.ok) return alert(reportSaveError);
+      const data = await response.json();
+      setPreparedReports((current) => current.map((x) => (x.id === report.id ? data.preparedReport : x)));
+    } catch {
+      alert(reportSaveError);
+    }
+  }
+  async function deletePreparedReport(id: string) {
+    try {
+      const response = await fetch(`/api/prepared-reports/${id}`, { method: "DELETE" });
+      if (!response.ok) return alert(reportSaveError);
+      setPreparedReports((current) => current.filter((x) => x.id !== id));
+    } catch {
+      alert(reportSaveError);
+    }
+  }
+
+  async function signIn(username: string, password: string) {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      setProfile((current) => ({ ...current, ...data.profile }));
+      setSignedIn(true);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function signOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
     setProfileOpen(false);
     setSignedIn(false);
   }
@@ -598,13 +637,15 @@ export default function Home() {
               language={language}
               records={records}
               preparedReports={preparedReports}
-              setPreparedReports={setPreparedReports}
+              onCreateReport={createPreparedReport}
+              onUpdateReport={updatePreparedReport}
+              onDeleteReport={deletePreparedReport}
               profile={profile}
               checkPassword={checkPassword}
             />
           )}
           {page === "notes" && (
-            <Notes language={language} notes={notes} setNotes={setNotes} />
+            <Notes language={language} notes={notes} onCreateNote={createNote} onUpdateNote={updateNote} onDeleteNote={deleteNote} />
           )}
           {page === "archive" && <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} />}
           {page === "users" && (
@@ -626,35 +667,6 @@ export default function Home() {
               uploadLogo={uploadLogo}
               typography={typography}
               setTypography={setTypography}
-              reset={() => {
-                setRecords([]);
-                setArchive([]);
-                setNotes([]);
-              }}
-              records={records}
-              archive={archive}
-              notes={notes}
-              preparedReports={preparedReports}
-              activeDatabase={activeDatabase}
-              onActivateDatabase={(db) => {
-                const data = db.data;
-                if (db.sections.includes("cash") || db.sections.includes("income") || db.sections.includes("expense")) {
-                  const incoming = Array.isArray(data.records) ? (data.records as RecordItem[]).map(normalizeRecord) : [];
-                  setRecords(incoming);
-                }
-                if (db.sections.includes("archive")) setArchive((data.archive as ArchiveItem[]) ?? []);
-                if (db.sections.includes("notes")) setNotes((data.notes as FinanceNote[]) ?? []);
-                if (db.sections.includes("reports")) {
-                  setPreparedReports((data.preparedReports as PreparedReport[]) ?? []);
-                }
-                if (db.sections.includes("settings")) {
-                  setCompany((data.company as string) || db.company);
-                  setLogo((data.logo as string) || "");
-                  setTypography({ ...defaultTypography, ...((data.typography as TypographySettings) || {}) });
-                }
-                setActiveDatabase(db.name);
-                localStorage.setItem("mf-active-database", db.name);
-              }}
             />
           )}
         </section>
@@ -665,8 +677,7 @@ export default function Home() {
           kind={modal.kind}
           initial={modal.item}
           records={records}
-          notes={notes}
-          setNotes={setNotes}
+          onCreateNote={createNote}
           onClose={() => setModal(null)}
           onSave={saveRecord}
         />
@@ -676,8 +687,18 @@ export default function Home() {
           profile={profile}
           language={language}
           onClose={() => setProfileModal(false)}
-          onSave={(next) => {
-            setProfile(next);
+          onSave={async (next) => {
+            try {
+              const response = await fetch("/api/profile", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: next.name, avatar: next.avatar }),
+              });
+              if (response.ok) {
+                const data = await response.json();
+                setProfile((current) => ({ ...current, ...data.profile }));
+              }
+            } catch {}
             setProfileModal(false);
           }}
         />
@@ -714,11 +735,12 @@ function Login({
 }: {
   language: Language;
   setLanguage: (x: Language) => void;
-  onSignIn: (username: string, password: string) => boolean;
+  onSignIn: (username: string, password: string) => Promise<boolean>;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const text =
     language === "tr"
       ? {
@@ -728,7 +750,6 @@ function Login({
           pass: "Şifre",
           button: "Oturum Aç",
           error: "Kullanıcı adı veya şifre hatalı.",
-          hint: "Başlangıç hesabı",
         }
       : language === "en"
         ? {
@@ -738,7 +759,6 @@ function Login({
             pass: "Password",
             button: "Sign In",
             error: "Incorrect username or password.",
-            hint: "Initial account",
           }
         : {
             title: "Maliye-Finans",
@@ -747,7 +767,6 @@ function Login({
             pass: "Şîfre",
             button: "Têkeve",
             error: "Navê bikarhêner an şîfre şaş e.",
-            hint: "Hesabê destpêkê",
           };
   return (
     <main className="loginPage">
@@ -771,9 +790,13 @@ function Login({
           </select>
         </label>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            setError(!onSignIn(username, password));
+            if (submitting) return;
+            setSubmitting(true);
+            const ok = await onSignIn(username, password);
+            setSubmitting(false);
+            setError(!ok);
           }}
         >
           <label>
@@ -795,11 +818,8 @@ function Login({
             />
           </label>
           {error && <p className="loginError">{text.error}</p>}
-          <button className="primary">{text.button}</button>
+          <button className="primary" disabled={submitting}>{text.button}</button>
         </form>
-        <small className="loginHint">
-          {text.hint}: <b>admin</b> / <b>admin123</b>
-        </small>
       </div>
     </main>
   );
@@ -1105,7 +1125,7 @@ function Records({
   onEdit: (x: RecordItem) => void;
   onDelete: (x: RecordItem) => void;
   onImport: (rows: Omit<RecordItem, "id">[]) => void;
-  checkPassword: (password: string) => boolean;
+  checkPassword: (password: string) => Promise<boolean>;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
   const [source, setSource] = useState("Tümü"),
@@ -1808,7 +1828,7 @@ function DeleteConfirmModal({
 }: {
   language: Language;
   itemLabel: string;
-  checkPassword: (password: string) => boolean;
+  checkPassword: (password: string) => Promise<boolean>;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -1819,13 +1839,13 @@ function DeleteConfirmModal({
     <div className="overlay">
       <form
         className="modal deleteModal"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (step === 1) {
             setStep(2);
             return;
           }
-          if (!checkPassword(password)) {
+          if (!(await checkPassword(password))) {
             setError(true);
             return;
           }
@@ -1950,8 +1970,7 @@ function RecordModal({
   kind,
   initial,
   records,
-  notes,
-  setNotes,
+  onCreateNote,
   onClose,
   onSave,
 }: {
@@ -1959,8 +1978,7 @@ function RecordModal({
   kind: Kind;
   initial?: RecordItem;
   records: RecordItem[];
-  notes: FinanceNote[];
-  setNotes: (x: FinanceNote[]) => void;
+  onCreateNote: (input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt">) => void;
   onClose: () => void;
   onSave: (x: Omit<RecordItem, "id">, id?: number) => void;
 }) {
@@ -2031,20 +2049,13 @@ function RecordModal({
   ];
   function commitSave() {
     if (financeNote.trim()) {
-      const now = new Date().toISOString();
-      setNotes([
-        {
-          id: Date.now(),
-          title: form.source.trim() || tx(language, "Mali Özel Not", "Private Finance Note", "Nîşeya Darayî ya Taybet"),
-          content: financeNote.trim(),
-          status: financeNoteStatus,
-          relation: financeNoteRelation,
-          relationDetail: financeNoteRelation === "none" ? "" : (financeNoteRelationDetail.trim() || form.source),
-          createdAt: now,
-          updatedAt: now,
-        },
-        ...notes,
-      ]);
+      onCreateNote({
+        title: form.source.trim() || tx(language, "Mali Özel Not", "Private Finance Note", "Nîşeya Darayî ya Taybet"),
+        content: financeNote.trim(),
+        status: financeNoteStatus,
+        relation: financeNoteRelation,
+        relationDetail: financeNoteRelation === "none" ? "" : (financeNoteRelationDetail.trim() || form.source),
+      });
     }
     onSave(form, initial?.id);
   }
@@ -2724,16 +2735,20 @@ function ReportBuilder({
   language,
   records,
   preparedReports,
-  setPreparedReports,
+  onCreateReport,
+  onUpdateReport,
+  onDeleteReport,
   profile,
   checkPassword,
 }: {
   language: Language;
   records: RecordItem[];
   preparedReports: PreparedReport[];
-  setPreparedReports: (items: PreparedReport[]) => void;
+  onCreateReport: (report: PreparedReport) => void;
+  onUpdateReport: (report: PreparedReport) => void;
+  onDeleteReport: (id: string) => void;
   profile: Profile;
-  checkPassword: (password: string) => boolean;
+  checkPassword: (password: string) => Promise<boolean>;
 }) {
   const [creating, setCreating] = useState(false);
   const [editingReport, setEditingReport] = useState<PreparedReport | null>(null);
@@ -2813,7 +2828,7 @@ function ReportBuilder({
           records={records}
           onClose={() => setCreating(false)}
           onSave={(report) => {
-            setPreparedReports([report, ...preparedReports]);
+            onCreateReport(report);
             setOpenId(report.id);
             setCreating(false);
           }}
@@ -2826,7 +2841,7 @@ function ReportBuilder({
           initial={editingReport}
           onClose={() => setEditingReport(null)}
           onSave={(report) => {
-            setPreparedReports(preparedReports.map((item) => item.id === report.id ? report : item));
+            onUpdateReport(report);
             setOpenId(report.id);
             setEditingReport(null);
           }}
@@ -2839,7 +2854,7 @@ function ReportBuilder({
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
           onConfirm={() => {
-            setPreparedReports(preparedReports.filter((item) => item.id !== deleteTarget.id));
+            onDeleteReport(deleteTarget.id);
             if (openId === deleteTarget.id) setOpenId(null);
             setDeleteTarget(null);
           }}
@@ -3275,11 +3290,15 @@ function AnnualReports({
 function Notes({
   language,
   notes,
-  setNotes,
+  onCreateNote,
+  onUpdateNote,
+  onDeleteNote,
 }: {
   language: Language;
   notes: FinanceNote[];
-  setNotes: (x: FinanceNote[]) => void;
+  onCreateNote: (note: Omit<FinanceNote, "id" | "createdAt" | "updatedAt">) => void;
+  onUpdateNote: (note: FinanceNote) => void;
+  onDeleteNote: (id: number) => void;
 }) {
   const [addingTo, setAddingTo] = useState<NoteStatus | null>(null);
   const [editingNote, setEditingNote] = useState<FinanceNote | null>(null);
@@ -3294,7 +3313,10 @@ function Notes({
     .filter((note) => note.status === status)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, status === "completed" ? 4 : undefined);
-  const moveNote = (id: number, status: NoteStatus) => setNotes(notes.map((note) => note.id === id ? { ...note, status, updatedAt: new Date().toISOString() } : note));
+  const moveNote = (id: number, status: NoteStatus) => {
+    const note = notes.find((x) => x.id === id);
+    if (note) onUpdateNote({ ...note, status, updatedAt: new Date().toISOString() });
+  };
   return (
     <div className="panel">
       <div className="toolbar">
@@ -3322,14 +3344,14 @@ function Notes({
               <h3>{note.title}</h3><p>{note.content}</p>
               <label>{tx(language, "Durum", "Status", "Rewş")}<select value={note.status} onChange={(event) => moveNote(note.id, event.target.value as NoteStatus)}>{columns.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
               <button type="button" className="noteEdit" title={tx(language, "Notu Düzenle", "Edit Note", "Nîşeyê Biguherîne")} aria-label={tx(language, "Notu Düzenle", "Edit Note", "Nîşeyê Biguherîne")} onClick={() => setEditingNote(note)}>✎</button>
-              <button className="noteDelete" title={tx(language, "Sil", "Delete", "Jêbirin")} onClick={() => setNotes(notes.filter((item) => item.id !== note.id))}>×</button>
+              <button className="noteDelete" title={tx(language, "Sil", "Delete", "Jêbirin")} onClick={() => onDeleteNote(note.id)}>×</button>
             </article>)}
             {!visibleNotes(column.id).length && <div className="noteColumnEmpty">{tx(language, "Not yok", "No notes", "Nîşe tune")}</div>}
           </div>
         </section>)}
       </div>
-      {addingTo && <NoteModal language={language} initialStatus={addingTo} columns={columns} onClose={() => setAddingTo(null)} onSave={(note) => { setNotes([note, ...notes]); setAddingTo(null); }} />}
-      {editingNote && <NoteModal language={language} initialStatus={editingNote.status} initialNote={editingNote} columns={columns} onClose={() => setEditingNote(null)} onSave={(updated) => { setNotes(notes.map((note) => note.id === updated.id ? updated : note)); setEditingNote(null); }} />}
+      {addingTo && <NoteModal language={language} initialStatus={addingTo} columns={columns} onClose={() => setAddingTo(null)} onSave={(note) => { onCreateNote(note); setAddingTo(null); }} />}
+      {editingNote && <NoteModal language={language} initialStatus={editingNote.status} initialNote={editingNote} columns={columns} onClose={() => setEditingNote(null)} onSave={(updated) => { onUpdateNote(updated); setEditingNote(null); }} />}
     </div>
   );
 }
@@ -3362,9 +3384,9 @@ function Users({
 }: {
   language: Language;
   users: UserAccount[];
-  setUsers: (items: UserAccount[]) => void;
+  setUsers: (updater: UserAccount[] | ((current: UserAccount[]) => UserAccount[])) => void;
   currentUsername: string;
-  checkPassword: (password: string) => boolean;
+  checkPassword: (password: string) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState<UserAccount | "new" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null);
@@ -3435,13 +3457,26 @@ function Users({
           initial={editing === "new" ? null : editing}
           existingUsernames={users.filter((u) => u !== editing).map((u) => u.username.toLowerCase())}
           onClose={() => setEditing(null)}
-          onSave={(account) => {
-            setUsers(
-              editing === "new"
-                ? [...users, account]
-                : users.map((u) => (u.id === account.id ? account : u)),
-            );
-            setEditing(null);
+          onSave={async (input) => {
+            try {
+              const response = await fetch(input.id ? `/api/users/${input.id}` : "/api/users", {
+                method: input.id ? "PUT" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(input),
+              });
+              if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                alert(body.error || tx(language, "Kullanıcı kaydedilemedi.", "The user could not be saved.", "Bikarhêner nehat tomarkirin."));
+                return;
+              }
+              const data = await response.json();
+              setUsers((current) =>
+                input.id ? current.map((u) => (u.id === data.user.id ? data.user : u)) : [...current, data.user],
+              );
+              setEditing(null);
+            } catch {
+              alert(tx(language, "Kullanıcı kaydedilemedi.", "The user could not be saved.", "Bikarhêner nehat tomarkirin."));
+            }
           }}
         />
       )}
@@ -3451,8 +3486,18 @@ function Users({
           itemLabel={`${deleteTarget.name} (@${deleteTarget.username})`}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            setUsers(users.filter((u) => u.id !== deleteTarget.id));
+          onConfirm={async () => {
+            try {
+              const response = await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
+              if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                alert(body.error || tx(language, "Kullanıcı silinemedi.", "The user could not be deleted.", "Bikarhêner nehat jêbirin."));
+                return;
+              }
+              setUsers((current) => current.filter((u) => u.id !== deleteTarget.id));
+            } catch {
+              alert(tx(language, "Kullanıcı silinemedi.", "The user could not be deleted.", "Bikarhêner nehat jêbirin."));
+            }
             setDeleteTarget(null);
           }}
         />
@@ -3471,7 +3516,7 @@ function UserModal({
   initial: UserAccount | null;
   existingUsernames: string[];
   onClose: () => void;
-  onSave: (account: UserAccount) => void;
+  onSave: (input: { id?: number; name: string; username: string; password: string; roleLabel: string; isAdmin: boolean; permissions: Page[] }) => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [username, setUsername] = useState(initial?.username ?? "");
@@ -3491,10 +3536,10 @@ function UserModal({
           e.preventDefault();
           if (!valid) return;
           onSave({
-            id: initial?.id ?? Date.now(),
+            id: initial?.id,
             name: name.trim(),
             username: username.trim(),
-            password: password.trim() || initial?.password || "",
+            password: password.trim(),
             roleLabel: roleLabel.trim(),
             isAdmin,
             permissions: isAdmin ? [] : permissions,
@@ -3571,13 +3616,6 @@ function Settings({
   uploadLogo,
   typography,
   setTypography,
-  reset,
-  records,
-  archive,
-  notes,
-  preparedReports,
-  activeDatabase,
-  onActivateDatabase,
 }: {
   language: Language;
   company: string;
@@ -3587,85 +3625,38 @@ function Settings({
   uploadLogo: (f?: File) => void;
   typography: TypographySettings;
   setTypography: (value: TypographySettings) => void;
-  reset: () => void;
-  records: RecordItem[];
-  archive: ArchiveItem[];
-  notes: FinanceNote[];
-  preparedReports: PreparedReport[];
-  activeDatabase: string;
-  onActivateDatabase: (db: DatabasePackage) => void;
 }) {
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
   const [typographyDraft, setTypographyDraft] = useState<TypographySettings>(typography);
   const [typographyApproved, setTypographyApproved] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"app" | "data">("app");
-  const [databaseName, setDatabaseName] = useState(company || "Yeni Şirket");
-  const [dataSections, setDataSections] = useState<DataSection[]>(["cash", "income", "expense", "reports", "notes", "archive", "settings"]);
-  const [databases, setDatabases] = useState<DatabasePackage[]>([]);
-  const [deleteDbStep, setDeleteDbStep] = useState<0 | 1 | 2>(0);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
-  const [dbActionConfirm, setDbActionConfirm] = useState<
-    { type: "activate" | "remove"; db: DatabasePackage } | null
-  >(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => setTypographyDraft(typography), [typography]);
-  useEffect(() => {
-    try { setDatabases(JSON.parse(localStorage.getItem("mf-database-packages") || "[]")); } catch { setDatabases([]); }
-  }, []);
 
-  function persistDatabases(next: DatabasePackage[]) {
-    setDatabases(next);
-    localStorage.setItem("mf-database-packages", JSON.stringify(next));
-  }
-
-  function buildDatabasePackage(): DatabasePackage {
-    const selectedRecords = records.filter((item) => dataSections.includes(item.kind));
-    const data: Record<string, unknown> = { records: selectedRecords };
-    if (dataSections.includes("archive")) data.archive = archive;
-    if (dataSections.includes("notes")) data.notes = notes;
-    if (dataSections.includes("reports")) {
-      data.preparedReports = preparedReports;
-    }
-    if (dataSections.includes("settings")) { data.company = company; data.logo = logo; data.typography = typography; }
-    const now = new Date().toISOString();
-    return { id: crypto.randomUUID(), name: databaseName.trim() || company, company, createdAt: now, updatedAt: now, sections: dataSections, data };
-  }
-
-  function downloadDatabase() {
-    if (!dataSections.length)
-      return alert(tx(
-        language,
-        "En az bir veri bölümü seçin.",
-        "Select at least one data section.",
-        "Herî kêm beşeke daneyan hilbijêrin.",
-      ));
-    const db = buildDatabasePackage();
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
-    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${db.name.replace(/[^a-z0-9_-]+/gi, "-")}.mfdb.json`; link.click(); URL.revokeObjectURL(link.href);
-  }
-
-  async function importDatabase(file?: File) {
-    if (!file) return;
+  async function persistSettings(next: { company?: string; logo?: string; typography?: TypographySettings }) {
+    setSaving(true);
     try {
-      const parsed = JSON.parse(await file.text()) as DatabasePackage;
-      if (!parsed.name || !parsed.data || !Array.isArray(parsed.sections)) throw new Error();
-      const next = [...databases.filter((item) => item.id !== parsed.id), parsed];
-      persistDatabases(next);
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company: next.company ?? company,
+          logo: next.logo ?? logo,
+          typography: next.typography ?? typography,
+          language,
+        }),
+      });
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        alert(tx(language, "Ayarlar kaydedilemedi.", "Settings could not be saved.", "Mîheng nehatin tomarkirin."));
+      }
     } catch {
-      alert(tx(language, "Bu dosya geçerli bir Maliye-Finans veritabanı değildir.", "This file is not a valid Maliye-Finans database.", "Ev pel danegeheke derbasdar a Maliye-Finansê nîne."));
+      alert(tx(language, "Ayarlar kaydedilemedi.", "Settings could not be saved.", "Mîheng nehatin tomarkirin."));
     }
-  }
-
-  function deleteDatabase() {
-    localStorage.removeItem("mf-database-packages");
-    localStorage.removeItem("mf-monthly-report-documents");
-    localStorage.setItem("mf-active-database", tx(language, "Yeni Boş Veritabanı", "New Empty Database", "Danegeha Nû ya Vala"));
-    localStorage.setItem("mf-preview", JSON.stringify({
-      records: [], archive: [], notes: [], logo: "", company: "Maliye-Finans", language,
-      profile: { name: "Admin", username: "admin", role: "Yönetici", avatar: "" },
-      preparedReports: [], typography: defaultTypography,
-    }));
-    window.location.reload();
+    setSaving(false);
   }
 
   function updateTypographyDraft(key: TypographyKey, next: TypographyRule) {
@@ -3673,18 +3664,17 @@ function Settings({
     setTypographyApproved(false);
   }
 
-  function approveTypography(approved: boolean) {
+  async function approveTypography(approved: boolean) {
     setTypographyApproved(approved);
-    if (approved) setTypography(typographyDraft);
+    if (approved) {
+      setTypography(typographyDraft);
+      await persistSettings({ typography: typographyDraft });
+    }
   }
 
   return (
     <div className="settingsPage">
-      <div className="settingsMainTabs" role="tablist">
-        <button className={settingsTab === "app" ? "active" : ""} onClick={() => setSettingsTab("app")}>⚙ {tx(language, "Uygulama Ayarları", "Application Settings", "Mîhengên Sepanê")}</button>
-        <button className={settingsTab === "data" ? "active" : ""} onClick={() => setSettingsTab("data")}>▤ {tx(language, "Veri (Database) Ayarları", "Data (Database) Settings", "Mîhengên Danegehê")}</button>
-      </div>
-      {settingsTab === "app" ? <div className="settings">
+      <div className="settings">
       <div className="panel">
         <Title
           title={tx(
@@ -3751,13 +3741,10 @@ function Settings({
             <option>EUR</option>
           </select>
         </label>
-        <button className="primary">
-          {tx(
-            language,
-            "Ayarları Kaydet",
-            "Save Settings",
-            "Mîhengan Tomar Bike",
-          )}
+        <button className="primary" disabled={saving} onClick={() => persistSettings({})}>
+          {saved
+            ? tx(language, "Kaydedildi ✓", "Saved ✓", "Hat Tomarkirin ✓")
+            : tx(language, "Ayarları Kaydet", "Save Settings", "Mîhengan Tomar Bike")}
         </button>
       </div>
       <div className="panel appearancePanel">
@@ -3797,146 +3784,7 @@ function Settings({
           </label>
         </div>
       </div>
-      <div className="panel">
-        <Title
-          title={tx(
-            language,
-            "Yerel Uygulama Verileri",
-            "Local Application Data",
-            "Daneyên Herêmî yên Sepanê",
-          )}
-          sub={tx(
-            language,
-            "Bu bilgisayardaki uygulama kayıtlarını yönetin",
-            "Manage application records on this computer",
-            "Qeydên sepanê yên li ser vê komputerê birêve bibin",
-          )}
-        />
-        <p className="explain">
-          {tx(
-            language,
-            "Yaptığınız değişiklikler bu bilgisayarda yerel olarak saklanır.",
-            "Your changes are stored locally on this computer.",
-            "Guherînên we li ser vê komputerê bi awayekî herêmî tên parastin.",
-          )}
-        </p>
-        <button
-          className="light redText"
-          onClick={() => setResetConfirmOpen(true)}
-        >
-          {tx(
-            language,
-            "Yerel Verileri Sıfırla",
-            "Reset Local Data",
-            "Daneyên Herêmî Nû Bike",
-          )}
-        </button>
-      </div>
-    </div> : <div className="databaseSettings">
-      <div className="panel databaseExportPanel">
-        <Title
-          title={tx(language, "Veritabanı Oluştur / Dışa Aktar", "Create / Export Database", "Danegehê Biafirîne / Derxe")}
-          sub={tx(language, "Yeni şirket paketi oluşturun ve alınacak bölümleri seçin", "Create a new company package and choose the sections to include", "Pakêteke nû ya pargîdaniyê biafirînin û beşên ku dê tê de bin hilbijêrin")}
-        />
-        <label className="settingLabel">{tx(language, "Veritabanı / Şirket Adı", "Database / Company Name", "Navê Danegeh / Pargîdaniyê")}<input value={databaseName} onChange={(e) => setDatabaseName(e.target.value)} /></label>
-        <div className="databaseSectionGrid">
-          {([[
-            "cash", ["Kasa", "Cash", "Qase"]], ["income", ["Gelir", "Income", "Dahat"]], ["expense", ["Gider", "Expense", "Mesref"]], ["reports", ["Rapor Hazırla", "Prepare Report", "Raporê Amade Bike"]], ["notes", ["Mali Notlar", "Finance Notes", "Nîşeyên Darayî"]], ["archive", ["Arşiv", "Archive", "Arşîv"]], ["settings", ["Uygulama Ayarları", "Application Settings", "Mîhengên Sepanê"]]] as [DataSection, [string, string, string]][]).map(([key, label]) => <label key={key} className={dataSections.includes(key) ? "selected" : ""}><input type="checkbox" checked={dataSections.includes(key)} onChange={(e) => setDataSections((current) => e.target.checked ? [...current, key] : current.filter((item) => item !== key))} /><span>{tx(language, ...label)}</span></label>)}
-        </div>
-        <div className="databaseActions">
-          <button className="primary" onClick={downloadDatabase}>↓ {tx(language, "Seçilen Verileri İndir", "Download Selected Data", "Daneyên Hilbijartî Daxe")}</button>
-          <label className="light fileButton">＋ {tx(language, "Veritabanı Yükle", "Load Database", "Danegehê Bar Bike")}<input hidden type="file" accept="application/json,.json" onChange={(e) => importDatabase(e.target.files?.[0])} /></label>
-          <button className="dangerButton" onClick={() => setDeleteDbStep(1)}>⌫ {tx(language, "Veritabanını Sil", "Delete Database", "Danegehê Jê Bibe")}</button>
-        </div>
-        <p className="databaseWarning">{tx(language, "Yüklenen dosya hemen etkinleşmez. Önce aşağıdaki listede kontrol edilir, ardından “Aktif Et” ile şirkete geçilir.", "A loaded file is not activated immediately. Review it in the list below, then switch to it with “Activate”.", "Pela barkirî tavilê çalak nabe. Pêşî di lîsteya jêrîn de kontrol bikin, paşê bi “Çalak Bike” derbasî wê bibin.")}</p>
-      </div>
-      <div className="panel databaseLibraryPanel">
-        <Title title={tx(language, "Şirket Veritabanları", "Company Databases", "Danegehên Pargîdaniyê")} sub={tx(language, "Birden fazla şirketi ayrı paketlerde yönetin", "Manage multiple companies in separate packages", "Gelek pargîdanî di pakêtên cuda de birêve bibin")} />
-        <div className="activeDatabaseSummary"><small>{tx(language, "ŞU ANDA AKTİF", "CURRENTLY ACTIVE", "NIHA ÇALAK E")}</small><strong>▣ {activeDatabase}</strong></div>
-        <div className="databaseList">
-          {databases.length ? databases.map((db) => <article key={db.id} className={db.name === activeDatabase ? "active" : ""}><div><b>{db.name}</b><small>{db.sections.length} {tx(language, "bölüm", "sections", "beş")} · {new Date(db.updatedAt).toLocaleDateString(language === "en" ? "en-GB" : language === "ku" ? "ku-TR" : "tr-TR")}</small></div><span>{db.name === activeDatabase ? <em>{tx(language, "Aktif", "Active", "Çalak")}</em> : <button className="light" onClick={() => setDbActionConfirm({ type: "activate", db })}>{tx(language, "Aktif Et", "Activate", "Çalak Bike")}</button>}<button className="iconDanger" title={tx(language, "Listeden kaldır", "Remove from list", "Ji lîsteyê rake")} onClick={() => setDbActionConfirm({ type: "remove", db })}>×</button></span></article>) : <div className="emptyDatabase">{tx(language, "Henüz yüklenmiş şirket veritabanı yok.", "No company database has been loaded yet.", "Hêj danegeheke pargîdaniyê nehatiye barkirin.")}</div>}
-        </div>
-      </div>
-    </div>}
-    {resetConfirmOpen && (
-      <ConfirmModal
-        language={language}
-        danger
-        message={tx(
-          language,
-          "Yerel uygulama verileri sıfırlansın mı?",
-          "Reset local application data?",
-          "Daneyên herêmî yên sepanê ji nû ve bên sazkirin?",
-        )}
-        onClose={() => setResetConfirmOpen(false)}
-        onConfirm={() => {
-          setResetConfirmOpen(false);
-          reset();
-        }}
-      />
-    )}
-    {deleteDbStep === 1 && (
-      <ConfirmModal
-        language={language}
-        title={tx(language, "Veritabanını Sil", "Delete Database", "Danegehê Jê Bibe")}
-        danger
-        message={tx(
-          language,
-          `"${activeDatabase}" veritabanını ve içindeki tüm mali verileri silmek istediğinizden emin misiniz?`,
-          `Are you sure you want to delete the "${activeDatabase}" database and all of its financial data?`,
-          `Ma hûn pê ewle ne ku dixwazin danegeha "${activeDatabase}" û hemû daneyên wê yên darayî jê bibin?`,
-        )}
-        confirmLabel={tx(language, "Devam Et", "Continue", "Bidomîne")}
-        onClose={() => setDeleteDbStep(0)}
-        onConfirm={() => setDeleteDbStep(2)}
-      />
-    )}
-    {deleteDbStep === 2 && (
-      <ConfirmModal
-        language={language}
-        title={tx(language, "Veritabanını Sil", "Delete Database", "Danegehê Jê Bibe")}
-        danger
-        message={tx(
-          language,
-          "Bu işlem geri alınamaz. Veritabanını kalıcı olarak silmek için tekrar onaylayın.",
-          "This action cannot be undone. Confirm again to permanently delete the database.",
-          "Ev kiryar nayê vegerandin. Ji bo jêbirina mayînde ya danegehê dîsa erê bikin.",
-        )}
-        confirmLabel={tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}
-        onClose={() => setDeleteDbStep(0)}
-        onConfirm={() => {
-          setDeleteDbStep(0);
-          deleteDatabase();
-        }}
-      />
-    )}
-    {dbActionConfirm && (
-      <ConfirmModal
-        language={language}
-        danger={dbActionConfirm.type === "remove"}
-        message={
-          dbActionConfirm.type === "activate"
-            ? tx(
-                language,
-                `"${dbActionConfirm.db.name}" veritabanına geçilsin mi?`,
-                `Switch to the "${dbActionConfirm.db.name}" database?`,
-                `Derbasî danegeha "${dbActionConfirm.db.name}" bibin?`,
-              )
-            : tx(
-                language,
-                "Bu veritabanı listeden kaldırılsın mı?",
-                "Remove this database from the list?",
-                "Ev danegeh ji lîsteyê were rakirin?",
-              )
-        }
-        onClose={() => setDbActionConfirm(null)}
-        onConfirm={() => {
-          if (dbActionConfirm.type === "activate") onActivateDatabase(dbActionConfirm.db);
-          else persistDatabases(databases.filter((item) => item.id !== dbActionConfirm.db.id));
-          setDbActionConfirm(null);
-        }}
-      />
-    )}
+    </div>
     </div>
   );
 }

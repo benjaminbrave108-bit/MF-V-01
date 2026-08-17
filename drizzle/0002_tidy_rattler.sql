@@ -1,0 +1,1 @@
+ALTER TABLE "records" ALTER COLUMN "amount" SET DEFAULT 0;
