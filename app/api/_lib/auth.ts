@@ -1,4 +1,4 @@
-import { and, eq, gt, ne } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, ne } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sessions, users } from "../../../db/schema";
 import type { Page } from "./types";
@@ -6,6 +6,9 @@ import type { Page } from "./types";
 const COOKIE_NAME = "mfv01_session";
 const TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 12);
 const SECURE = process.env.SESSION_COOKIE_SECURE !== "false";
+// Caps session rows per user (a stolen/never-logged-out token has a natural
+// expiry via TTL, but nothing else was bounding how many could pile up).
+const MAX_SESSIONS_PER_USER = 10;
 
 export type SessionUser = {
   id: number;
@@ -57,6 +60,21 @@ export async function createSession(userId: number): Promise<{ token: string; ex
   const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
   const expiresAt = new Date(Date.now() + TTL_HOURS * 60 * 60 * 1000);
   await db.insert(sessions).values({ id: token, userId, expiresAt });
+
+  // Opportunistic cleanup on the path that actually grows the table: drop
+  // this user's already-expired sessions, then trim down to the N most
+  // recent if logins have piled up beyond that.
+  await db.delete(sessions).where(and(eq(sessions.userId, userId), lt(sessions.expiresAt, new Date())));
+  const remaining = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+    .orderBy(desc(sessions.createdAt));
+  if (remaining.length > MAX_SESSIONS_PER_USER) {
+    const staleIds = remaining.slice(MAX_SESSIONS_PER_USER).map((row) => row.id);
+    await db.delete(sessions).where(inArray(sessions.id, staleIds));
+  }
+
   return { token, expiresAt };
 }
 

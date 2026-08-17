@@ -129,8 +129,28 @@ async function runMigrations() {
   }
 }
 
+const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+// Belt-and-suspenders alongside the per-login trim in app/api/_lib/auth.ts:
+// this catches sessions left behind by users who never log back in.
+function startSessionCleanupTimer() {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  async function sweep() {
+    try {
+      const result = await pool.query("DELETE FROM sessions WHERE expires_at < now()");
+      if (result.rowCount) console.log(`[sessions] cleaned up ${result.rowCount} expired session(s)`);
+    } catch (error) {
+      console.error("[sessions] cleanup failed", error);
+    }
+  }
+  sweep();
+  const timer = setInterval(sweep, SESSION_CLEANUP_INTERVAL_MS);
+  timer.unref();
+}
+
 async function main() {
   await runMigrations();
+  startSessionCleanupTimer();
 
   const { default: worker } = await import(pathToFileURL(SERVER_ENTRY).href);
 
