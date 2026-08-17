@@ -50,26 +50,29 @@ export async function POST(request: Request) {
   const cashAccount = payload.cashAccount || fallbackKasaName;
 
   const db = getDb();
-  const [record] = await db
-    .insert(records)
-    .values({
-      kind: payload.kind,
-      date: payload.date,
-      source: payload.source,
-      detail: payload.detail,
-      note: payload.note,
-      person: payload.person,
-      amount: payload.amount,
-      currency: payload.currency,
-      project: payload.project,
-      tags: payload.tags,
-      monthlyExpense: payload.monthlyExpense,
-      cashAccount,
-      listName: payload.listName,
-    })
-    .returning();
+  const { record, ensuredCash } = await db.transaction(async (tx) => {
+    const [insertedRecord] = await tx
+      .insert(records)
+      .values({
+        kind: payload.kind,
+        date: payload.date,
+        source: payload.source,
+        detail: payload.detail,
+        note: payload.note,
+        person: payload.person,
+        amount: payload.amount,
+        currency: payload.currency,
+        project: payload.project,
+        tags: payload.tags,
+        monthlyExpense: payload.monthlyExpense,
+        cashAccount,
+        listName: payload.listName,
+      })
+      .returning();
 
-  const ensuredCash = await ensureFallbackKasa(fallbackKasaName);
+    const createdCash = await ensureFallbackKasa(fallbackKasaName, tx);
+    return { record: insertedRecord, ensuredCash: createdCash };
+  });
 
   return json({ record, ensuredCash }, { status: 201 });
 }

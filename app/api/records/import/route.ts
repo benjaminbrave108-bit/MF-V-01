@@ -48,11 +48,13 @@ export async function POST(request: Request) {
   });
 
   const db = getDb();
-  const inserted = await db.insert(records).values(rowsToInsert).returning();
-
-  for (const name of fallbackNamesUsed) {
-    await ensureFallbackKasa(name);
-  }
+  const inserted = await db.transaction(async (tx) => {
+    const insertedRows = await tx.insert(records).values(rowsToInsert).returning();
+    for (const name of fallbackNamesUsed) {
+      await ensureFallbackKasa(name, tx);
+    }
+    return insertedRows;
+  });
 
   return json({ records: inserted }, { status: 201 });
 }

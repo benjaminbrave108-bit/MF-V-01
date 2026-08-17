@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getDb, type DbClient } from "../../../db";
 import { records } from "../../../db/schema";
 
 export function fallbackKasaNameFor(kind: string): string {
@@ -10,10 +10,10 @@ export function fallbackKasaNameFor(kind: string): string {
 
 // Mirrors the client's previous `ensureFallbackKasa`: if a record needs a
 // default cash account bucket that doesn't exist yet as its own "cash"
-// record, create one so it shows up in Kasalar.
-export async function ensureFallbackKasa(name: string) {
+// record, create one so it shows up in Kasalar. Accepts a transaction so
+// callers can make this part of a single atomic write.
+export async function ensureFallbackKasa(name: string, db: DbClient = getDb()) {
   if (!name) return null;
-  const db = getDb();
   const existing = await db
     .select()
     .from(records)

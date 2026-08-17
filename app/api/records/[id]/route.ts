@@ -41,43 +41,47 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const source = payload.source ?? old.source;
   const cashAccount = payload.cashAccount || old.cashAccount || fallbackKasaName;
 
-  const [record] = await db
-    .update(records)
-    .set({
-      kind,
-      date: payload.date ?? old.date,
-      source,
-      detail: payload.detail ?? old.detail,
-      note: payload.note ?? old.note,
-      person: payload.person ?? old.person,
-      amount: payload.amount ?? old.amount,
-      currency: payload.currency ?? old.currency,
-      project: payload.project ?? old.project,
-      tags: payload.tags ?? old.tags,
-      monthlyExpense: payload.monthlyExpense ?? old.monthlyExpense,
-      cashAccount,
-      listName: payload.listName ?? old.listName,
-      updatedAt: new Date(),
-    })
-    .where(eq(records.id, id))
-    .returning();
+  const { record, archiveEntry, ensuredCash } = await db.transaction(async (tx) => {
+    const [updatedRecord] = await tx
+      .update(records)
+      .set({
+        kind,
+        date: payload.date ?? old.date,
+        source,
+        detail: payload.detail ?? old.detail,
+        note: payload.note ?? old.note,
+        person: payload.person ?? old.person,
+        amount: payload.amount ?? old.amount,
+        currency: payload.currency ?? old.currency,
+        project: payload.project ?? old.project,
+        tags: payload.tags ?? old.tags,
+        monthlyExpense: payload.monthlyExpense ?? old.monthlyExpense,
+        cashAccount,
+        listName: payload.listName ?? old.listName,
+        updatedAt: new Date(),
+      })
+      .where(eq(records.id, id))
+      .returning();
 
-  // Cascade: if a cash account's display name changed, keep every record
-  // that referenced it by name pointing at the new name.
-  if (old.kind === "cash" && old.source !== source) {
-    await db.update(records).set({ cashAccount: source }).where(eq(records.cashAccount, old.source));
-  }
+    // Cascade: if a cash account's display name changed, keep every record
+    // that referenced it by name pointing at the new name.
+    if (old.kind === "cash" && old.source !== source) {
+      await tx.update(records).set({ cashAccount: source }).where(eq(records.cashAccount, old.source));
+    }
 
-  const [archiveEntry] = await db
-    .insert(archive)
-    .values({
-      action: "Düzenlendi",
-      userName: session.user.name,
-      oldRecord: old,
-    })
-    .returning();
+    const [insertedArchive] = await tx
+      .insert(archive)
+      .values({
+        action: "Düzenlendi",
+        userName: session.user.name,
+        oldRecord: old,
+      })
+      .returning();
 
-  const ensuredCash = await ensureFallbackKasa(fallbackKasaName);
+    const createdCash = await ensureFallbackKasa(fallbackKasaName, tx);
+
+    return { record: updatedRecord, archiveEntry: insertedArchive, ensuredCash: createdCash };
+  });
 
   return json({ record, archiveEntry: toClientArchiveItem(archiveEntry), ensuredCash });
 }
@@ -99,16 +103,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await db.delete(records).where(eq(records.id, id));
-
-  const [archiveEntry] = await db
-    .insert(archive)
-    .values({
-      action: "Silindi",
-      userName: session.user.name,
-      oldRecord: old,
-    })
-    .returning();
+  const [archiveEntry] = await db.transaction(async (tx) => {
+    await tx.delete(records).where(eq(records.id, id));
+    return tx
+      .insert(archive)
+      .values({
+        action: "Silindi",
+        userName: session.user.name,
+        oldRecord: old,
+      })
+      .returning();
+  });
 
   return json({ archiveEntry: toClientArchiveItem(archiveEntry) });
 }

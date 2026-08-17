@@ -2,6 +2,11 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
+// Lets helpers (e.g. app/api/_lib/records.ts's ensureFallbackKasa) accept
+// either the plain db handle or a transaction, so callers can opt them into
+// db.transaction(...) and get atomic multi-statement writes.
+export type DbClient = ReturnType<typeof drizzle<typeof schema>> | Parameters<Parameters<ReturnType<typeof drizzle<typeof schema>>["transaction"]>[0]>[0];
+
 let cachedDb: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let cachedPool: Pool | null = null;
 
