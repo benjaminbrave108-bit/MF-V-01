@@ -29,6 +29,13 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   const old = existingRows[0];
   if (!old) return json({ error: "Record not found" }, { status: 404 });
 
+  // Optimistic locking: if the client tells us the updatedAt it started
+  // editing from and it no longer matches, someone else saved a change in
+  // the meantime — reject rather than silently overwrite their edit.
+  if (payload.updatedAt && new Date(payload.updatedAt).getTime() !== old.updatedAt.getTime()) {
+    return json({ error: "Bu kayıt başka bir kullanıcı tarafından değiştirildi" }, { status: 409 });
+  }
+
   const kind = payload.kind ?? old.kind;
   // Both the record's current kind and its requested new kind must be
   // permitted — otherwise a user could smuggle a record from an

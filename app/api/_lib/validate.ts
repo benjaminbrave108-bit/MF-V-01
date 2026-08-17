@@ -72,6 +72,9 @@ export const recordUpdateSchema = z.object({
   monthlyExpense: z.boolean().optional(),
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
+  // Optimistic-locking token: the updatedAt the client last saw. If it
+  // doesn't match the row's current value, someone else changed it first.
+  updatedAt: z.string().optional(),
 });
 
 export const recordImportSchema = z.object({

@@ -27,6 +27,9 @@ type RecordItem = {
   monthlyExpense: boolean;
   cashAccount: string;
   listName: string;
+  // Sent back with edits so the server can detect a concurrent change
+  // (see saveRecord's 409 handling) — meaningless on a not-yet-saved record.
+  updatedAt?: string;
 };
 type ArchiveItem = {
   id: number;
@@ -296,6 +299,10 @@ export default function Home() {
         body: JSON.stringify(next),
       });
       if (!response.ok) {
+        if (response.status === 409) {
+          alert(tx(language, "Bu kayıt siz düzenlerken başka bir kullanıcı tarafından değiştirildi. Lütfen sayfayı yenileyip tekrar deneyin.", "This record was changed by another user while you were editing it. Please refresh and try again.", "Dema te ev qeyd sererast dikir, bikarhênerek din ew guherand. Ji kerema xwe rûpelê nûve bike û dîsa biceribîne."));
+          return;
+        }
         alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
         return;
       }
@@ -1463,7 +1470,7 @@ function Records({
       headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
         headers[colNumber] = String(cell.value ?? "").trim();
       });
-      const raw: Record<string, unknown>[] = [];
+      const raw: { rowNumber: number; row: Record<string, unknown> }[] = [];
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
         const record: Record<string, unknown> = {};
@@ -1475,10 +1482,11 @@ function Records({
             ? (value as { text: string }).text
             : value ?? "";
         });
-        raw.push(record);
+        raw.push({ rowNumber, row: record });
       });
+      const invalidDateRows: number[] = [];
       const imported = raw
-        .map((row): Omit<RecordItem, "id"> => {
+        .map(({ rowNumber, row }): (Omit<RecordItem, "id"> & { rowNumber: number }) | null => {
           const values = Object.values(row);
           const get = (...names: string[]) => {
             for (const name of names)
@@ -1486,9 +1494,14 @@ function Records({
             return "";
           };
           const excelDate = get("Tarih", "Date", "Tarîx");
-          const parsedDate = parseStoredDate(
-            String(excelDate || values[0] || new Date().toISOString().slice(0, 10)),
-          );
+          // Import is the one place a bad date shouldn't silently become
+          // "today" — that would misfile a transaction under the wrong day
+          // without anyone noticing. Reject the row instead.
+          const parsedDate = parseImportDate(excelDate || values[0]);
+          if (!parsedDate) {
+            invalidDateRows.push(rowNumber);
+            return null;
+          }
           const resolvedSource =
             source !== "Tümü"
               ? source
@@ -1505,6 +1518,7 @@ function Records({
                     "Excel Aktarımı",
                 );
           return {
+            rowNumber,
             kind,
             date: parsedDate,
             source: resolvedSource,
@@ -1529,15 +1543,40 @@ function Records({
             listName: "",
           };
         })
-        .filter((x) => x.source && Number.isFinite(x.amount));
-      if (!imported.length) throw new Error();
-      onImport(imported);
+        .filter((x): x is Omit<RecordItem, "id"> & { rowNumber: number } => x !== null && Boolean(x.source) && Number.isFinite(x.amount))
+        .map(({ rowNumber: _rowNumber, ...record }) => record);
+      if (!imported.length && !invalidDateRows.length) throw new Error();
+
+      const duplicateCount = imported.filter((x) =>
+        records.some((existing) => existing.date === x.date && existing.amount === x.amount && existing.currency === x.currency && existing.source === x.source),
+      ).length;
+      if (duplicateCount > 0) {
+        const proceed = window.confirm(
+          tx(
+            language,
+            `İçe aktarılacak ${imported.length} kayıttan ${duplicateCount} tanesi mevcut kayıtlarla aynı tarih, tutar ve başlığa sahip. Yine de içe aktarmak istiyor musunuz?`,
+            `${duplicateCount} of the ${imported.length} rows to import match an existing record's date, amount and title. Import anyway?`,
+            `${duplicateCount} ji ${imported.length} rêzên ku dê werin têxistin, bi heman tarîx, meblağ û sernavê qeydek heyî re li hev in. Dîsa jî têxistin?`,
+          ),
+        );
+        if (!proceed) return;
+      }
+
+      if (imported.length) onImport(imported);
+      const skippedNote = invalidDateRows.length
+        ? tx(
+            language,
+            ` (${invalidDateRows.length} satır geçersiz tarih nedeniyle atlandı: satır ${invalidDateRows.join(", ")})`,
+            ` (${invalidDateRows.length} row(s) skipped for invalid dates: row ${invalidDateRows.join(", ")})`,
+            ` (${invalidDateRows.length} rêz ji ber tarîxa nederbasdar hatin derbasqilkirin: rêz ${invalidDateRows.join(", ")})`,
+          )
+        : "";
       alert(
         tx(
           language,
-          `${imported.length} kayıt Excel'den eklendi.`,
-          `${imported.length} records imported from Excel.`,
-          `${imported.length} qeyd ji Excelê hatin têxistin.`,
+          `${imported.length} kayıt Excel'den eklendi.${skippedNote}`,
+          `${imported.length} records imported from Excel.${skippedNote}`,
+          `${imported.length} qeyd ji Excelê hatin têxistin.${skippedNote}`,
         ),
       );
     } catch {
@@ -3365,7 +3404,7 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
   const url = URL.createObjectURL(blob);
   const link = window.document.createElement("a");
   link.href = url;
-  link.download = `${report.title.replaceAll(" ", "-")}.xlsx`;
+  link.download = `${report.title.replaceAll(" ", "-").replace(/[\\/:*?"<>|]/g, "-")}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -4224,6 +4263,21 @@ function date(v: string, _language: Language = "tr") {
   const stored = parseStoredDate(v);
   const [year, month, day] = stored.split("-");
   return `${day}.${month}.${year}`;
+}
+// Stricter sibling of parseStoredDate for Excel import: returns null on an
+// unrecognized date instead of silently defaulting to today, so a bad row
+// gets rejected and reported rather than misfiled under the wrong day.
+function parseImportDate(value: unknown): string | null {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  return null;
 }
 function parseStoredDate(value: unknown) {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
