@@ -2,7 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { records } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { ensureFallbackKasa, fallbackKasaNameFor } from "../_lib/records";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
@@ -14,7 +14,7 @@ function allowedKinds(user: { isAdmin: boolean; permissions: string[] }): Kind[]
   return RECORD_KINDS.filter((kind) => user.permissions.includes(kind));
 }
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -33,9 +33,9 @@ export async function GET(request: Request) {
   const db = getDb();
   const rows = await db.select().from(records).where(inArray(records.kind, allowed)).orderBy(desc(records.date), desc(records.id));
   return json({ records: rows });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -75,4 +75,4 @@ export async function POST(request: Request) {
   });
 
   return json({ record, ensuredCash }, { status: 201 });
-}
+});

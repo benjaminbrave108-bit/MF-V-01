@@ -3,10 +3,10 @@ import { getDb } from "../../../../db";
 import { users } from "../../../../db/schema";
 import { verifyPassword } from "../../../../db/passwords";
 import { requireSession } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { clearAttempts, isRateLimited, recordFailedAttempt } from "../../_lib/rate-limit";
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -34,4 +34,4 @@ export async function POST(request: Request) {
   if (valid) clearAttempts(rateLimitKey);
   else recordFailedAttempt(rateLimitKey);
   return json({ valid });
-}
+});

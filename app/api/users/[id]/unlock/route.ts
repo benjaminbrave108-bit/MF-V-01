@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { users } from "../../../../../db/schema";
 import { requireAdmin } from "../../../_lib/auth";
-import { json } from "../../../_lib/http";
+import { json, withErrorHandling } from "../../../_lib/http";
 import { unlockUserAccount } from "../../../_lib/security";
 
 function toClientUser(row: typeof users.$inferSelect) {
@@ -19,7 +19,7 @@ function toClientUser(row: typeof users.$inferSelect) {
   };
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
@@ -33,4 +33,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!account) return json({ error: "User not found" }, { status: 404 });
 
   return json({ user: toClientUser(account) });
-}
+});

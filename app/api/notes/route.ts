@@ -2,19 +2,19 @@ import { desc } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { financeNotes } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { noteInputSchema, parseBody } from "../_lib/validate";
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
   const db = getDb();
   const rows = await db.select().from(financeNotes).orderBy(desc(financeNotes.updatedAt), desc(financeNotes.id));
   return json({ notes: rows });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
@@ -35,4 +35,4 @@ export async function POST(request: Request) {
     .returning();
 
   return json({ note }, { status: 201 });
-}
+});

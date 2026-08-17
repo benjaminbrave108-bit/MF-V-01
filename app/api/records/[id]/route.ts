@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { archive, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { ensureFallbackKasa, fallbackKasaNameFor } from "../../_lib/records";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
@@ -12,7 +12,7 @@ function canAccessKind(user: { isAdmin: boolean; permissions: string[] }, kind: 
   return user.isAdmin || user.permissions.includes(kind as Kind);
 }
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -84,9 +84,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   });
 
   return json({ record, archiveEntry: toClientArchiveItem(archiveEntry), ensuredCash });
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -116,4 +116,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   });
 
   return json({ archiveEntry: toClientArchiveItem(archiveEntry) });
-}
+});

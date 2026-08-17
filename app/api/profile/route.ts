@@ -2,14 +2,14 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { users } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { isDataUriWithinLimit } from "../_lib/limits";
 import type { Page } from "../_lib/types";
 import { parseBody, profileUpdateSchema } from "../_lib/validate";
 
 // Self-service profile edit: only name/avatar. Username, role and
 // permissions are managed centrally via /api/users (admin-only).
-export async function PUT(request: Request) {
+export const PUT = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -40,4 +40,4 @@ export async function PUT(request: Request) {
       avatar: account.avatar,
     },
   });
-}
+});

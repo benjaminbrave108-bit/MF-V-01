@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { users } from "../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../db/passwords";
 import { requireAdmin } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { parseBody, userCreateSchema } from "../_lib/validate";
 
 function toClientUser(row: typeof users.$inferSelect) {
@@ -20,16 +20,16 @@ function toClientUser(row: typeof users.$inferSelect) {
   };
 }
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
   const db = getDb();
   const rows = await db.select().from(users).orderBy(users.id);
   return json({ users: rows.map(toClientUser) });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
@@ -59,4 +59,4 @@ export async function POST(request: Request) {
     .returning();
 
   return json({ user: toClientUser(account) }, { status: 201 });
-}
+});

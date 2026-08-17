@@ -3,11 +3,11 @@ import { getDb } from "../../../../db";
 import { users } from "../../../../db/schema";
 import { hashPassword, validatePasswordPolicy, verifyPassword } from "../../../../db/passwords";
 import { destroyOtherSessions, getSessionToken, requireSession } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { clearAttempts, isRateLimited, recordFailedAttempt } from "../../_lib/rate-limit";
 import { parseBody, passwordChangeSchema } from "../../_lib/validate";
 
-export async function PUT(request: Request) {
+export const PUT = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -45,4 +45,4 @@ export async function PUT(request: Request) {
   if (currentToken) await destroyOtherSessions(account.id, currentToken);
 
   return json({ ok: true });
-}
+});

@@ -19,3 +19,21 @@ export function assertSameOrigin(request: Request): Response | null {
   if (origin === requestUrl.origin) return null;
   return json({ error: "Origin mismatch" }, { status: 403 });
 }
+
+// Wraps a route handler so an unexpected error (DB down, bad query, a bug)
+// never surfaces as a raw framework 500 page or an unhandled-exception log
+// with no context — it's logged with the request path and turned into a
+// plain JSON 500 the client's fetch() calls can handle like any other error.
+type RouteHandler<C> = (request: Request, ctx: C) => Promise<Response>;
+
+export function withErrorHandling<C = undefined>(handler: RouteHandler<C>): RouteHandler<C> {
+  return async (request: Request, ctx: C) => {
+    try {
+      return await handler(request, ctx);
+    } catch (error) {
+      const { pathname } = new URL(request.url);
+      console.error(`[api] ${request.method} ${pathname} failed`, error);
+      return json({ error: "Internal server error" }, { status: 500 });
+    }
+  };
+}

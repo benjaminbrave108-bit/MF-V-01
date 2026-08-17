@@ -1,7 +1,7 @@
 import { getSessionUser } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const user = await getSessionUser(request);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
   return json({
@@ -14,4 +14,4 @@ export async function GET(request: Request) {
       avatar: user.avatar,
     },
   });
-}
+});

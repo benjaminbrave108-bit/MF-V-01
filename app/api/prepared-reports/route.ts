@@ -2,19 +2,19 @@ import { desc } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { preparedReports } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { parseBody, preparedReportInputSchema } from "../_lib/validate";
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
 
   const db = getDb();
   const rows = await db.select().from(preparedReports).orderBy(desc(preparedReports.createdAt));
   return json({ preparedReports: rows });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
 
@@ -40,4 +40,4 @@ export async function POST(request: Request) {
     .returning();
 
   return json({ preparedReport: report }, { status: 201 });
-}
+});

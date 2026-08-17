@@ -2,7 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { archive, financeNotes, preparedReports, records, settings, users } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { toClientArchiveItem } from "../_lib/archive";
 import type { Kind } from "../_lib/types";
 
@@ -26,7 +26,7 @@ function toClientUser(row: typeof users.$inferSelect) {
 // Returns everything the client needs right after login in one round trip,
 // scoped to what the signed-in user is actually allowed to see: unpermitted
 // collections come back empty rather than relying on the client to hide them.
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -56,4 +56,4 @@ export async function GET(request: Request) {
     settings: settingsRows[0] ?? null,
     users: user.isAdmin ? userRows.map(toClientUser) : undefined,
   });
-}
+});

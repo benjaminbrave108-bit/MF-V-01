@@ -2,10 +2,10 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { financeNotes } from "../../../../db/schema";
 import { requirePermission } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { noteInputSchema, parseBody } from "../../_lib/validate";
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
@@ -33,9 +33,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   if (!note) return json({ error: "Note not found" }, { status: 404 });
   return json({ note });
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
 
@@ -46,4 +46,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const db = getDb();
   await db.delete(financeNotes).where(eq(financeNotes.id, id));
   return json({ ok: true });
-}
+});

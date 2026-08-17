@@ -3,7 +3,7 @@ import { getDb } from "../../../../db";
 import { users } from "../../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../../db/passwords";
 import { requireAdmin } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { parseBody, userUpdateSchema } from "../../_lib/validate";
 
 function toClientUser(row: typeof users.$inferSelect) {
@@ -20,7 +20,7 @@ function toClientUser(row: typeof users.$inferSelect) {
   };
 }
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
@@ -64,9 +64,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .returning();
 
   return json({ user: toClientUser(account) });
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
@@ -92,4 +92,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   await db.delete(users).where(eq(users.id, id));
   return json({ ok: true });
-}
+});

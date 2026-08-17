@@ -1,14 +1,14 @@
 import { getDb } from "../../../../db";
 import { records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
-import { json } from "../../_lib/http";
+import { json, withErrorHandling } from "../../_lib/http";
 import { ensureFallbackKasa, fallbackKasaNameFor } from "../../_lib/records";
 import type { Kind } from "../../_lib/types";
 import { parseBody, recordImportSchema } from "../../_lib/validate";
 
 const RECORD_KINDS: Kind[] = ["cash", "income", "expense"];
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
@@ -57,4 +57,4 @@ export async function POST(request: Request) {
   });
 
   return json({ records: inserted }, { status: 201 });
-}
+});

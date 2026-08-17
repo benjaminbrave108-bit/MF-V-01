@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { settings } from "../../../db/schema";
 import { requireAdmin, requireSession } from "../_lib/auth";
-import { json } from "../_lib/http";
+import { json, withErrorHandling } from "../_lib/http";
 import { isDataUriWithinLimit } from "../_lib/limits";
 import { parseBody, settingsInputSchema } from "../_lib/validate";
 
@@ -19,15 +19,15 @@ async function getOrCreateSettings() {
   return created;
 }
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
   const row = await getOrCreateSettings();
   return json({ settings: row });
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withErrorHandling(async (request: Request) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
@@ -54,4 +54,4 @@ export async function PUT(request: Request) {
     .returning();
 
   return json({ settings: row });
-}
+});

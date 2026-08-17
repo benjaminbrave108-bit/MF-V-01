@@ -1,12 +1,12 @@
 import { requireAdmin } from "../../../_lib/auth";
-import { json } from "../../../_lib/http";
+import { json, withErrorHandling } from "../../../_lib/http";
 import { unblockIp } from "../../../_lib/security";
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ ip: string }> }) {
+export const DELETE = withErrorHandling<{ params: Promise<{ ip: string }> }>(async (request, { params }) => {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
   const { ip } = await params;
   await unblockIp(decodeURIComponent(ip));
   return json({ ok: true });
-}
+});
