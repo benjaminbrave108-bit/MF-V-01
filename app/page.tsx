@@ -165,16 +165,14 @@ export default function Home() {
   const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem } | null>(
     null,
   );
-  const [language, setLanguage] = useState<Language>(() => {
-    if (typeof window === "undefined") return "tr";
-    const saved = localStorage.getItem("mf-language");
-    return saved === "en" || saved === "ku" || saved === "tr" ? saved : "tr";
-  });
+  // Both start at a fixed, SSR-safe default and are corrected from
+  // localStorage in an effect after mount (same pattern as uiZoom below) —
+  // reading localStorage during the initial render would make the client's
+  // first render disagree with the server-rendered HTML and break hydration.
+  const [language, setLanguage] = useState<Language>("tr");
   // Gates the first-run LanguageSetup screen — shown once, before the first
   // sign-in, whenever this browser has never had a language chosen.
-  const [languageChosen, setLanguageChosen] = useState(
-    () => typeof window !== "undefined" && Boolean(localStorage.getItem("mf-language")),
-  );
+  const [languageChosen, setLanguageChosen] = useState(true);
   const [profile, setProfile] = useState<Profile>({
     name: "Admin",
     username: "admin",
@@ -190,6 +188,16 @@ export default function Home() {
   const [typography, setTypography] = useState<TypographySettings>(defaultTypography);
   const [uiZoom, setUiZoom] = useState(100);
   const [sidebarCompact, setSidebarCompact] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("mf-language");
+    if (saved === "en" || saved === "ku" || saved === "tr") {
+      setLanguage(saved);
+      setLanguageChosen(true);
+    } else {
+      setLanguageChosen(false);
+    }
+  }, []);
 
   // Updates the active language, remembers it as this browser's pre-login
   // default, and — once signed in — persists it to the user's own account
@@ -728,6 +736,7 @@ export default function Home() {
               uploadLogo={uploadLogo}
               typography={typography}
               setTypography={setTypography}
+              checkPassword={checkPassword}
             />
           )}
         </section>
@@ -2118,12 +2127,18 @@ function ConfirmModal({
 function DeleteConfirmModal({
   language,
   itemLabel,
+  title,
+  warningText,
+  confirmLabel,
   checkPassword,
   onClose,
   onConfirm,
 }: {
   language: Language;
   itemLabel: string;
+  title?: string;
+  warningText?: string;
+  confirmLabel?: string;
   checkPassword: (password: string) => Promise<boolean>;
   onClose: () => void;
   onConfirm: () => void;
@@ -2150,7 +2165,7 @@ function DeleteConfirmModal({
       >
         <div className="modalHead">
           <div>
-            <h2>{tx(language, "Kaydı Sil", "Delete Record", "Qeydê Jêbibe")}</h2>
+            <h2>{title ?? tx(language, "Kaydı Sil", "Delete Record", "Qeydê Jêbibe")}</h2>
             <p>{itemLabel}</p>
           </div>
           <button type="button" onClick={onClose}>
@@ -2159,7 +2174,7 @@ function DeleteConfirmModal({
         </div>
         {step === 1 ? (
           <p className="deleteWarning">
-            {tx(
+            {warningText ?? tx(
               language,
               "Bu kayıt kalıcı olarak silinecektir. Eski hali Arşiv bölümünde saklanır. Devam etmek istiyor musunuz?",
               "This record will be permanently deleted. The previous version is kept in Archive. Continue?",
@@ -2198,7 +2213,7 @@ function DeleteConfirmModal({
           <button className="danger">
             {step === 1
               ? tx(language, "Devam Et", "Continue", "Bidomîne")
-              : tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}
+              : confirmLabel ?? tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}
           </button>
         </div>
       </form>
@@ -3934,6 +3949,7 @@ function Settings({
   uploadLogo,
   typography,
   setTypography,
+  checkPassword,
 }: {
   language: Language;
   company: string;
@@ -3943,6 +3959,7 @@ function Settings({
   uploadLogo: (f?: File) => void;
   typography: TypographySettings;
   setTypography: (value: TypographySettings) => void;
+  checkPassword: (password: string) => Promise<boolean>;
 }) {
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
   const [typographyDraft, setTypographyDraft] = useState<TypographySettings>(typography);
@@ -3951,6 +3968,8 @@ function Settings({
   const [saved, setSaved] = useState(false);
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
   const [blockedIpsLoaded, setBlockedIpsLoaded] = useState(false);
+  const [dbBusy, setDbBusy] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   useEffect(() => setTypographyDraft(typography), [typography]);
 
@@ -4018,6 +4037,81 @@ function Settings({
     if (approved) {
       setTypography(typographyDraft);
       await persistSettings({ typography: typographyDraft });
+    }
+  }
+
+  const dbErrorMessage = tx(language, "İşlem tamamlanamadı. Lütfen tekrar deneyin.", "The operation could not be completed. Please try again.", "Kirin nehat qedandin. Ji kerema xwe dîsa biceribîne.");
+
+  async function exportDatabase() {
+    setDbBusy(true);
+    try {
+      const response = await fetch("/api/database/export");
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `mf-v01-yedek-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert(dbErrorMessage);
+    }
+    setDbBusy(false);
+  }
+
+  async function importDatabase(file?: File) {
+    if (!file) return;
+    setDbBusy(true);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const response = await fetch("/api/database/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error();
+      alert(
+        tx(
+          language,
+          "Veriler içe aktarıldı. Sayfa yenileniyor.",
+          "Data imported. Reloading the page.",
+          "Daneyên hatin têxistin. Rûpel tê nûvekirin.",
+        ),
+      );
+      window.location.reload();
+    } catch {
+      alert(
+        tx(
+          language,
+          "Dosya okunamadı veya içe aktarılamadı. Lütfen bu uygulamadan dışa aktarılmış bir yedek dosyası seçin.",
+          "The file could not be read or imported. Please choose a backup file exported from this application.",
+          "Pel nehat xwendin an têxistin. Ji kerema xwe pelek ku ji vê sepanê hatiye derxistin hilbijêre.",
+        ),
+      );
+    }
+    setDbBusy(false);
+  }
+
+  async function clearDatabase() {
+    setDbBusy(true);
+    try {
+      const response = await fetch("/api/database/clear", { method: "POST" });
+      if (!response.ok) throw new Error();
+      alert(
+        tx(
+          language,
+          "Mali veriler silindi. Sayfa yenileniyor.",
+          "Financial data cleared. Reloading the page.",
+          "Daneyên darayî hatin jêbirin. Rûpel tê nûvekirin.",
+        ),
+      );
+      window.location.reload();
+    } catch {
+      alert(dbErrorMessage);
+      setDbBusy(false);
     }
   }
 
@@ -4163,6 +4257,71 @@ function Settings({
           </div>
         )}
       </div>
+      <div className="panel">
+        <Title
+          title={tx(language, "Veri (Database) Ayarları", "Database Settings", "Mîhengên Danegehê")}
+          sub={tx(
+            language,
+            "Mali verileri (kayıt, arşiv, not, rapor) yedekleyin, geri yükleyin veya sıfırlayın",
+            "Back up, restore, or reset financial data (records, archive, notes, reports)",
+            "Daneyên darayî (qeyd, arşîv, nîşe, rapor) tomar bike, vegerîne, an ji nû ve saz bike",
+          )}
+        />
+        <div className="databaseActions">
+          <button type="button" className="light" disabled={dbBusy} onClick={exportDatabase}>
+            ⇩ {tx(language, "Dışa Aktar", "Export", "Derxe")}
+          </button>
+          <label className="light fileButton">
+            ⇧ {tx(language, "İçe Aktar", "Import", "Têxe")}
+            <input
+              hidden
+              type="file"
+              accept=".json,application/json"
+              disabled={dbBusy}
+              onChange={(e) => {
+                importDatabase(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <button type="button" className="light redText" disabled={dbBusy} onClick={() => setClearConfirmOpen(true)}>
+            🗑 {tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
+          </button>
+        </div>
+        <small className="databaseHint">
+          {tx(
+            language,
+            "İçe aktarma, mevcut tüm kayıt/arşiv/not/rapor verilerinin yerine geçer. Kullanıcı hesapları ve şifreler bu işlemlerden etkilenmez.",
+            "Importing replaces all current record/archive/note/report data. User accounts and passwords are not affected by these operations.",
+            "Têxistin şûna hemû daneyên qeyd/arşîv/nîşe/rapor ên heyî digire. Hesabên bikarhêner û şîfre ji van kiryaran bandor nabin.",
+          )}
+        </small>
+      </div>
+      {clearConfirmOpen && (
+        <DeleteConfirmModal
+          language={language}
+          title={tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
+          itemLabel={tx(
+            language,
+            "Tüm kayıtlar, arşiv, notlar ve raporlar",
+            "All records, archive, notes and reports",
+            "Hemû qeyd, arşîv, nîşe û rapor",
+          )}
+          warningText={tx(
+            language,
+            "Tüm kayıtlar, arşiv, notlar ve hazırlanan raporlar kalıcı olarak silinecektir. Kullanıcılar ve ayarlar korunur. Devam etmeden önce dışa aktarma ile yedek almanız önerilir.",
+            "All records, archive, notes and prepared reports will be permanently deleted. Users and settings are preserved. Exporting a backup first is recommended.",
+            "Hemû qeyd, arşîv, nîşe û raporên amade dê bi awayekî domdar werin jêbirin. Bikarhêner û mîheng têne parastin.",
+          )}
+          confirmLabel={tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}
+          checkPassword={checkPassword}
+          onClose={() => setClearConfirmOpen(false)}
+          onConfirm={() => {
+            setClearConfirmOpen(false);
+            clearDatabase();
+          }}
+        />
+      )}
     </div>
     </div>
   );

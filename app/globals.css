@@ -2093,6 +2093,19 @@ td {
   background: #f7ecec;
   color: #a35a5a;
 }
+.databaseActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.databaseHint {
+  display: block;
+  margin-top: 12px;
+  color: #70838a;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .blockedIpList {
   display: flex;
   flex-direction: column;

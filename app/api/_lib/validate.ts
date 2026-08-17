@@ -142,3 +142,45 @@ export const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(1),
 });
+
+// GET /api/database/export produces exactly this shape; POST .../import
+// validates against it. Loose on id/createdAt/updatedAt (ignored on
+// import — the DB assigns fresh ones) but strict on the business fields.
+const exportedRecordSchema = recordInputSchema.extend({
+  id: z.number().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+const exportedArchiveSchema = z.object({
+  id: z.number().optional(),
+  action: z.string().max(100),
+  at: z.string().optional(),
+  userName: z.string().max(200),
+  oldRecord: z.record(z.string(), z.unknown()),
+});
+const exportedNoteSchema = noteInputSchema.extend({
+  id: z.number().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+const exportedReportSchema = preparedReportInputSchema.extend({
+  createdAt: z.string().optional(),
+});
+
+export const databaseImportSchema = z.object({
+  version: z.number().optional(),
+  exportedAt: z.string().optional(),
+  records: z.array(exportedRecordSchema).max(50_000).optional().default([]),
+  archive: z.array(exportedArchiveSchema).max(50_000).optional().default([]),
+  notes: z.array(exportedNoteSchema).max(20_000).optional().default([]),
+  preparedReports: z.array(exportedReportSchema).max(20_000).optional().default([]),
+  settings: z
+    .object({
+      company: z.string().max(200).optional(),
+      logo: z.string().max(1_000_000).optional(),
+      typography: z.record(z.string(), z.unknown()).optional(),
+      language: languageSchema.optional(),
+    })
+    .nullable()
+    .optional(),
+});
