@@ -96,8 +96,6 @@ const defaultTypography: TypographySettings = {
 
 const monthNames = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"];
 
-const seed: RecordItem[] = [];
-
 const nav: { id: Page; label: Record<Language, string>; icon: string }[] = [
   {
     id: "dashboard",
