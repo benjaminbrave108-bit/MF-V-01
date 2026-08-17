@@ -26,7 +26,12 @@ export const PUT = withErrorHandling(async (request: Request) => {
   const db = getDb();
   const [account] = await db
     .update(users)
-    .set({ name, avatar, updatedAt: new Date() })
+    .set({
+      name,
+      avatar,
+      ...(payload.language ? { language: payload.language } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(users.id, session.user.id))
     .returning();
 
@@ -38,6 +43,7 @@ export const PUT = withErrorHandling(async (request: Request) => {
       isAdmin: account.isAdmin,
       permissions: (account.permissions as Page[]) ?? [],
       avatar: account.avatar,
+      language: account.language,
     },
   });
 });

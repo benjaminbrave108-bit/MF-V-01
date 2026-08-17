@@ -104,11 +104,13 @@ export const preparedReportInputSchema = z.object({
   expense: z.array(z.record(z.string(), z.unknown())).max(2000).optional().default([]),
 });
 
+const languageSchema = z.enum(["tr", "en", "ku"]);
+
 export const settingsInputSchema = z.object({
   company: z.string().max(200).optional().default("Maliye-Finans"),
   logo: z.string().max(1_000_000).optional().default(""),
   typography: z.record(z.string(), z.unknown()).optional().default({}),
-  language: z.enum(["tr", "en", "ku"]).optional().default("tr"),
+  language: languageSchema.optional().default("tr"),
 });
 
 const pageSchema = z.enum(restrictablePages as [string, ...string[]]);
@@ -133,6 +135,7 @@ export const userUpdateSchema = z.object({
 export const profileUpdateSchema = z.object({
   name: z.string().min(1).max(200),
   avatar: z.string().max(1_000_000).optional().default(""),
+  language: languageSchema.optional(),
 });
 
 export const passwordChangeSchema = z.object({

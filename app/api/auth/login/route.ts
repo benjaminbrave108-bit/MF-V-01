@@ -83,6 +83,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         isAdmin: account.isAdmin,
         permissions: (account.permissions as Page[]) ?? [],
         avatar: account.avatar,
+        language: account.language,
       },
     },
     { status: 200, headers: { "Set-Cookie": sessionCookieHeader(token, expiresAt) } },

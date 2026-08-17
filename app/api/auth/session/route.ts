@@ -12,6 +12,7 @@ export const GET = withErrorHandling(async (request: Request) => {
       isAdmin: user.isAdmin,
       permissions: user.permissions,
       avatar: user.avatar,
+      language: user.language,
     },
   });
 });

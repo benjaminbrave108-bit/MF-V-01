@@ -18,6 +18,7 @@ export type SessionUser = {
   isAdmin: boolean;
   permissions: Page[];
   avatar: string;
+  language: string;
 };
 
 function parseCookies(header: string | null): Record<string, string> {
@@ -99,6 +100,7 @@ function toSessionUser(user: typeof users.$inferSelect): SessionUser {
     isAdmin: user.isAdmin,
     permissions: (user.permissions as Page[]) ?? [],
     avatar: user.avatar,
+    language: user.language,
   };
 }
 

@@ -43,6 +43,13 @@
       "when": 1786999690679,
       "tag": "0005_tough_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787003230953,
+      "tag": "0006_fearless_rhino",
+      "breakpoints": true
     }
   ]
 }

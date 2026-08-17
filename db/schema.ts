@@ -10,6 +10,10 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   permissions: jsonb("permissions").notNull().default([]),
   avatar: text("avatar").notNull().default(""),
+  // Per-user UI language — takes over from settings.language once signed
+  // in (that column stays only as the pre-login default). Set via the
+  // navbar language picker (PUT /api/profile) or LanguageSetup at first run.
+  language: text("language").notNull().default("tr"),
   // Set automatically after repeated failed login attempts against this
   // account; only an admin can clear it (see app/api/_lib/security.ts).
   locked: boolean("locked").notNull().default(false),

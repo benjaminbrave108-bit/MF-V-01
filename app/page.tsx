@@ -165,7 +165,16 @@ export default function Home() {
   const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem } | null>(
     null,
   );
-  const [language, setLanguage] = useState<Language>("tr");
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === "undefined") return "tr";
+    const saved = localStorage.getItem("mf-language");
+    return saved === "en" || saved === "ku" || saved === "tr" ? saved : "tr";
+  });
+  // Gates the first-run LanguageSetup screen — shown once, before the first
+  // sign-in, whenever this browser has never had a language chosen.
+  const [languageChosen, setLanguageChosen] = useState(
+    () => typeof window !== "undefined" && Boolean(localStorage.getItem("mf-language")),
+  );
   const [profile, setProfile] = useState<Profile>({
     name: "Admin",
     username: "admin",
@@ -182,6 +191,24 @@ export default function Home() {
   const [uiZoom, setUiZoom] = useState(100);
   const [sidebarCompact, setSidebarCompact] = useState(false);
 
+  // Updates the active language, remembers it as this browser's pre-login
+  // default, and — once signed in — persists it to the user's own account
+  // so it follows them to any device (see PUT /api/profile below).
+  function changeLanguage(next: Language) {
+    setLanguage(next);
+    setLanguageChosen(true);
+    try {
+      localStorage.setItem("mf-language", next);
+    } catch {}
+    if (signedIn) {
+      fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: profile.name, avatar: profile.avatar, language: next }),
+      }).catch(() => {});
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -192,6 +219,14 @@ export default function Home() {
           const data = await response.json();
           setProfile((current) => ({ ...current, ...data.profile }));
           setSignedIn(true);
+          const savedLanguage = data.profile?.language;
+          if (savedLanguage === "en" || savedLanguage === "ku" || savedLanguage === "tr") {
+            setLanguage(savedLanguage);
+            setLanguageChosen(true);
+            try {
+              localStorage.setItem("mf-language", savedLanguage);
+            } catch {}
+          }
         } else {
           setSignedIn(false);
         }
@@ -229,7 +264,9 @@ export default function Home() {
         if (data.settings) {
           setCompany(data.settings.company ?? "Maliye-Finans");
           setLogo(data.settings.logo ?? "");
-          setLanguage(data.settings.language ?? "tr");
+          // Language is per-user now (applied at sign-in from
+          // profile.language) — settings.language is only the pre-login
+          // default and is intentionally not applied here.
           setTypography({ ...defaultTypography, ...(data.settings.typography ?? {}) });
         }
       } catch {}
@@ -460,6 +497,14 @@ export default function Home() {
       }
       setProfile((current) => ({ ...current, ...data.profile }));
       setSignedIn(true);
+      const savedLanguage = data.profile?.language;
+      if (savedLanguage === "en" || savedLanguage === "ku" || savedLanguage === "tr") {
+        setLanguage(savedLanguage);
+        setLanguageChosen(true);
+        try {
+          localStorage.setItem("mf-language", savedLanguage);
+        } catch {}
+      }
       return null;
     } catch {
       return tx(language, "Bağlantı hatası. Lütfen tekrar deneyin.", "Connection error. Please try again.", "Xeletiya girêdanê. Ji kerema xwe dîsa biceribîne.");
@@ -473,9 +518,13 @@ export default function Home() {
     setSignedIn(false);
   }
 
+  if (!signedIn && !languageChosen) {
+    return <LanguageSetup onChoose={changeLanguage} />;
+  }
+
   if (!signedIn)
     return (
-      <Login language={language} setLanguage={setLanguage} onSignIn={signIn} />
+      <Login language={language} setLanguage={changeLanguage} onSignIn={signIn} />
     );
 
   return (
@@ -551,7 +600,7 @@ export default function Home() {
               <select
                 aria-label="Dil seçimi"
                 value={language}
-                onChange={(e) => setLanguage(e.target.value as Language)}
+                onChange={(e) => changeLanguage(e.target.value as Language)}
               >
                 <option value="tr">Türkçe</option>
                 <option value="en">English</option>
