@@ -2,15 +2,20 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { blockedIps, sessions, users } from "../../../db/schema";
 
+// Note: "unknown" (server.mjs couldn't read a peer address, or the request
+// came in through vite's dev server which never sets x-mfv01-remote-addr)
+// is deliberately still blockable — it must not be a bypass. Behind a
+// correctly configured reverse proxy (TRUSTED_PROXY_COUNT set) this should
+// never actually happen for real client traffic.
 export async function isIpBlocked(ip: string): Promise<boolean> {
-  if (!ip || ip === "unknown") return false;
+  if (!ip) return false;
   const db = getDb();
   const rows = await db.select().from(blockedIps).where(eq(blockedIps.ip, ip)).limit(1);
   return rows.length > 0;
 }
 
 export async function blockIp(ip: string, reason: string): Promise<void> {
-  if (!ip || ip === "unknown") return;
+  if (!ip) return;
   const db = getDb();
   await db.insert(blockedIps).values({ ip, reason }).onConflictDoNothing();
 }

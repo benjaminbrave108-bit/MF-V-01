@@ -830,6 +830,43 @@ function Login({
   );
 }
 
+function PasswordField({
+  value,
+  onChange,
+  autoComplete,
+  required,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="passwordFieldWrap">
+      <input
+        type={visible ? "text" : "password"}
+        autoComplete={autoComplete}
+        required={required}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className="passwordFieldToggle"
+        tabIndex={-1}
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Şifreyi gizle" : "Şifreyi göster"}
+      >
+        {visible ? "🙈" : "👁"}
+      </button>
+    </div>
+  );
+}
+
 function ProfileModal({
   profile,
   language,
@@ -1029,21 +1066,11 @@ function ProfileModal({
             </label>
             <label>
               {text.pwNew}
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+              <PasswordField autoComplete="new-password" value={newPassword} onChange={setNewPassword} />
             </label>
             <label>
               {text.pwConfirm}
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <PasswordField autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} />
             </label>
           </div>
           {pwStatus && (
@@ -3742,11 +3769,10 @@ function UserModal({
           )}
           <label>
             {tx(language, "Şifre", "Password", "Şîfre")}
-            <input
-              type="password"
+            <PasswordField
               required={!initial}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               placeholder={initial ? tx(language, "Değiştirmek için yazın", "Type to change", "Ji bo guherînê binivîse") : ""}
             />
           </label>

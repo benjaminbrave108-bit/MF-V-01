@@ -2189,6 +2189,27 @@ td {
   color: #8a979b;
   cursor: not-allowed;
 }
+.passwordFieldWrap {
+  position: relative;
+  display: flex;
+}
+.passwordFieldWrap input {
+  width: 100%;
+  padding-right: 34px !important;
+}
+.passwordFieldToggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  color: #586b72;
+}
 @media (max-width: 900px) {
   .users { grid-template-columns: 1fr; }
 }
