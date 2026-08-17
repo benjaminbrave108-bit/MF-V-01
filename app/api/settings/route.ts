@@ -4,6 +4,7 @@ import { settings } from "../../../db/schema";
 import { requireAdmin, requireSession } from "../_lib/auth";
 import { json } from "../_lib/http";
 import { isDataUriWithinLimit } from "../_lib/limits";
+import { parseBody, settingsInputSchema } from "../_lib/validate";
 
 const SINGLETON_ID = 1;
 
@@ -30,15 +31,11 @@ export async function PUT(request: Request) {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
+  const parsed = await parseBody(request, settingsInputSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
 
-  const logo = String(payload.logo ?? "");
-  if (logo && !isDataUriWithinLimit(logo)) {
+  if (payload.logo && !isDataUriWithinLimit(payload.logo)) {
     return json({ error: "Logo must be a data:image/(png|jpeg|webp|svg+xml) URI under 512KB" }, { status: 413 });
   }
 
@@ -47,10 +44,10 @@ export async function PUT(request: Request) {
   const [row] = await db
     .update(settings)
     .set({
-      company: String(payload.company ?? "Maliye-Finans"),
-      logo: String(payload.logo ?? ""),
-      typography: payload.typography && typeof payload.typography === "object" ? payload.typography : {},
-      language: String(payload.language ?? "tr"),
+      company: payload.company,
+      logo: payload.logo,
+      typography: payload.typography,
+      language: payload.language,
       updatedAt: new Date(),
     })
     .where(eq(settings.id, SINGLETON_ID))

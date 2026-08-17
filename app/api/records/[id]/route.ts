@@ -6,6 +6,7 @@ import { json } from "../../_lib/http";
 import { ensureFallbackKasa, fallbackKasaNameFor } from "../../_lib/records";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
+import { parseBody, recordUpdateSchema } from "../../_lib/validate";
 
 function canAccessKind(user: { isAdmin: boolean; permissions: string[] }, kind: string): boolean {
   return user.isAdmin || user.permissions.includes(kind as Kind);
@@ -19,19 +20,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const id = Number(idParam);
   if (!Number.isFinite(id)) return json({ error: "Invalid id" }, { status: 400 });
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
+  const parsed = await parseBody(request, recordUpdateSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
 
   const db = getDb();
   const existingRows = await db.select().from(records).where(eq(records.id, id)).limit(1);
   const old = existingRows[0];
   if (!old) return json({ error: "Record not found" }, { status: 404 });
 
-  const kind = String(payload.kind ?? old.kind);
+  const kind = payload.kind ?? old.kind;
   // Both the record's current kind and its requested new kind must be
   // permitted — otherwise a user could smuggle a record from an
   // unauthorized bucket into an authorized one (or vice versa).
@@ -40,25 +38,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const fallbackKasaName = fallbackKasaNameFor(kind);
-  const source = String(payload.source ?? "");
-  const cashAccount = String(payload.cashAccount ?? "") || fallbackKasaName;
+  const source = payload.source ?? old.source;
+  const cashAccount = payload.cashAccount || old.cashAccount || fallbackKasaName;
 
   const [record] = await db
     .update(records)
     .set({
       kind,
-      date: String(payload.date ?? old.date),
+      date: payload.date ?? old.date,
       source,
-      detail: String(payload.detail ?? ""),
-      note: String(payload.note ?? ""),
-      person: String(payload.person ?? ""),
-      amount: Number(payload.amount ?? 0),
-      currency: String(payload.currency ?? "USD"),
-      project: String(payload.project ?? ""),
-      tags: Array.isArray(payload.tags) ? payload.tags : [],
-      monthlyExpense: Boolean(payload.monthlyExpense),
+      detail: payload.detail ?? old.detail,
+      note: payload.note ?? old.note,
+      person: payload.person ?? old.person,
+      amount: payload.amount ?? old.amount,
+      currency: payload.currency ?? old.currency,
+      project: payload.project ?? old.project,
+      tags: payload.tags ?? old.tags,
+      monthlyExpense: payload.monthlyExpense ?? old.monthlyExpense,
       cashAccount,
-      listName: String(payload.listName ?? ""),
+      listName: payload.listName ?? old.listName,
       updatedAt: new Date(),
     })
     .where(eq(records.id, id))

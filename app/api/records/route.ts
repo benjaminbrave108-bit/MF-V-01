@@ -5,6 +5,7 @@ import { requireSession } from "../_lib/auth";
 import { json } from "../_lib/http";
 import { ensureFallbackKasa, fallbackKasaNameFor } from "../_lib/records";
 import type { Kind } from "../_lib/types";
+import { parseBody, recordInputSchema } from "../_lib/validate";
 
 const RECORD_KINDS: Kind[] = ["cash", "income", "expense"];
 
@@ -38,37 +39,33 @@ export async function POST(request: Request) {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
+  const parsed = await parseBody(request, recordInputSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
 
-  const kind = String(payload.kind ?? "");
-  if (!session.user.isAdmin && !session.user.permissions.includes(kind as Kind)) {
+  if (!session.user.isAdmin && !session.user.permissions.includes(payload.kind as Kind)) {
     return json({ error: "Forbidden" }, { status: 403 });
   }
-  const fallbackKasaName = fallbackKasaNameFor(kind);
-  const cashAccount = String(payload.cashAccount ?? "") || fallbackKasaName;
+  const fallbackKasaName = fallbackKasaNameFor(payload.kind);
+  const cashAccount = payload.cashAccount || fallbackKasaName;
 
   const db = getDb();
   const [record] = await db
     .insert(records)
     .values({
-      kind,
-      date: String(payload.date ?? ""),
-      source: String(payload.source ?? ""),
-      detail: String(payload.detail ?? ""),
-      note: String(payload.note ?? ""),
-      person: String(payload.person ?? ""),
-      amount: Number(payload.amount ?? 0),
-      currency: String(payload.currency ?? "USD"),
-      project: String(payload.project ?? ""),
-      tags: Array.isArray(payload.tags) ? payload.tags : [],
-      monthlyExpense: Boolean(payload.monthlyExpense),
+      kind: payload.kind,
+      date: payload.date,
+      source: payload.source,
+      detail: payload.detail,
+      note: payload.note,
+      person: payload.person,
+      amount: payload.amount,
+      currency: payload.currency,
+      project: payload.project,
+      tags: payload.tags,
+      monthlyExpense: payload.monthlyExpense,
       cashAccount,
-      listName: String(payload.listName ?? ""),
+      listName: payload.listName,
     })
     .returning();
 

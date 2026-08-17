@@ -5,6 +5,7 @@ import { hashPassword, validatePasswordPolicy, verifyPassword } from "../../../.
 import { destroyOtherSessions, getSessionToken, requireSession } from "../../_lib/auth";
 import { json } from "../../_lib/http";
 import { clearAttempts, isRateLimited, recordFailedAttempt } from "../../_lib/rate-limit";
+import { parseBody, passwordChangeSchema } from "../../_lib/validate";
 
 export async function PUT(request: Request) {
   const session = await requireSession(request);
@@ -19,14 +20,9 @@ export async function PUT(request: Request) {
     );
   }
 
-  let payload: { currentPassword?: string; newPassword?: string };
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const currentPassword = payload.currentPassword ?? "";
-  const newPassword = payload.newPassword ?? "";
+  const parsed = await parseBody(request, passwordChangeSchema);
+  if ("response" in parsed) return parsed.response;
+  const { currentPassword, newPassword } = parsed.data;
 
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, session.user.id)).limit(1);

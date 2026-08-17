@@ -4,6 +4,7 @@ import { users } from "../../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../../db/passwords";
 import { requireAdmin } from "../../_lib/auth";
 import { json } from "../../_lib/http";
+import { parseBody, userUpdateSchema } from "../../_lib/validate";
 
 function toClientUser(row: typeof users.$inferSelect) {
   return {
@@ -27,19 +28,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const id = Number(idParam);
   if (!Number.isFinite(id)) return json({ error: "Invalid id" }, { status: 400 });
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
+  const parsed = await parseBody(request, userUpdateSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
 
   const db = getDb();
   const existingRows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   const existing = existingRows[0];
   if (!existing) return json({ error: "User not found" }, { status: 404 });
 
-  const isAdmin = Boolean(payload.isAdmin);
+  const isAdmin = payload.isAdmin;
   if (existing.isAdmin && !isAdmin) {
     const [{ value: adminCount }] = await db.select({ value: count() }).from(users).where(and(eq(users.isAdmin, true), ne(users.id, id)));
     if (adminCount === 0) {
@@ -47,18 +45,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
   }
 
-  const password = String(payload.password ?? "").trim();
+  const password = payload.password.trim();
   if (password) {
-    const policyError = validatePasswordPolicy(password, String(payload.username ?? existing.username));
+    const policyError = validatePasswordPolicy(password, existing.username);
     if (policyError) return json({ error: policyError }, { status: 400 });
   }
   const [account] = await db
     .update(users)
     .set({
-      name: String(payload.name ?? existing.name),
-      roleLabel: String(payload.roleLabel ?? existing.roleLabel),
+      name: payload.name ?? existing.name,
+      roleLabel: payload.roleLabel ?? existing.roleLabel,
       isAdmin,
-      permissions: isAdmin ? [] : Array.isArray(payload.permissions) ? payload.permissions : [],
+      permissions: isAdmin ? [] : payload.permissions,
       ...(password ? { passwordHash: await hashPassword(password) } : {}),
       updatedAt: new Date(),
     })

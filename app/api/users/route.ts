@@ -4,6 +4,7 @@ import { users } from "../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../db/passwords";
 import { requireAdmin } from "../_lib/auth";
 import { json } from "../_lib/http";
+import { parseBody, userCreateSchema } from "../_lib/validate";
 
 function toClientUser(row: typeof users.$inferSelect) {
   return {
@@ -32,19 +33,13 @@ export async function POST(request: Request) {
   const session = await requireAdmin(request);
   if ("response" in session) return session.response;
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
+  const parsed = await parseBody(request, userCreateSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
+  const username = payload.username.trim();
+  if (!username) return json({ error: "Username and password are required" }, { status: 400 });
 
-  const username = String(payload.username ?? "").trim();
-  const password = String(payload.password ?? "");
-  if (!username || !password) {
-    return json({ error: "Username and password are required" }, { status: 400 });
-  }
-  const policyError = validatePasswordPolicy(password, username);
+  const policyError = validatePasswordPolicy(payload.password, username);
   if (policyError) return json({ error: policyError }, { status: 400 });
 
   const db = getDb();
@@ -55,11 +50,11 @@ export async function POST(request: Request) {
     .insert(users)
     .values({
       username,
-      passwordHash: await hashPassword(password),
-      name: String(payload.name ?? username),
-      roleLabel: String(payload.roleLabel ?? ""),
-      isAdmin: Boolean(payload.isAdmin),
-      permissions: Boolean(payload.isAdmin) ? [] : Array.isArray(payload.permissions) ? payload.permissions : [],
+      passwordHash: await hashPassword(payload.password),
+      name: payload.name || username,
+      roleLabel: payload.roleLabel,
+      isAdmin: payload.isAdmin,
+      permissions: payload.isAdmin ? [] : payload.permissions,
     })
     .returning();
 

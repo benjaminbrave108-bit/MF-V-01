@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { preparedReports } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
 import { json } from "../_lib/http";
+import { parseBody, preparedReportInputSchema } from "../_lib/validate";
 
 export async function GET(request: Request) {
   const session = await requirePermission(request, "reportBuilder");
@@ -17,27 +18,24 @@ export async function POST(request: Request) {
   const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const id = String(payload.id ?? "").trim() || crypto.randomUUID();
+  const parsed = await parseBody(request, preparedReportInputSchema);
+  if ("response" in parsed) return parsed.response;
+  const payload = parsed.data;
+  const id = payload.id?.trim() || crypto.randomUUID();
 
   const db = getDb();
   const [report] = await db
     .insert(preparedReports)
     .values({
       id,
-      date: String(payload.date ?? ""),
-      title: String(payload.title ?? ""),
-      detail: String(payload.detail ?? ""),
-      presentedTo: String(payload.presentedTo ?? ""),
-      cashAccount: String(payload.cashAccount ?? ""),
-      signature: String(payload.signature ?? ""),
-      income: Array.isArray(payload.income) ? payload.income : [],
-      expense: Array.isArray(payload.expense) ? payload.expense : [],
+      date: payload.date,
+      title: payload.title,
+      detail: payload.detail,
+      presentedTo: payload.presentedTo,
+      cashAccount: payload.cashAccount,
+      signature: payload.signature,
+      income: payload.income,
+      expense: payload.expense,
     })
     .returning();
 
