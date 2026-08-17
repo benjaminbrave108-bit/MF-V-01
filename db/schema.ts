@@ -9,8 +9,21 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   permissions: jsonb("permissions").notNull().default([]),
   avatar: text("avatar").notNull().default(""),
+  // Set automatically after repeated failed login attempts against this
+  // account; only an admin can clear it (see app/api/_lib/security.ts).
+  locked: boolean("locked").notNull().default(false),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lockReason: text("lock_reason").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// IPs auto-blocked after repeated failed login attempts. Presence of a row
+// means "blocked" — only an admin removing the row lifts it.
+export const blockedIps = pgTable("blocked_ips", {
+  ip: text("ip").primaryKey(),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sessions = pgTable("sessions", {

@@ -17,6 +17,9 @@ function toClientUser(row: typeof users.$inferSelect) {
     roleLabel: row.roleLabel,
     isAdmin: row.isAdmin,
     permissions: row.permissions,
+    locked: row.locked,
+    lockedAt: row.lockedAt,
+    lockReason: row.lockReason,
   };
 }
 

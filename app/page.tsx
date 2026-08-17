@@ -56,7 +56,11 @@ type UserAccount = {
   roleLabel: string;
   isAdmin: boolean;
   permissions: Page[];
+  locked: boolean;
+  lockedAt: string | null;
+  lockReason: string;
 };
+type BlockedIp = { ip: string; reason: string; createdAt: string };
 const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "archive"];
 const adminOnlyPages: Page[] = ["users", "settings"];
 type ReportLine = { date: string; title: string; detail: string; note: string; amount: number };
@@ -436,20 +440,22 @@ export default function Home() {
     }
   }
 
-  async function signIn(username: string, password: string) {
+  async function signIn(username: string, password: string): Promise<string | null> {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), password }),
       });
-      if (!response.ok) return false;
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return data.error || tx(language, "Kullanıcı adı veya şifre hatalı.", "Incorrect username or password.", "Navê bikarhêner an şîfre şaş e.");
+      }
       setProfile((current) => ({ ...current, ...data.profile }));
       setSignedIn(true);
-      return true;
+      return null;
     } catch {
-      return false;
+      return tx(language, "Bağlantı hatası. Lütfen tekrar deneyin.", "Connection error. Please try again.", "Xeletiya girêdanê. Ji kerema xwe dîsa biceribîne.");
     }
   }
   async function signOut() {
@@ -734,11 +740,11 @@ function Login({
 }: {
   language: Language;
   setLanguage: (x: Language) => void;
-  onSignIn: (username: string, password: string) => Promise<boolean>;
+  onSignIn: (username: string, password: string) => Promise<string | null>;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const text =
     language === "tr"
@@ -793,9 +799,9 @@ function Login({
             e.preventDefault();
             if (submitting) return;
             setSubmitting(true);
-            const ok = await onSignIn(username, password);
+            const errorMessage = await onSignIn(username, password);
             setSubmitting(false);
-            setError(!ok);
+            setError(errorMessage);
           }}
         >
           <label>
@@ -816,7 +822,7 @@ function Login({
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
-          {error && <p className="loginError">{text.error}</p>}
+          {error && <p className="loginError">{error}</p>}
           <button className="primary" disabled={submitting}>{text.button}</button>
         </form>
       </div>
@@ -3555,6 +3561,17 @@ function Users({
                 <strong>{u.name}</strong>
                 <small>@{u.username}</small>
                 <em>{u.roleLabel}</em>
+                {u.locked && (
+                  <span className="userPermTag userPermTagLocked">
+                    🔒{" "}
+                    {tx(
+                      language,
+                      "Kilitli — güvenlik nedeniyle askıda",
+                      "Locked — suspended for security",
+                      "Kilît — ji ber ewlehiyê hate rawestandin",
+                    )}
+                  </span>
+                )}
                 <div className="userPermissions">
                   {u.isAdmin ? (
                     <span className="userPermTag userPermTagAdmin">
@@ -3576,6 +3593,26 @@ function Users({
                   <button type="button" onClick={() => setEditing(u)}>
                     ✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}
                   </button>
+                  {u.locked && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/users/${u.id}/unlock`, { method: "POST" });
+                          if (!response.ok) {
+                            alert(tx(language, "Kilit açılamadı.", "Could not unlock the account.", "Kilît nehat vekirin."));
+                            return;
+                          }
+                          const data = await response.json();
+                          setUsers((current) => current.map((x) => (x.id === data.user.id ? { ...x, ...data.user } : x)));
+                        } catch {
+                          alert(tx(language, "Kilit açılamadı.", "Could not unlock the account.", "Kilît nehat vekirin."));
+                        }
+                      }}
+                    >
+                      🔓 {tx(language, "Kilidi Aç", "Unlock", "Kilîtê Veke")}
+                    </button>
+                  )}
                   {!isSelf && !isLastAdmin && (
                     <button type="button" className="redText" onClick={() => setDeleteTarget(u)}>
                       🗑 {tx(language, "Sil", "Delete", "Jêbibe")}
@@ -3767,8 +3804,39 @@ function Settings({
   const [typographyApproved, setTypographyApproved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
+  const [blockedIpsLoaded, setBlockedIpsLoaded] = useState(false);
 
   useEffect(() => setTypographyDraft(typography), [typography]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/blocked-ips")
+      .then((r) => (r.ok ? r.json() : { blockedIps: [] }))
+      .then((data) => {
+        if (!cancelled) setBlockedIps(data.blockedIps ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setBlockedIpsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function unblockIp(ip: string) {
+    try {
+      const response = await fetch(`/api/admin/blocked-ips/${encodeURIComponent(ip)}`, { method: "DELETE" });
+      if (!response.ok) {
+        alert(tx(language, "IP engeli kaldırılamadı.", "Could not remove the IP block.", "Astengiya IP nehat rakirin."));
+        return;
+      }
+      setBlockedIps((current) => current.filter((x) => x.ip !== ip));
+    } catch {
+      alert(tx(language, "IP engeli kaldırılamadı.", "Could not remove the IP block.", "Astengiya IP nehat rakirin."));
+    }
+  }
 
   async function persistSettings(next: { company?: string; logo?: string; typography?: TypographySettings }) {
     setSaving(true);
@@ -3919,6 +3987,36 @@ function Settings({
             <span>{tx(language, "Yapılan Değişiklikleri Uygula", "Apply Changes", "Guherînên Hatine Kirin Bisepîne")}</span>
           </label>
         </div>
+      </div>
+      <div className="panel">
+        <Title
+          title={tx(language, "Engellenen IP Adresleri", "Blocked IP Addresses", "Navnîşanên IP yên Astengkirî")}
+          sub={tx(
+            language,
+            "Üst üste başarısız giriş denemesi sonrası otomatik engellenen adresler",
+            "Addresses auto-blocked after repeated failed login attempts",
+            "Navnîşanên ku piştî hewldanên têketinê yên bêserûber bi xweber hatine astengkirin",
+          )}
+        />
+        {!blockedIpsLoaded ? (
+          <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
+        ) : blockedIps.length === 0 ? (
+          <small>{tx(language, "Engellenen IP adresi yok.", "No blocked IP addresses.", "Navnîşana IP ya astengkirî tune.")}</small>
+        ) : (
+          <div className="blockedIpList">
+            {blockedIps.map((row) => (
+              <div key={row.ip} className="blockedIpRow">
+                <span>
+                  <strong>{row.ip}</strong>
+                  <small>{row.reason || tx(language, "Sebep belirtilmedi", "No reason given", "Sedem nehatiye diyarkirin")}</small>
+                </span>
+                <button type="button" className="light" onClick={() => unblockIp(row.ip)}>
+                  {tx(language, "Engeli Kaldır", "Unblock", "Astengiyê Rake")}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
     </div>
