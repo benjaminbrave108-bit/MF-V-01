@@ -29,8 +29,15 @@ JSON.parse(await readFile(hostingPath, "utf8"));
 const workerUrl = pathToFileURL(workerPath);
 workerUrl.searchParams.set("sites-validation", `${process.pid}-${Date.now()}`);
 const worker = await import(workerUrl.href);
-if (!worker.default || typeof worker.default.fetch !== "function") {
-  throw new Error("dist/server/index.js must have an ESM default export with fetch(request, env, ctx)");
+// vinext's App Router build (see resolveAppRouterHandler in
+// vinext/dist/server/prod-server.js) supports either a Worker-style
+// default export ({ fetch(request, env, ctx) }) or a plain handler
+// function (handler(request)) — this project's `vinext build` output is
+// the latter. Accept both instead of assuming only the Worker shape.
+const isWorkerStyle = worker.default && typeof worker.default.fetch === "function";
+const isPlainHandler = typeof worker.default === "function";
+if (!isWorkerStyle && !isPlainHandler) {
+  throw new Error("dist/server/index.js must have a default export that is either a handler function or a Worker-style { fetch(request, env, ctx) } object");
 }
 NODE
 

@@ -303,7 +303,9 @@ export default function Home() {
     } else {
       document.documentElement.style.setProperty("zoom", String(uiZoom / 100));
     }
-    return () => document.documentElement.style.removeProperty("zoom");
+    return () => {
+      document.documentElement.style.removeProperty("zoom");
+    };
   }, [uiZoom]);
 
   useEffect(() => {
@@ -3432,7 +3434,7 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
   report.income.forEach((line) => addData([date(line.date, "tr"), line.title, line.detail, line.note, line.amount]));
   const incomeTotalRow = sheet.addRow(["", "", "", "Toplam Gelir", totalIncome]);
   incomeTotalRow.height = 24; setFill(incomeTotalRow.number, "FFE7F4EF");
-  incomeTotalRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF314750" } }; cell.alignment = { vertical: "middle", horizontal: cell.col === 5 ? "right" : "left" }; });
+  incomeTotalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => { cell.border = border; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF314750" } }; cell.alignment = { vertical: "middle", horizontal: colNumber === 5 ? "right" : "left" }; });
   incomeTotalRow.getCell(5).numFmt = moneyFormat;
 
   mergeTitle(sheet.rowCount + 1, tx(language, "Gider", "Expense", "Mesref"), "FFEDF6F7", 12);
@@ -3440,7 +3442,7 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
   report.expense.forEach((line) => addData([date(line.date, "tr"), line.title, line.detail, line.note, line.amount]));
   const expenseTotalRow = sheet.addRow(["", "", "", "Toplam Gider", totalExpense]);
   expenseTotalRow.height = 24; setFill(expenseTotalRow.number, "FFE7F4EF");
-  expenseTotalRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF314750" } }; cell.alignment = { vertical: "middle", horizontal: cell.col === 5 ? "right" : "left" }; });
+  expenseTotalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => { cell.border = border; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF314750" } }; cell.alignment = { vertical: "middle", horizontal: colNumber === 5 ? "right" : "left" }; });
   expenseTotalRow.getCell(5).numFmt = moneyFormat;
 
   const totals = [[tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî"), totalIncome], [tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî"), totalExpense], [tx(language, "Sonuç", "Result", "Encam"), result]] as const;
@@ -3448,7 +3450,7 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
     const row = sheet.addRow([label, "", "", "", value]);
     sheet.mergeCells(row.number, 1, row.number, 4);
     row.height = 24;
-    row.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD8D8D8" } }; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: value < 0 ? "FFBD3131" : "FF12191D" } }; cell.alignment = { vertical: "middle", horizontal: cell.col === 5 ? "right" : "left" }; });
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => { cell.border = border; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD8D8D8" } }; cell.font = { name: "Arial", size: 10, bold: true, color: { argb: value < 0 ? "FFBD3131" : "FF12191D" } }; cell.alignment = { vertical: "middle", horizontal: colNumber === 5 ? "right" : "left" }; });
     row.getCell(5).numFmt = moneyFormat;
   });
 
@@ -3461,7 +3463,7 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
   signValueRow.height = 26;
   signValueRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF12191D" } }; cell.alignment = { vertical: "middle", horizontal: "left" }; });
 
-  sheet.pageMargins = { left: 0.3, right: 0.3, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 };
+  sheet.pageSetup.margins = { left: 0.3, right: 0.3, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 };
   sheet.headerFooter.oddFooter = `&L${report.title}&RPage &P / &N`;
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

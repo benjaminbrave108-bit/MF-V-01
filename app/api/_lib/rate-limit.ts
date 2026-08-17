@@ -52,8 +52,12 @@ function trustedProxyCount(): number {
 
 // Picks the real client IP: walks in from the right of X-Forwarded-For by
 // TRUSTED_PROXY_COUNT hops (so a client can't just add a fake IP to the
-// front of the header), falling back to the raw TCP peer address that
-// server.mjs stamps onto every request.
+// front of the header) — this is the path that matters in production,
+// behind a reverse proxy with TRUSTED_PROXY_COUNT set. With no proxy
+// configured (local dev, or a direct-exposed deployment we don't
+// recommend), every request collapses to a shared "unknown" bucket;
+// tests/api.test.mjs sets x-mfv01-remote-addr directly to get distinct
+// per-test identities without needing a real proxy in front.
 export function getClientIp(request: Request): string {
   const proxies = trustedProxyCount();
   if (proxies > 0) {

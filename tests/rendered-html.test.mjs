@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { callWorker } from "./helpers/call-worker.mjs";
 
 const developmentPreviewMeta =
   /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
@@ -9,7 +10,8 @@ test("renders development preview metadata", async () => {
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
-  const response = await worker.fetch(
+  const response = await callWorker(
+    worker,
     new Request("http://localhost/", {
       headers: { accept: "text/html" },
     }),

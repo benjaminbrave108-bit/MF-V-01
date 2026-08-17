@@ -7,12 +7,18 @@ export function json(data: unknown, init?: ResponseInit): Response {
   return response;
 }
 
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 // Cheap CSRF hardening: browsers always send Origin on cross-origin
 // state-changing fetches, and same-origin requests from our own frontend
 // also carry it. If it's present and doesn't match our own origin, reject.
 // If it's absent (older clients, some same-origin cases), let the session
-// cookie's SameSite=Lax do the rest of the work.
-export function assertSameOrigin(request: Request): Response | null {
+// cookie's SameSite=Lax do the rest of the work. Lives here (checked inside
+// every mutating route via withErrorHandling) rather than in a Node HTTP
+// adapter in front, so it applies the same way under `npm run dev`,
+// `vinext start`, and server.mjs alike.
+function assertSameOrigin(request: Request): Response | null {
+  if (!MUTATING_METHODS.has(request.method)) return null;
   const origin = request.headers.get("origin");
   if (!origin) return null;
   const requestUrl = new URL(request.url);
@@ -24,11 +30,14 @@ export function assertSameOrigin(request: Request): Response | null {
 // never surfaces as a raw framework 500 page or an unhandled-exception log
 // with no context — it's logged with the request path and turned into a
 // plain JSON 500 the client's fetch() calls can handle like any other error.
+// Also applies the CSRF origin check above to every mutating request.
 type RouteHandler<C> = (request: Request, ctx: C) => Promise<Response>;
 
 export function withErrorHandling<C = undefined>(handler: RouteHandler<C>): RouteHandler<C> {
   return async (request: Request, ctx: C) => {
     try {
+      const originError = assertSameOrigin(request);
+      if (originError) return originError;
       return await handler(request, ctx);
     } catch (error) {
       const { pathname } = new URL(request.url);

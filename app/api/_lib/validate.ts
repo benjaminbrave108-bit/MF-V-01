@@ -77,8 +77,13 @@ export const recordUpdateSchema = z.object({
   updatedAt: z.string().optional(),
 });
 
+// An import row's date may be blank (the route then defaults it to today)
+// but if present must still be a real YYYY-MM-DD date — plain
+// z.string() here would let a malformed date like "16-01-2026" straight
+// into the database unvalidated.
+const importDateSchema = z.union([z.literal(""), dateSchema]);
 export const recordImportSchema = z.object({
-  items: z.array(recordInputSchema.partial({ date: true }).extend({ date: z.string().optional().default("") })).min(1).max(2000),
+  items: z.array(recordInputSchema.partial({ date: true }).extend({ date: importDateSchema.optional().default("") })).min(1).max(2000),
 });
 
 const noteStatusSchema = z.enum(["important", "urgent", "pending", "completed"]);
