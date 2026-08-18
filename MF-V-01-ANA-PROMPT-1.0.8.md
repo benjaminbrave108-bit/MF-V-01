@@ -27,6 +27,15 @@ Bu belgedeki NSIS kurucu, `app.asar`, SmartScreen ve Windows'a özgü teslim
 kuralları yalnız masaüstü sürümü için geçerlidir; web sürümünün kurulum ve
 doğrulama adımları `README.md`'de anlatılır.
 
+**Not (2026-08-18):** Masaüstü sürümü "dondurulmuş" olsa da bu tarihte
+`Desktop\MF-Uygulamasi\MF-V-01-1.0.8-ONE-CLICK-BUILD-V6` altında **ayrı,
+kendi Git deposu olan** bir kopyasına bağımsız iyileştirmeler yapıldı
+(gerçek Kullanıcı Yönetimi, şifre hash'leme + kilitleme, çoklu veritabanı
+kaldırma, Rapor Hazırla'nın bu web sürümündekiyle eşitlenmesi). Bu web
+sürümüyle senkron değildir; ayrıntı için o projenin kendi
+`MF-V-01-ANA-PROMPT-1.0.8.md` dosyasındaki "Durum güncellemesi" bölümüne
+bakın.
+
 ## Proje kimliği
 
 - Uygulama adı: **MF-V-01**
