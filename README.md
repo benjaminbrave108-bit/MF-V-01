@@ -1,112 +1,140 @@
-# vinext-starter
+# MF-V-01 — Maliye/Finans Muhasebe
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Çok kullanıcılı, sunucu tabanlı bir muhasebe uygulaması: kasa, gelir,
+gider, mali notlar, hazırlanan raporlar, arşiv ve kullanıcı/erişim
+yönetimi. Next.js uyumlu [vinext](https://github.com/cloudflare/vinext)
+framework'ü (Vite üzerinde) ile [Drizzle ORM](https://orm.drizzle.team)
+üzerinden **PostgreSQL**'e bağlanır; kendi sunucunuzda çalışacak şekilde
+tasarlanmıştır (Cloudflare Workers/D1 kullanmaz).
 
-## Prerequisites
+> **Masaüstü (Electron) sürümü hakkında:** `desktop/` altındaki Electron
+> uygulaması bilinçli olarak ayrı, dondurulmuş bir offline araç olarak
+> bırakılmıştır ve bu README'nin kapsamı dışındadır. Ayrıntılar için
+> `MF-V-01-ANA-PROMPT-1.0.8.md`'ye bakın.
+
+## Mimari özeti
+
+- **İstemci + sunucu**: `app/page.tsx` (tek sayfalık React arayüzü) ve
+  `app/api/**/route.ts` (REST API uçları), vinext'in App Router benzeri
+  yapısıyla tek bir Next.js projesinde bir arada.
+- **Veritabanı**: PostgreSQL, şema `db/schema.ts`'de Drizzle ile tanımlı,
+  migration'lar `drizzle/`'da.
+- **Kimlik doğrulama**: `scrypt` ile şifre hash'leme, httpOnly oturum
+  çerezi (`app/api/_lib/auth.ts`), kullanıcı bazlı sayfa/işlem izinleri.
+- **Güvenlik**: sunucu taraflı yetki denetimi, ardışık başarısız giriş
+  denemelerinde IP engelleme + hesap kilitleme (admin onayı gerektirir),
+  Zod ile girdi doğrulama, CSRF origin kontrolü (`app/api/_lib/http.ts`).
+- **Prod sunucu**: `server.mjs` — asıl sunmayı (statik dosyalar, SSR, API
+  yönlendirme) vinext'in kendi `startProdServer`'ına devreder; üstüne
+  migration çalıştırma ve süresi dolmuş oturumları temizleme ekler.
+
+## Gereksinimler
 
 - Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+- PostgreSQL 16+ (yerelde native servis olarak veya bir konteyner içinde
+  çalışabilir; bu proje Docker'a bağımlı değildir)
 
-## Sites Lifecycle
+## Kurulum
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
-
-This starter does not use `wrangler.jsonc`.
-
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
-
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm ci
+cp .env.example .env.local
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+`.env.local` içindeki alanları doldurun (bkz. `.env.example`'daki
+açıklamalar):
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+| Değişken | Açıklama |
+|---|---|
+| `DATABASE_URL` | `postgres://kullanici:sifre@host:5432/veritabani` |
+| `SESSION_COOKIE_SECURE` | Prod'da `true` (HTTPS zorunlu), yerel HTTP testte `false` |
+| `SESSION_TTL_HOURS` | Oturum süresi (varsayılan 12) |
+| `PGSSL` | Yönetilen/uzak Postgres TLS istiyorsa `require` |
+| `PGPOOL_MAX` | Node süreci başına bağlantı havuzu üst sınırı |
+| `PORT`, `HOST` | `server.mjs`'in dinleyeceği adres |
+| `VINEXT_TRUST_PROXY`, `TRUSTED_PROXY_COUNT` | Reverse proxy arkasındaysanız `1`+ yapın (aşağıya bakın) |
+| `SEED_ADMIN_PASSWORD`, `SEED_MANAGER_PASSWORD`, `SEED_USER_PASSWORD` | `npm run db:seed` için — sabit varsayılan yok, siz belirlersiniz |
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+## Veritabanı: migration ve seed
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+```bash
+npm run db:generate   # şema değiştiğinde yeni migration üretir
+npm run db:migrate    # migration'ları uygular
+npm run db:seed       # SEED_*_PASSWORD ile admin/manager/user hesaplarını oluşturur
+```
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+`server.mjs` da açılışta migration'ları otomatik uygular; `db:migrate`'i
+elle çalıştırmak yalnız migration üretiminden hemen sonra doğrulamak
+istediğinizde gerekir.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## Geliştirme
 
-## Diagnostic Commands
+```bash
+npm run dev
+```
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build, validate, and verify the rendered development-preview metadata
-- `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Vite/vinext geliştirme sunucusunu başlatır (varsayılan `http://localhost:5173`).
+`.env.local` otomatik yüklenir.
 
-Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
+## Prod dağıtım
 
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
+```bash
+npm run build
+node --env-file=.env.local server.mjs
+```
 
-## Learn More
+`server.mjs` yalnız `127.0.0.1` üzerinde dinlemek üzere tasarlanmıştır —
+**TLS sonlandırma, güvenlik başlıkları (CSP, HSTS, X-Frame-Options),
+istek gövdesi boyut sınırı ve genel erişim için önünde bir reverse proxy
+(nginx/caddy) çalıştırmanız gerekir.** Örnek systemd/pm2 yapılandırmaları
+için `deploy/` klasörüne bakın.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Reverse proxy arkasındaysanız `.env.local`'da `VINEXT_TRUST_PROXY=1` ve
+`TRUSTED_PROXY_COUNT` değerini proxy sayınıza göre ayarlayın — aksi halde
+giriş denemesi hız sınırlama ve IP engelleme özellikleri gerçek istemci
+IP'sini göremez.
 
-## 1.0.8 V6 data persistence fix
-- Desktop server now uses stable localhost port 47831 so browser storage has the same origin after restart.
-- Initial state saving is delayed until persisted data has been loaded, preventing accidental overwrite with empty startup state.
+## Test
+
+```bash
+npm test
+```
+
+Sırasıyla: tip kontrolü (`tsc --noEmit`), prod derlemesi, ardından
+`tests/*.test.mjs` (render/varlık testleri + `tests/api.test.mjs`'deki
+API entegrasyon testleri). API testleri **gerçek `DATABASE_URL`
+veritabanına karşı** çalışır — bu ortamda ayrı bir test veritabanı
+oluşturmak için gereken `CREATEDB` yetkisi mevcut değildi, bu yüzden
+testler oluşturdukları veriyi açıkça işaretleyip kendi sonlarında
+temizler. Prod verisi olan bir veritabanına karşı `npm test`
+çalıştırmadan önce bunu göz önünde bulundurun.
+
+## Yedekleme ve geri yükleme
+
+İki yol var:
+
+1. **Uygulama içinden** (`Ayarlar → Veri (Database) Ayarları`, admin):
+   kayıt/arşiv/not/rapor verisini JSON olarak dışa aktarır, aynı biçimden
+   içe aktarır (mevcut mali veriyi değiştirir; kullanıcı hesapları
+   etkilenmez), veya tüm mali veriyi siler (iki adımlı şifre onaylı).
+2. **`pg_dump`** ile tam veritabanı yedeği (kullanıcılar dahil):
+   ```bash
+   pg_dump "$DATABASE_URL" > yedek.sql
+   ```
+
+## Proje yapısı (özet)
+
+- `app/page.tsx` — tek dosyalık React arayüzü
+- `app/api/**/route.ts` — REST API uçları
+- `app/api/_lib/` — paylaşılan sunucu yardımcıları (auth, validate, http, rate-limit, security)
+- `db/schema.ts`, `drizzle/` — Postgres şeması ve migration'lar
+- `server.mjs` — prod giriş noktası
+- `desktop/` — ayrı, dondurulmuş Electron uygulaması (bu README'nin kapsamı dışında)
+- `tests/` — `node --test` ile çalışan testler
+
+## Diğer belgeler
+
+- `MF-V-01-ANA-PROMPT-1.0.8.md` — masaüstü sürümünün orijinal ürün
+  spesifikasyonu ve web sürümüne dair durum notu
+- `MF-V-01-DUZELTME-PLANI-1.0.9.md` — bu göç ve sonrasındaki düzeltmelerin
+  planı (tamamlanan/kalan maddeler için doğrulama kapıları içerir)

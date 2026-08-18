@@ -1,5 +1,32 @@
 # MF-V-01 — Ana Proje Promptu
 
+## Durum güncellemesi (2026-08 — Postgres/sunucu göçü)
+
+Bu belgenin geri kalanı **masaüstü (Electron) sürümünü** anlatır ve o sürüm
+için hâlâ geçerlidir — masaüstü uygulaması bilinçli olarak dondurulmuş,
+ayrı bir offline araç olarak bırakıldı; bu göçten etkilenmedi ve
+güncellenmedi.
+
+Buna ek olarak proje artık **kendi sunucunuzda çalışan, çok kullanıcılı bir
+web sürümü** olarak da dağıtılıyor:
+
+- Veriler artık cihazda değil, merkezi bir **PostgreSQL** veritabanında
+  tutuluyor; birden fazla kullanıcı aynı anda aynı veriyi görüp
+  düzenleyebiliyor (bkz. `db/schema.ts`, `app/api/**`).
+- Kimlik doğrulama sunucu taraflı: `scrypt` ile şifre hash'leme, httpOnly
+  oturum çerezi, kullanıcı bazlı erişim izinleri (bkz. `app/api/_lib/auth.ts`).
+- Bu belgedeki "İlk açılışta üç dilli dil seçim ekranı" ve "Ayarlar > Veri
+  (Database) Ayarları" maddeleri web sürümünde de uygulanıyor — dil artık
+  kullanıcı hesabına bağlı kalıcı, veritabanı dışa/içe aktarma ve silme
+  `Ayarlar` sayfasından admin için kullanılabilir.
+- Dağıtım: `npm run build && node server.mjs` (bkz. kök dizindeki
+  `server.mjs` ve `README.md`) — Electron paketleme veya
+  `build/standalone-installer.nsi` bu yola dahil değildir.
+
+Bu belgedeki NSIS kurucu, `app.asar`, SmartScreen ve Windows'a özgü teslim
+kuralları yalnız masaüstü sürümü için geçerlidir; web sürümünün kurulum ve
+doğrulama adımları `README.md`'de anlatılır.
+
 ## Proje kimliği
 
 - Uygulama adı: **MF-V-01**
