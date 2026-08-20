@@ -31,6 +31,9 @@ RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=builder /app/dist ./dist
 COPY drizzle ./drizzle
 COPY server.mjs ./
+# The only way to create the first account: there is no self-service
+# bootstrap, and login looks the user up in a table that starts empty.
+COPY scripts/seed-users.mjs ./scripts/
 
 EXPOSE 8080
 CMD ["node", "server.mjs"]
