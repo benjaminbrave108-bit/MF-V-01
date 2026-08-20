@@ -10,6 +10,10 @@ ENV SITES_BUILD_TIMEOUT=10m
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+# The scripts are exec'd by name, so they need the bit set. It is fixed in
+# git too, but this repo is developed on Windows, where a later commit can
+# silently drop it again and break every deployment.
+RUN chmod +x scripts/*.sh
 RUN npm run build
 
 # ---- Runtime stage: production dependencies only ----
