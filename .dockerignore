@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+dist
+release
+.wrangler
+.sites-runtime
+.env
+.env.*
+!.env.example
+desktop
+tests
+examples
+*.md
