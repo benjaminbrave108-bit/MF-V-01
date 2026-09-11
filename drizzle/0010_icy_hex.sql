@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "dashboard_included_user_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

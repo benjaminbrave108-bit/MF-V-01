@@ -10,9 +10,11 @@ export const GET = withErrorHandling(async (request: Request) => {
       username: user.username,
       role: user.roleLabel,
       isAdmin: user.isAdmin,
+      isSuperAdmin: user.isSuperAdmin,
       permissions: user.permissions,
       avatar: user.avatar,
       language: user.language,
+      dashboardIncludedUserIds: user.dashboardIncludedUserIds,
     },
   });
 });

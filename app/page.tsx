@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LanguageSetup, Login } from "./components/Login";
 import { ProfileModal } from "./components/ProfileModal";
 import { Dashboard } from "./components/Dashboard";
@@ -16,6 +16,8 @@ import { defaultTypography, typographyVariables } from "./lib/typography";
 import { adminOnlyPages } from "./lib/types";
 import type {
   ArchiveItem,
+  CashAccountSummary,
+  CashTransfer,
   FinanceNote,
   Kind,
   Language,
@@ -40,6 +42,7 @@ export default function Home() {
   const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem } | null>(
     null,
   );
+  const [recordsSearch, setRecordsSearch] = useState("");
   // Both start at a fixed, SSR-safe default and are corrected from
   // localStorage in an effect after mount (same pattern as uiZoom below) —
   // reading localStorage during the initial render would make the client's
@@ -54,9 +57,93 @@ export default function Home() {
     role: "Yönetici",
     avatar: "",
     isAdmin: true,
+    isSuperAdmin: false,
     permissions: [],
+    dashboardIncludedUserIds: [],
   });
   const [users, setUsers] = useState<UserAccount[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<CashAccountSummary[]>([]);
+  const [cashTransfers, setCashTransfers] = useState<CashTransfer[]>([]);
+  // Which "workspace" Kasa/Gelir/Gider/Ana Sayfa currently show: null is the
+  // signed-in user's own data, otherwise the id of a user who shared kasas
+  // with them (read-only — see the Ana Sayfa sidebar submenu below).
+  const [viewingUserId, setViewingUserId] = useState<number | null>(null);
+  // Distinguishes the "Ana Sayfa" top-level nav click (home — merges in every
+  // opted-in shared kasa the super admin has selected via Görüntüle) from the
+  // "Kendi Verilerim" submenu entry (own-only — same viewingUserId===null as
+  // home, but should show ONLY the signed-in user's own data, not the merge).
+  // Reset to false whenever leaving the own-only view.
+  const [dashboardOwnOnly, setDashboardOwnOnly] = useState(false);
+  // One entry per person (other than yourself) who owns at least one kasa
+  // you can see — populates the "R Verileri" / "S Verileri" rows.
+  const sharedOwners = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const a of cashAccounts) {
+      if (!a.isOwner && a.ownerUserId != null) byId.set(a.ownerUserId, a.ownerName || "");
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [cashAccounts]);
+  // Same as sharedOwners, but narrowed to owners who have opted at least one
+  // kasa in for dashboard sharing (Kasalar/Ayarlar > Paylaş's "Süper Admin'in
+  // Ana Sayfa'sında göster" toggle) — this is what powers the Ayarlar >
+  // Görüntüle checkbox list, since checking a user there is meaningless
+  // unless they've actually consented to be merged.
+  const dashboardShareableOwners = useMemo(
+    () => sharedOwners.filter((owner) => cashAccounts.some((a) => a.ownerUserId === owner.id && a.dashboardShareEnabled)),
+    [sharedOwners, cashAccounts],
+  );
+  // Kasa ids that belong to whichever workspace is active — "own" means
+  // owned by the signed-in user, otherwise owned by the selected user.
+  const contextCashAccountIds = useMemo(() => {
+    const ownerId = viewingUserId;
+    return new Set(
+      cashAccounts.filter((a) => (ownerId === null ? a.isOwner : a.ownerUserId === ownerId)).map((a) => a.id),
+    );
+  }, [cashAccounts, viewingUserId]);
+  // Records scoped to the active workspace: a record with no kasa link at
+  // all only ever belongs to your own workspace, never a shared one.
+  const contextRecords = useMemo(
+    () =>
+      records.filter((x) =>
+        x.cashAccountId === null || x.cashAccountId === undefined
+          ? viewingUserId === null
+          : contextCashAccountIds.has(x.cashAccountId),
+      ),
+    [records, contextCashAccountIds, viewingUserId],
+  );
+  const contextCashAccounts = useMemo(
+    () => cashAccounts.filter((a) => contextCashAccountIds.has(a.id)),
+    [cashAccounts, contextCashAccountIds],
+  );
+  // Ana Sayfa's own totals, separate from contextRecords above: a super
+  // admin can opt (Ayarlar > Görüntüle) to merge specific other users'
+  // kasas into their own home totals — Kasa/Gelir/Gider stay per-workspace
+  // as usual, only the dashboard aggregate reflects this. Browsing someone
+  // else's workspace (viewingUserId set) shows just that person, same as
+  // everywhere else — the merge only ever applies to "my own" Ana Sayfa.
+  const dashboardCashAccountIds = useMemo(() => {
+    if (viewingUserId !== null || dashboardOwnOnly) return contextCashAccountIds;
+    const included = new Set(profile.dashboardIncludedUserIds);
+    return new Set(
+      cashAccounts
+        .filter(
+          (a) =>
+            a.isOwner || (a.ownerUserId != null && included.has(a.ownerUserId) && a.dashboardShareEnabled),
+        )
+        .map((a) => a.id),
+    );
+  }, [cashAccounts, viewingUserId, dashboardOwnOnly, contextCashAccountIds, profile.dashboardIncludedUserIds]);
+  const dashboardRecords = useMemo(
+    () =>
+      records.filter((x) =>
+        x.cashAccountId === null || x.cashAccountId === undefined
+          ? viewingUserId === null
+          : dashboardCashAccountIds.has(x.cashAccountId),
+      ),
+    [records, dashboardCashAccountIds, viewingUserId],
+  );
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
   const [preparedReports, setPreparedReports] = useState<PreparedReport[]>([]);
@@ -144,6 +231,8 @@ export default function Home() {
         ));
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
         if (Array.isArray(data.users)) setUsers(data.users);
+        refreshCashAccounts();
+        refreshCashTransfers();
         if (data.settings) {
           setCompany(data.settings.company ?? "Maliye-Finans");
           setLogo(data.settings.logo ?? "");
@@ -205,6 +294,9 @@ export default function Home() {
   function canAccess(pageId: Page) {
     if (profile.isAdmin) return true;
     if (pageId === "dashboard") return true;
+    // Every signed-in user may open Kullanıcılar to view/edit their own
+    // account — Users.tsx itself limits a non-admin to just that.
+    if (pageId === "users") return true;
     if (adminOnlyPages.includes(pageId)) return false;
     return profile.permissions.includes(pageId);
   }
@@ -237,6 +329,56 @@ export default function Home() {
       setModal(null);
     } catch {
       alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
+    }
+  }
+  async function refreshCashAccounts() {
+    try {
+      const response = await fetch("/api/cash-accounts");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.cashAccounts)) setCashAccounts(data.cashAccounts);
+    } catch {}
+  }
+  async function refreshRecords() {
+    try {
+      const response = await fetch("/api/records");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.records)) setRecords(data.records.map(normalizeRecord));
+    } catch {}
+  }
+  async function refreshCashTransfers() {
+    try {
+      const response = await fetch("/api/cash-transfers");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.cashTransfers)) setCashTransfers(data.cashTransfers);
+    } catch {}
+  }
+  async function refreshAfterCashTransfer() {
+    await Promise.all([refreshRecords(), refreshCashAccounts(), refreshCashTransfers()]);
+  }
+  async function updateDashboardScope(includedUserIds: number[]) {
+    const previous = profile.dashboardIncludedUserIds;
+    setProfile((p) => ({ ...p, dashboardIncludedUserIds: includedUserIds }));
+    try {
+      const response = await fetch("/api/profile/dashboard-scope", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includedUserIds }),
+      });
+      if (!response.ok) {
+        setProfile((p) => ({ ...p, dashboardIncludedUserIds: previous }));
+        alert(tx(language, "Görüntüle ayarı kaydedilemedi.", "The view setting could not be saved.", "Mîhenga dîtinê nehat tomarkirin."));
+        return;
+      }
+      const data = await response.json();
+      if (Array.isArray(data.dashboardIncludedUserIds)) {
+        setProfile((p) => ({ ...p, dashboardIncludedUserIds: data.dashboardIncludedUserIds }));
+      }
+    } catch {
+      setProfile((p) => ({ ...p, dashboardIncludedUserIds: previous }));
+      alert(tx(language, "Görüntüle ayarı kaydedilemedi.", "The view setting could not be saved.", "Mîhenga dîtinê nehat tomarkirin."));
     }
   }
   async function checkPassword(password: string) {
@@ -447,11 +589,50 @@ export default function Home() {
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
-                onClick={() => setPage(n.id)}
+                onClick={() => {
+                  setPage(n.id);
+                  if (n.id === "dashboard") {
+                    setViewingUserId(null);
+                    setDashboardOwnOnly(false);
+                  }
+                }}
               >
                 <i>{n.icon}</i>
                 <span>{n.label[language]}</span>
               </button>
+              {n.id === "dashboard" && sharedOwners.length > 0 && (
+                <div className="navSubmenu">
+                  <button
+                    type="button"
+                    className={viewingUserId === null && dashboardOwnOnly ? "active" : ""}
+                    onClick={() => {
+                      setViewingUserId(null);
+                      setDashboardOwnOnly(true);
+                      setPage("dashboard");
+                    }}
+                  >
+                    <i>◎</i>
+                    <span>{tx(language, "Kendi Verilerim", "My Own Data", "Daneyên Min ên Xwe")}</span>
+                  </button>
+                  {sharedOwners.map((owner) => (
+                    <button
+                      type="button"
+                      key={owner.id}
+                      className={viewingUserId === owner.id ? "active" : ""}
+                      onClick={() => {
+                        setViewingUserId(owner.id);
+                        setDashboardOwnOnly(false);
+                        setPage("dashboard");
+                      }}
+                    >
+                      <i>◈</i>
+                      <span>
+                        {tx(language, `${owner.name} Verileri`, `${owner.name}'s Data`, `Daneyên ${owner.name}`)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </nav>
@@ -469,9 +650,41 @@ export default function Home() {
       </aside>
       <main>
         <header>
-          <h1>
-            {nav.find((n) => n.id === page)?.label[language]}
-          </h1>
+          <div className="headerTitleRow">
+            <h1>
+              {nav.find((n) => n.id === page)?.label[language]}
+            </h1>
+            {viewingUserId !== null &&
+              ["dashboard", "cash", "income", "expense"].includes(page) &&
+              (() => {
+                const owner = sharedOwners.find((o) => o.id === viewingUserId);
+                return owner ? (
+                  <span className="workspaceBadge">
+                    👁 {tx(language, `${owner.name} Verileri`, `${owner.name}'s Data`, `Daneyên ${owner.name}`)}
+                  </span>
+                ) : null;
+              })()}
+            {viewingUserId === null && dashboardOwnOnly && page === "dashboard" && (
+              <span className="workspaceBadge">
+                ◎ {tx(language, "Kendi Verilerim", "My Own Data", "Daneyên Min ên Xwe")}
+              </span>
+            )}
+            {(page === "income" || page === "expense") && (
+              <div className="headerSearch">
+                <span>⌕</span>
+                <input
+                  value={recordsSearch}
+                  onChange={(e) => setRecordsSearch(e.target.value)}
+                  placeholder={tx(
+                    language,
+                    "Kayıtlarda ara…",
+                    "Search records…",
+                    "Di qeydan de bigere…",
+                  )}
+                />
+              </div>
+            )}
+          </div>
           <div className="headerActions">
             <div className="zoomControl" title={tx(language, "Ekran ölçeği (Ctrl + / Ctrl -)", "Interface zoom (Ctrl + / Ctrl -)", "Mezinahiya dîmenderê (Ctrl + / Ctrl -)")}>
               <button type="button" onClick={() => setUiZoom((current) => [125, 110, 100, 90, 80].find((level) => level < current) ?? 80)} aria-label={tx(language, "Küçült", "Zoom out", "Biçûk bike")}>−</button>
@@ -559,23 +772,31 @@ export default function Home() {
         </header>
         <section className="content">
           {page === "dashboard" && (
-            <Dashboard records={records} language={language} goTo={setPage} />
+            <Dashboard records={dashboardRecords} language={language} goTo={setPage} />
           )}
           {(["cash", "income", "expense"] as Page[]).includes(page) && (
             <Records
               language={language}
               kind={page as Kind}
-              records={records.filter(
+              records={contextRecords.filter(
                 (x) =>
                   x.kind === page ||
                   (page === "income" && x.kind === "cash"),
               )}
-              allRecords={records}
+              allRecords={contextRecords}
               onAdd={() => setModal({ kind: page as Kind })}
               onEdit={(item) => setModal({ kind: item.kind, item })}
               onDelete={removeRecord}
               onImport={importRecords}
               checkPassword={checkPassword}
+              cashAccounts={contextCashAccounts}
+              users={users}
+              onCashAccountsChange={setCashAccounts}
+              search={recordsSearch}
+              setSearch={setRecordsSearch}
+              cashTransfers={cashTransfers}
+              onTransfersChanged={refreshAfterCashTransfer}
+              readOnly={viewingUserId !== null}
             />
           )}
           {page === "reportBuilder" && (
@@ -600,6 +821,8 @@ export default function Home() {
               users={users}
               setUsers={setUsers}
               currentUsername={profile.username}
+              currentUserIsAdmin={profile.isAdmin}
+              currentUserIsSuperAdmin={profile.isSuperAdmin}
               checkPassword={checkPassword}
             />
           )}
@@ -614,6 +837,10 @@ export default function Home() {
               typography={typography}
               setTypography={setTypography}
               checkPassword={checkPassword}
+              isSuperAdmin={profile.isSuperAdmin}
+              sharedOwners={dashboardShareableOwners}
+              dashboardIncludedUserIds={profile.dashboardIncludedUserIds}
+              onDashboardIncludedUserIdsChange={updateDashboardScope}
             />
           )}
         </section>
@@ -627,6 +854,9 @@ export default function Home() {
           onCreateNote={createNote}
           onClose={() => setModal(null)}
           onSave={saveRecord}
+          cashAccounts={cashAccounts}
+          users={users}
+          onTransfersChanged={refreshAfterCashTransfer}
         />
       )}
       {profileModal && (

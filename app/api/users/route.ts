@@ -13,6 +13,7 @@ function toClientUser(row: typeof users.$inferSelect) {
     name: row.name,
     roleLabel: row.roleLabel,
     isAdmin: row.isAdmin,
+    isSuperAdmin: row.isSuperAdmin,
     permissions: row.permissions,
     locked: row.locked,
     lockedAt: row.lockedAt,
@@ -46,6 +47,13 @@ export const POST = withErrorHandling(async (request: Request) => {
   const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
   if (existing[0]) return json({ error: "Username already exists" }, { status: 409 });
 
+  // A super-admin flag in the request body only takes effect if the
+  // requester is themself a super admin — a plain admin cannot mint one by
+  // sending the field (see requireSuperAdmin's absence here: this route
+  // stays admin-reachable for ordinary user creation, this check is the
+  // narrower gate just for that one field).
+  const isSuperAdmin = payload.isSuperAdmin && session.user.isSuperAdmin;
+
   const [account] = await db
     .insert(users)
     .values({
@@ -53,8 +61,9 @@ export const POST = withErrorHandling(async (request: Request) => {
       passwordHash: await hashPassword(payload.password),
       name: payload.name || username,
       roleLabel: payload.roleLabel,
-      isAdmin: payload.isAdmin,
-      permissions: payload.isAdmin ? [] : payload.permissions,
+      isAdmin: payload.isAdmin || isSuperAdmin,
+      isSuperAdmin,
+      permissions: payload.isAdmin || isSuperAdmin ? [] : payload.permissions,
     })
     .returning();
 

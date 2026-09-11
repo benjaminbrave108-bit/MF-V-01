@@ -16,9 +16,11 @@ export type SessionUser = {
   name: string;
   roleLabel: string;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   permissions: Page[];
   avatar: string;
   language: string;
+  dashboardIncludedUserIds: number[];
 };
 
 function parseCookies(header: string | null): Record<string, string> {
@@ -98,9 +100,11 @@ function toSessionUser(user: typeof users.$inferSelect): SessionUser {
     name: user.name,
     roleLabel: user.roleLabel,
     isAdmin: user.isAdmin,
+    isSuperAdmin: user.isSuperAdmin,
     permissions: (user.permissions as Page[]) ?? [],
     avatar: user.avatar,
     language: user.language,
+    dashboardIncludedUserIds: (user.dashboardIncludedUserIds as number[]) ?? [],
   };
 }
 
@@ -128,6 +132,17 @@ export async function requireAdmin(request: Request): Promise<{ user: SessionUse
   const result = await requireSession(request);
   if ("response" in result) return result;
   if (!result.user.isAdmin) return { response: Response.json({ error: "Forbidden" }, { status: 403 }) };
+  return result;
+}
+
+// Kasa erişim atamaları (Ayarlar > Kasa Erişimi) ve süper admin rolünün
+// verilmesi/alınması yalnız süper adminlere açık — sıradan bir admin bile
+// bunu yapamaz (bkz. proje sahibinin kararı: "süper admin tüm verilere
+// erişebilir, ancak ... hangi kasaları görebileceğini belirleyebilmeliyiz").
+export async function requireSuperAdmin(request: Request): Promise<{ user: SessionUser } | { response: Response }> {
+  const result = await requireSession(request);
+  if ("response" in result) return result;
+  if (!result.user.isSuperAdmin) return { response: Response.json({ error: "Forbidden" }, { status: 403 }) };
   return result;
 }
 

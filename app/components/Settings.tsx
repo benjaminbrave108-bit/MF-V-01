@@ -6,6 +6,8 @@ import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
 import type { BlockedIp, Language, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
 
+type SettingsTab = "general" | "typography" | "users" | "view" | "database";
+
 export function Settings({
   language,
   company,
@@ -16,6 +18,10 @@ export function Settings({
   typography,
   setTypography,
   checkPassword,
+  isSuperAdmin,
+  sharedOwners,
+  dashboardIncludedUserIds,
+  onDashboardIncludedUserIdsChange,
 }: {
   language: Language;
   company: string;
@@ -26,7 +32,12 @@ export function Settings({
   typography: TypographySettings;
   setTypography: (value: TypographySettings) => void;
   checkPassword: (password: string) => Promise<boolean>;
+  isSuperAdmin: boolean;
+  sharedOwners: { id: number; name: string }[];
+  dashboardIncludedUserIds: number[];
+  onDashboardIncludedUserIdsChange: (ids: number[]) => void;
 }) {
+  const [tab, setTab] = useState<SettingsTab>("general");
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
   const [typographyDraft, setTypographyDraft] = useState<TypographySettings>(typography);
   const [typographyApproved, setTypographyApproved] = useState(false);
@@ -183,186 +194,299 @@ export function Settings({
 
   return (
     <div className="settingsPage">
-      <div className="settings">
-      <div className="panel">
-        <Title
-          title={tx(
-            language,
-            "Genel Ayarlar",
-            "General Settings",
-            "Mîhengên Giştî",
-          )}
-          sub={tx(
-            language,
-            "Şirket, logo ve finans tercihleri",
-            "Company, logo and finance preferences",
-            "Vebijarkên pargîdanî, logo û darayî",
-          )}
-        />
-        <div className="logoBox">
-          <div>{logo ? <img src={logo} alt="Logo" /> : <img src={kbGroupLogo} alt="KB Group" />}</div>
-          <span>
-            <strong>
-              {tx(
-                language,
-                "Şirket Logosu",
-                "Company Logo",
-                "Logoya Pargîdaniyê",
-              )}
-            </strong>
-            <small>{tx(language, "PNG, JPG veya WEBP", "PNG, JPG or WEBP", "PNG, JPG an WEBP")}</small>
-            <label className="light">
-              {tx(language, "Logo Seç", "Choose Logo", "Logo Hilbijêre")}
-              <input
-                hidden
-                type="file"
-                accept="image/*"
-                onChange={(e) => uploadLogo(e.target.files?.[0])}
-              />
-            </label>
-            {logo && (
-              <button className="light redText" onClick={() => setLogo("")}>
-                {tx(language, "Kaldır", "Remove", "Rake")}
-              </button>
-            )}
-          </span>
-        </div>
-        <label className="settingLabel">
-          {tx(
-            language,
-            "Program / Şirket Adı",
-            "Program / Company Name",
-            "Navê Bername / Pargîdaniyê",
-          )}
-          <input value={company} onChange={(e) => setCompany(e.target.value)} />
-        </label>
-        <label className="settingLabel">
-          {tx(
-            language,
-            "Ana Para Birimi",
-            "Main Currency",
-            "Yekeya Pere ya Sereke",
-          )}
-          <select>
-            <option>USD</option>
-            <option>IQD</option>
-            <option>TRY</option>
-            <option>EUR</option>
-          </select>
-        </label>
-        <button className="primary" disabled={saving} onClick={() => persistSettings({})}>
-          {saved
-            ? tx(language, "Kaydedildi ✓", "Saved ✓", "Hat Tomarkirin ✓")
-            : tx(language, "Ayarları Kaydet", "Save Settings", "Mîhengan Tomar Bike")}
+      <div className="settingsMainTabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "general"} className={tab === "general" ? "active" : ""} onClick={() => setTab("general")}>
+          {tx(language, "Genel Ayarlar", "General Settings", "Mîhengên Giştî")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "typography"} className={tab === "typography" ? "active" : ""} onClick={() => setTab("typography")}>
+          {tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
+          {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
+        </button>
+        {isSuperAdmin && (
+          <button type="button" role="tab" aria-selected={tab === "view"} className={tab === "view" ? "active" : ""} onClick={() => setTab("view")}>
+            {tx(language, "Görüntüle", "View", "Nîşandan")}
+          </button>
+        )}
+        <button type="button" role="tab" aria-selected={tab === "database"} className={tab === "database" ? "active" : ""} onClick={() => setTab("database")}>
+          {tx(language, "Veri (Database) Ayarları", "Database Settings", "Mîhengên Danegehê")}
         </button>
       </div>
-      <div className="panel appearancePanel">
-        <Title
-          title={tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
-          sub={tx(language, "Projedeki her yazı kademesini ayrı düzenleyin", "Edit every text level separately", "Her asta nivîsê cuda sererast bikin")}
-        />
-        <div className="typeCategoryButtons" role="tablist" aria-label={tx(language, "Yazı kategorileri", "Text categories", "Kategoriyên nivîsê")}>
-          {(Object.keys(typographyDraft) as TypographyKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={activeTypographyKey === key}
-              className={activeTypographyKey === key ? "active" : ""}
-              onClick={() => setActiveTypographyKey(key)}
-            >
-              {tx(language, ...typographyNames[key])}
-            </button>
-          ))}
-        </div>
-        <div className="typeSettingsSelected">
-          <TypographyControl
-            language={language}
-            typeKey={activeTypographyKey}
-            value={typographyDraft[activeTypographyKey]}
-            onChange={(next) => updateTypographyDraft(activeTypographyKey, next)}
-          />
-        </div>
-        <div className="appearanceActions">
-          <button className="light" onClick={() => { setTypographyDraft(defaultTypography); setTypographyApproved(false); }}>
-            ↺ {tx(language, "Varsayılana Dön", "Reset Defaults", "Vegere Destpêkê")}
-          </button>
-          <label className={`appearanceApproval ${typographyApproved ? "approved" : ""}`}>
-            <input type="checkbox" checked={typographyApproved} onChange={(event) => approveTypography(event.target.checked)} />
-            <span>{tx(language, "Yapılan Değişiklikleri Uygula", "Apply Changes", "Guherînên Hatine Kirin Bisepîne")}</span>
-          </label>
-        </div>
-      </div>
-      <div className="panel">
-        <Title
-          title={tx(language, "Engellenen IP Adresleri", "Blocked IP Addresses", "Navnîşanên IP yên Astengkirî")}
-          sub={tx(
-            language,
-            "Üst üste başarısız giriş denemesi sonrası otomatik engellenen adresler",
-            "Addresses auto-blocked after repeated failed login attempts",
-            "Navnîşanên ku piştî hewldanên têketinê yên bêserûber bi xweber hatine astengkirin",
-          )}
-        />
-        {!blockedIpsLoaded ? (
-          <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
-        ) : blockedIps.length === 0 ? (
-          <small>{tx(language, "Engellenen IP adresi yok.", "No blocked IP addresses.", "Navnîşana IP ya astengkirî tune.")}</small>
-        ) : (
-          <div className="blockedIpList">
-            {blockedIps.map((row) => (
-              <div key={row.ip} className="blockedIpRow">
-                <span>
-                  <strong>{row.ip}</strong>
-                  <small>{row.reason || tx(language, "Sebep belirtilmedi", "No reason given", "Sedem nehatiye diyarkirin")}</small>
-                </span>
-                <button type="button" className="light" onClick={() => unblockIp(row.ip)}>
-                  {tx(language, "Engeli Kaldır", "Unblock", "Astengiyê Rake")}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="panel">
-        <Title
-          title={tx(language, "Veri (Database) Ayarları", "Database Settings", "Mîhengên Danegehê")}
-          sub={tx(
-            language,
-            "Mali verileri (kayıt, arşiv, not, rapor) yedekleyin, geri yükleyin veya sıfırlayın",
-            "Back up, restore, or reset financial data (records, archive, notes, reports)",
-            "Daneyên darayî (qeyd, arşîv, nîşe, rapor) tomar bike, vegerîne, an ji nû ve saz bike",
-          )}
-        />
-        <div className="databaseActions">
-          <button type="button" className="light" disabled={dbBusy} onClick={exportDatabase}>
-            ⇩ {tx(language, "Dışa Aktar", "Export", "Derxe")}
-          </button>
-          <label className="light fileButton">
-            ⇧ {tx(language, "İçe Aktar", "Import", "Têxe")}
-            <input
-              hidden
-              type="file"
-              accept=".json,application/json"
-              disabled={dbBusy}
-              onChange={(e) => {
-                importDatabase(e.target.files?.[0]);
-                e.target.value = "";
-              }}
+
+      {tab === "general" && (
+        <div className="settings">
+          <div className="panel">
+            <Title
+              title={tx(
+                language,
+                "Genel Ayarlar",
+                "General Settings",
+                "Mîhengên Giştî",
+              )}
+              sub={tx(
+                language,
+                "Şirket, logo ve finans tercihleri",
+                "Company, logo and finance preferences",
+                "Vebijarkên pargîdanî, logo û darayî",
+              )}
             />
-          </label>
-          <button type="button" className="light redText" disabled={dbBusy} onClick={() => setClearConfirmOpen(true)}>
-            🗑 {tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
-          </button>
+            <div className="logoBox">
+              <div>{logo ? <img src={logo} alt="Logo" /> : <img src={kbGroupLogo} alt="KB Group" />}</div>
+              <span>
+                <strong>
+                  {tx(
+                    language,
+                    "Şirket Logosu",
+                    "Company Logo",
+                    "Logoya Pargîdaniyê",
+                  )}
+                </strong>
+                {isSuperAdmin ? (
+                  <>
+                    <small>{tx(language, "PNG, JPG veya WEBP", "PNG, JPG or WEBP", "PNG, JPG an WEBP")}</small>
+                    <label className="light">
+                      {tx(language, "Logo Seç", "Choose Logo", "Logo Hilbijêre")}
+                      <input
+                        hidden
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => uploadLogo(e.target.files?.[0])}
+                      />
+                    </label>
+                    {logo && (
+                      <button className="light redText" onClick={() => setLogo("")}>
+                        {tx(language, "Kaldır", "Remove", "Rake")}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <small>
+                    {tx(
+                      language,
+                      "Sadece süper admin değiştirebilir.",
+                      "Only a super admin can change this.",
+                      "Tenê super admin dikare vê biguherîne.",
+                    )}
+                  </small>
+                )}
+              </span>
+            </div>
+            <label className="settingLabel">
+              {tx(
+                language,
+                "Program / Şirket Adı",
+                "Program / Company Name",
+                "Navê Bername / Pargîdaniyê",
+              )}
+              <input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                disabled={!isSuperAdmin}
+                title={
+                  isSuperAdmin
+                    ? undefined
+                    : tx(language, "Sadece süper admin değiştirebilir.", "Only a super admin can change this.", "Tenê super admin dikare vê biguherîne.")
+                }
+              />
+            </label>
+            <label className="settingLabel">
+              {tx(
+                language,
+                "Ana Para Birimi",
+                "Main Currency",
+                "Yekeya Pere ya Sereke",
+              )}
+              <select>
+                <option>USD</option>
+                <option>IQD</option>
+                <option>TRY</option>
+                <option>EUR</option>
+              </select>
+            </label>
+            <button className="primary" disabled={saving} onClick={() => persistSettings({})}>
+              {saved
+                ? tx(language, "Kaydedildi ✓", "Saved ✓", "Hat Tomarkirin ✓")
+                : tx(language, "Ayarları Kaydet", "Save Settings", "Mîhengan Tomar Bike")}
+            </button>
+          </div>
         </div>
-        <small className="databaseHint">
-          {tx(
-            language,
-            "İçe aktarma, mevcut tüm kayıt/arşiv/not/rapor verilerinin yerine geçer. Kullanıcı hesapları ve şifreler bu işlemlerden etkilenmez.",
-            "Importing replaces all current record/archive/note/report data. User accounts and passwords are not affected by these operations.",
-            "Têxistin şûna hemû daneyên qeyd/arşîv/nîşe/rapor ên heyî digire. Hesabên bikarhêner û şîfre ji van kiryaran bandor nabin.",
-          )}
-        </small>
-      </div>
+      )}
+
+      {tab === "typography" && (
+        <div className="settings">
+          <div className="panel appearancePanel">
+            <Title
+              title={tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
+              sub={tx(language, "Projedeki her yazı kademesini ayrı düzenleyin", "Edit every text level separately", "Her asta nivîsê cuda sererast bikin")}
+            />
+            <div className="typeCategoryButtons" role="tablist" aria-label={tx(language, "Yazı kategorileri", "Text categories", "Kategoriyên nivîsê")}>
+              {(Object.keys(typographyDraft) as TypographyKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTypographyKey === key}
+                  className={activeTypographyKey === key ? "active" : ""}
+                  onClick={() => setActiveTypographyKey(key)}
+                >
+                  {tx(language, ...typographyNames[key])}
+                </button>
+              ))}
+            </div>
+            <div className="typeSettingsSelected">
+              <TypographyControl
+                language={language}
+                typeKey={activeTypographyKey}
+                value={typographyDraft[activeTypographyKey]}
+                onChange={(next) => updateTypographyDraft(activeTypographyKey, next)}
+              />
+            </div>
+            <div className="appearanceActions">
+              <button className="light" onClick={() => { setTypographyDraft(defaultTypography); setTypographyApproved(false); }}>
+                ↺ {tx(language, "Varsayılana Dön", "Reset Defaults", "Vegere Destpêkê")}
+              </button>
+              <label className={`appearanceApproval ${typographyApproved ? "approved" : ""}`}>
+                <input type="checkbox" checked={typographyApproved} onChange={(event) => approveTypography(event.target.checked)} />
+                <span>{tx(language, "Yapılan Değişiklikleri Uygula", "Apply Changes", "Guherînên Hatine Kirin Bisepîne")}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "users" && (
+        <div className="settings">
+          <div className="panel">
+            <Title
+              title={tx(language, "Engellenen IP Adresleri", "Blocked IP Addresses", "Navnîşanên IP yên Astengkirî")}
+              sub={tx(
+                language,
+                "Üst üste başarısız giriş denemesi sonrası otomatik engellenen adresler",
+                "Addresses auto-blocked after repeated failed login attempts",
+                "Navnîşanên ku piştî hewldanên têketinê yên bêserûber bi xweber hatine astengkirin",
+              )}
+            />
+            {!blockedIpsLoaded ? (
+              <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
+            ) : blockedIps.length === 0 ? (
+              <small>{tx(language, "Engellenen IP adresi yok.", "No blocked IP addresses.", "Navnîşana IP ya astengkirî tune.")}</small>
+            ) : (
+              <div className="blockedIpList">
+                {blockedIps.map((row) => (
+                  <div key={row.ip} className="blockedIpRow">
+                    <span>
+                      <strong>{row.ip}</strong>
+                      <small>{row.reason || tx(language, "Sebep belirtilmedi", "No reason given", "Sedem nehatiye diyarkirin")}</small>
+                    </span>
+                    <button type="button" className="light" onClick={() => unblockIp(row.ip)}>
+                      {tx(language, "Engeli Kaldır", "Unblock", "Astengiyê Rake")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "view" && isSuperAdmin && (
+        <div className="settings">
+          <div className="panel">
+            <Title
+              title={tx(language, "Görüntüle", "View", "Nîşandan")}
+              sub={tx(
+                language,
+                "Ana Sayfa'daki Toplam Gelir/Gider/Net/Bakiye sonuçlarına, işaretlediğiniz kullanıcıların kasa verileri de dahil edilir. İşaretlemezseniz Ana Sayfa yalnızca kendi verilerinizle sınırlı kalır.",
+                "The Ana Sayfa Total Income/Expense/Net/Balance figures also include the kasa data of any users you check below. If you check none, Ana Sayfa stays limited to your own data.",
+                "Encamên Ana Sayfayê yên Dahat/Mesref/Paqij/Bakiye ya Giştî, daneyên qaseyê yên bikarhênerên ku we nîşan kirine jî digire nav xwe. Heke hûn tu kesî nîşan nekin, Ana Sayfa tenê bi daneyên we yên xwe ve tê sînorkirin.",
+              )}
+            />
+            {sharedOwners.length === 0 ? (
+              <small className="viewTabEmptyNote">
+                {tx(
+                  language,
+                  "Henüz sizinle veri paylaşan başka bir kullanıcı yok. Bir kullanıcının burada çıkması için, önce o kullanıcının kendi kasasında Kasalar sayfasında \"Paylaş\" düğmesini açıp \"Süper Admin'in Ana Sayfa'sında göster\" seçeneğini işaretlemesi gerekir — bu onayı vermeden bir kasa burada listelenmez.",
+                  "No other user has shared data with you yet. For a user to appear here, they first need to open \"Paylaş\" on their own kasa in the Kasalar page and check \"Show in Super Admin's Ana Sayfa\" — without that consent, a kasa won't be listed here.",
+                  "Hîn tu bikarhênerê din daneyên xwe bi we re parve nekiriye. Ji bo ku bikarhênerek li vir xuya bibe, divê ew pêşî li ser qaseya xwe ya di rûpela Kasalar de \"Paylaş\" veke û vebijarka \"Nîşandana li Ana Sayfaya Super Admin\" nîşan bike — bêyî vê destûrê, qase li vir nayê rêzkirin.",
+                )}
+              </small>
+            ) : (
+              <div className="userPermissionOptions">
+                {sharedOwners.map((owner) => {
+                  const checked = dashboardIncludedUserIds.includes(owner.id);
+                  return (
+                    <label key={owner.id} className="userPermissionOption">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...dashboardIncludedUserIds, owner.id]
+                            : dashboardIncludedUserIds.filter((id) => id !== owner.id);
+                          onDashboardIncludedUserIdsChange(next);
+                        }}
+                      />
+                      {tx(
+                        language,
+                        `${owner.name}'nin sonuçlarını da göster`,
+                        `Also show ${owner.name}'s results`,
+                        `Encamên ${owner.name} jî nîşan bide`,
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "database" && (
+        <div className="settings">
+          <div className="panel">
+            <Title
+              title={tx(language, "Veri (Database) Ayarları", "Database Settings", "Mîhengên Danegehê")}
+              sub={tx(
+                language,
+                "Mali verileri (kayıt, arşiv, not, rapor) yedekleyin, geri yükleyin veya sıfırlayın",
+                "Back up, restore, or reset financial data (records, archive, notes, reports)",
+                "Daneyên darayî (qeyd, arşîv, nîşe, rapor) tomar bike, vegerîne, an ji nû ve saz bike",
+              )}
+            />
+            <div className="databaseActions">
+              <button type="button" className="light" disabled={dbBusy} onClick={exportDatabase}>
+                ⇩ {tx(language, "Dışa Aktar", "Export", "Derxe")}
+              </button>
+              <label className="light fileButton">
+                ⇧ {tx(language, "İçe Aktar", "Import", "Têxe")}
+                <input
+                  hidden
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={dbBusy}
+                  onChange={(e) => {
+                    importDatabase(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <button type="button" className="light redText" disabled={dbBusy} onClick={() => setClearConfirmOpen(true)}>
+                🗑 {tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
+              </button>
+            </div>
+            <small className="databaseHint">
+              {tx(
+                language,
+                "İçe aktarma, mevcut tüm kayıt/arşiv/not/rapor verilerinin yerine geçer. Kullanıcı hesapları ve şifreler bu işlemlerden etkilenmez.",
+                "Importing replaces all current record/archive/note/report data. User accounts and passwords are not affected by these operations.",
+                "Têxistin şûna hemû daneyên qeyd/arşîv/nîşe/rapor ên heyî digire. Hesabên bikarhêner û şîfre ji van kiryaran bandor nabin.",
+              )}
+            </small>
+          </div>
+        </div>
+      )}
+
       {clearConfirmOpen && (
         <DeleteConfirmModal
           language={language}
@@ -389,7 +513,6 @@ export function Settings({
         />
       )}
     </div>
-    </div>
   );
 }
 
@@ -404,3 +527,4 @@ function TypographyControl({ language, typeKey, value, onChange }: { language: L
     <div className="colorSwatches">{colorSwatches.map((color) => <button key={color} aria-label={color} title={color} className={value.color.toLowerCase() === color ? "active" : ""} style={{ background: color }} onClick={() => onChange({ ...value, color })} />)}</div>
   </section>;
 }
+

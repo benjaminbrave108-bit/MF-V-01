@@ -19,9 +19,13 @@ export type RecordItem = {
   currency: string;
   project: string;
   tags: string[];
-  monthlyExpense: boolean;
   cashAccount: string;
   listName: string;
+  // The kasa this record is actually linked to (FK) — null for legacy/orphan
+  // rows. Used client-side to scope a record to a "workspace" (own vs a
+  // shared user's) by matching against CashAccountSummary.id; cashAccount
+  // above is only the display-text name.
+  cashAccountId?: number | null;
   // Sent back with edits so the server can detect a concurrent change
   // (see saveRecord's 409 handling) — meaningless on a not-yet-saved record.
   updatedAt?: string;
@@ -46,21 +50,80 @@ export type FinanceNote = {
   updatedAt: string;
 };
 export type Language = "tr" | "en" | "ku";
-export type Profile = { name: string; username: string; role: string; avatar: string; isAdmin: boolean; permissions: Page[] };
+export type Profile = {
+  name: string;
+  username: string;
+  role: string;
+  avatar: string;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  permissions: Page[];
+  // Ayarlar > Görüntüle (super admin only) — other users' ids whose kasas
+  // are merged into this super admin's own Ana Sayfa totals.
+  dashboardIncludedUserIds: number[];
+};
 export type UserAccount = {
   id: number;
   name: string;
   username: string;
   roleLabel: string;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   permissions: Page[];
   locked: boolean;
   lockedAt: string | null;
   lockReason: string;
 };
 export type BlockedIp = { ip: string; reason: string; createdAt: string };
+// Kasa Erişimi (Ayarlar) taslağının veri modeli — bkz. app/api/cash-accounts.
+export type CashAccountSummary = {
+  id: number;
+  name: string;
+  ownerUserId: number | null;
+  ownerName?: string | null;
+  createdAt?: string;
+  isOwner: boolean;
+  sharedWithUserIds: number[];
+  // Owner-controlled opt-in (Kasalar > Paylaş or Ayarlar > Paylaşım): lets a
+  // super admin fold this kasa into their own Ana Sayfa via Görüntüle.
+  dashboardShareEnabled: boolean;
+};
+// Kasa Aktarımı: bkz. app/api/cash-transfers. Oluşturulduğu anda kaynak
+// kasadan tutar hemen düşer ve hedef kasada "gelir" kaydı hemen görünür
+// (fromRecordId/toRecordId) — status yalnızca hedef kasadaki kaydın "Onay
+// Bekliyor" (soluk renk) mü yoksa onaylanmış mı göründüğünü belirler. Hedef
+// kasaya erişimi olan taraf onaylayınca (POST .../:id/confirm) status
+// "confirmed" olur; ödeme o an değil, oluşturulduğu anda gerçekleşmiştir.
+export type CashTransferStatus = "pending" | "confirmed" | "cancelled";
+export type CashTransfer = {
+  id: number;
+  fromCashAccountId: number;
+  fromCashAccountName: string;
+  toCashAccountId: number;
+  toCashAccountName: string;
+  amount: number;
+  currency: string;
+  date: string;
+  detail: string;
+  note: string;
+  recipientPerson: string;
+  recipientUserId: number | null;
+  recipientUserName: string | null;
+  createdByUserId: number;
+  createdByUserName: string;
+  status: CashTransferStatus;
+  confirmedByUserId: number | null;
+  confirmedByUserName: string | null;
+  confirmedAt: string | null;
+  fromRecordId: number | null;
+  toRecordId: number | null;
+  createdAt: string;
+};
 export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "archive"];
-export const adminOnlyPages: Page[] = ["users", "settings"];
+// "users" is intentionally not here — every signed-in user may open
+// Kullanıcılar to view/edit their own account; Users.tsx itself restricts
+// non-admins to just their own card and a name/password-only edit form.
+export const adminOnlyPages: Page[] = ["settings"];
 export type ReportLine = { date: string; title: string; detail: string; note: string; amount: number };
 export type PreparedReport = {
   id: string;

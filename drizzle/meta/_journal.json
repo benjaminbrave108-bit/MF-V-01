@@ -50,6 +50,41 @@
       "when": 1787003230953,
       "tag": "0006_fearless_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788776531674,
+      "tag": "0007_minor_living_tribunal",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788784766086,
+      "tag": "0008_silly_mephistopheles",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788946451099,
+      "tag": "0009_loose_mongoose",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788950007294,
+      "tag": "0010_icy_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788953688098,
+      "tag": "0011_serious_amphibian",
+      "breakpoints": true
     }
   ]
 }

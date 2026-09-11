@@ -1,11 +1,89 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
-import type { FinanceNote, Kind, Language, NoteRelation, NoteStatus, RecordItem } from "../lib/types";
+import type { CashAccountSummary, CashTransfer, FinanceNote, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
+
+function ShareKasaModal({
+  language,
+  account,
+  users,
+  onToggle,
+  busyKey,
+  onToggleDashboardShare,
+  dashboardShareBusy,
+  onClose,
+}: {
+  language: Language;
+  account: CashAccountSummary;
+  users: UserAccount[];
+  onToggle: (userId: number, grant: boolean) => void;
+  busyKey: string | null;
+  onToggleDashboardShare: (enabled: boolean) => void;
+  dashboardShareBusy: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>{tx(language, "Kasayı Paylaş", "Share Kasa", "Qaseyê Parve Bike")}</h2>
+            <small>{account.name}</small>
+          </div>
+          <button type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="userPermissionOptions">
+          {users.map((u) => {
+            const key = `${account.id}-${u.id}`;
+            const shared = account.sharedWithUserIds.includes(u.id);
+            const isOwner = account.ownerUserId === u.id;
+            return (
+              <label key={u.id} className="userPermissionOption">
+                <input
+                  type="checkbox"
+                  checked={shared || isOwner}
+                  disabled={isOwner || busyKey === key}
+                  onChange={(e) => onToggle(u.id, e.target.checked)}
+                />
+                {u.name} {isOwner ? `(${tx(language, "sahibi", "owner", "xwedî")})` : ""}
+              </label>
+            );
+          })}
+        </div>
+        <label className="wide check dashboardShareOption">
+          <input
+            type="checkbox"
+            checked={account.dashboardShareEnabled}
+            disabled={dashboardShareBusy}
+            onChange={(e) => onToggleDashboardShare(e.target.checked)}
+          />
+          <span>
+            <b>{tx(language, "Süper Admin'in Ana Sayfa'sında göster", "Show in Super Admin's Ana Sayfa", "Di Ana Sayfaya Super Admin de nîşan bide")}</b>
+            <small>
+              {tx(
+                language,
+                "İşaretlerseniz, süper admin isterse (Ayarlar > Görüntüle) bu kasanın sonuçlarını kendi Ana Sayfa toplamlarına dahil edebilir.",
+                "If checked, a super admin can choose (Ayarlar > Görüntüle) to fold this kasa's results into their own Ana Sayfa totals.",
+                "Heke hatibe nîşankirin, super admin dikare (Ayarlar > Nîşandan) encamên vê qaseyê têxe nav giştiyên Ana Sayfaya xwe.",
+              )}
+            </small>
+          </span>
+        </label>
+        <div className="modalActions">
+          <button type="button" onClick={onClose}>
+            {tx(language, "Kapat", "Close", "Bigire")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SuggestInput({
   value,
@@ -72,6 +150,14 @@ export function Records({
   onDelete,
   onImport,
   checkPassword,
+  cashAccounts,
+  users,
+  onCashAccountsChange,
+  search,
+  setSearch,
+  cashTransfers,
+  onTransfersChanged,
+  readOnly,
 }: {
   language: Language;
   kind: Kind;
@@ -82,13 +168,117 @@ export function Records({
   onDelete: (x: RecordItem) => void;
   onImport: (rows: Omit<RecordItem, "id">[]) => void;
   checkPassword: (password: string) => Promise<boolean>;
+  cashAccounts: CashAccountSummary[];
+  users: UserAccount[];
+  onCashAccountsChange: (updater: CashAccountSummary[] | ((current: CashAccountSummary[]) => CashAccountSummary[])) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  cashTransfers: CashTransfer[];
+  onTransfersChanged: () => void;
+  readOnly: boolean;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
-  const [source, setSource] = useState("Tümü"),
-    [search, setSearch] = useState("");
+  const [shareTarget, setShareTarget] = useState<CashAccountSummary | null>(null);
+  const [shareBusyKey, setShareBusyKey] = useState<string | null>(null);
+  const [dashboardShareBusy, setDashboardShareBusy] = useState(false);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  async function approveTransfer(transferId: number) {
+    setApprovingId(transferId);
+    try {
+      const response = await fetch(`/api/cash-transfers/${transferId}/confirm`, { method: "POST" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        alert(body.error || tx(language, "Aktarım onaylanamadı.", "The transfer could not be confirmed.", "Veguhastin nehat erêkirin."));
+        return;
+      }
+      onTransfersChanged();
+    } catch {
+      alert(tx(language, "Aktarım onaylanamadı.", "The transfer could not be confirmed.", "Veguhastin nehat erêkirin."));
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  async function toggleShare(userId: number, grant: boolean) {
+    if (!shareTarget) return;
+    const cashAccountId = shareTarget.id;
+    const key = `${cashAccountId}-${userId}`;
+    setShareBusyKey(key);
+    try {
+      const response = grant
+        ? await fetch(`/api/cash-accounts/${cashAccountId}/access`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId }),
+          })
+        : await fetch(`/api/cash-accounts/${cashAccountId}/access?userId=${userId}`, { method: "DELETE" });
+      if (!response.ok) {
+        alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+        return;
+      }
+      // Built from `shareTarget` itself (not the `cashAccounts` prop, which
+      // may be scoped to just the active workspace) so this patches the
+      // right row in the full list regardless of what's currently filtered.
+      const updatedTarget: CashAccountSummary = {
+        ...shareTarget,
+        sharedWithUserIds: grant
+          ? [...shareTarget.sharedWithUserIds, userId]
+          : shareTarget.sharedWithUserIds.filter((id) => id !== userId),
+      };
+      onCashAccountsChange((current) => current.map((a) => (a.id === cashAccountId ? updatedTarget : a)));
+      setShareTarget(updatedTarget);
+    } catch {
+      alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+    } finally {
+      setShareBusyKey(null);
+    }
+  }
+
+  async function toggleDashboardShare(enabled: boolean) {
+    if (!shareTarget) return;
+    const cashAccountId = shareTarget.id;
+    setDashboardShareBusy(true);
+    try {
+      const response = await fetch(`/api/cash-accounts/${cashAccountId}/dashboard-share`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) {
+        alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+        return;
+      }
+      const updatedTarget: CashAccountSummary = { ...shareTarget, dashboardShareEnabled: enabled };
+      onCashAccountsChange((current) => current.map((a) => (a.id === cashAccountId ? updatedTarget : a)));
+      setShareTarget(updatedTarget);
+    } catch {
+      alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+    } finally {
+      setDashboardShareBusy(false);
+    }
+  }
+  const [source, setSource] = useState("Tümü");
   const [showListColumn, setShowListColumn] = useState(false);
   const [activeList, setActiveList] = useState("");
   const [showAllLists, setShowAllLists] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [filterSource, setFilterSource] = useState("");
+  const [filterPerson, setFilterPerson] = useState("");
+  const [filterProject, setFilterProject] = useState("");
+  const [filterTag, setFilterTag] = useState("");
+  const activeFilterCount = [filterFrom, filterTo, filterSource, filterPerson, filterProject, filterTag].filter(Boolean).length;
+  const clearFilters = () => {
+    setFilterFrom("");
+    setFilterTo("");
+    setFilterSource("");
+    setFilterPerson("");
+    setFilterProject("");
+    setFilterTag("");
+  };
+  const filterSourceOptions = [...new Set(records.map((x) => x.source).filter(Boolean))];
   const openList = (name: string) => {
     setSource("Tümü");
     setSearch(name);
@@ -143,6 +333,51 @@ export function Records({
   );
   const visibleGroups = groups.slice(0, 4);
   const overflowGroups = groups.slice(4);
+  // Shared between the always-visible group cards and the "Diğer
+  // Kasalar/Başlıklar" overflow selector below — both need the same
+  // hover tooltip (Toplam Kasa / Gider / Sonuç) so a kasa's expense total
+  // is visible whether or not it made the top-4 cut.
+  const renderGroupTooltip = (g: (typeof groups)[number], matchingAccount: CashAccountSummary | undefined) => (
+    <div className="groupCardTooltip">
+      {g.kind === "cash" ? (
+        <>
+          <div>
+            <small>{tx(language, "Kasa Oluşturucu", "Kasa Owner", "Vekera Qaseyê")}</small>
+            <strong>{matchingAccount?.ownerName || tx(language, "Belirtilmedi", "Unassigned", "Nehatiye diyarkirin")}</strong>
+          </div>
+          <div>
+            <small>{tx(language, "Toplam Kasa", "Total In", "Giştî")}</small>
+            <strong>{moneyBreakdown(g.totalInByCurrency)}</strong>
+          </div>
+          <div>
+            <small>{tx(language, "Gider", "Expense", "Mesref")}</small>
+            <strong className="negative">{moneyBreakdown(g.totalOutByCurrency)}</strong>
+          </div>
+          <div>
+            <small>{tx(language, "Sonuç", "Result", "Encam")}</small>
+            <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <small>
+              {g.kind === "income"
+                ? tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî")
+                : tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî")}
+            </small>
+            <strong className={g.kind === "expense" ? "negative" : ""}>
+              {moneyBreakdown(g.totalByCurrency)}
+            </strong>
+          </div>
+          <div>
+            <small>{tx(language, "Kayıt Sayısı", "Record Count", "Hejmara Qeydan")}</small>
+            <strong>{g.count}</strong>
+          </div>
+        </>
+      )}
+    </div>
+  );
   // Overall pill total, computed per currency directly from the record
   // arrays (not by summing groups' already-blended totals) so mixed
   // currencies show as separate amounts instead of one wrong number.
@@ -205,6 +440,12 @@ export function Records({
     (x) =>
       (source === "Tümü" || x.source === source) &&
       (!showAllLists || x.listName) &&
+      (!filterFrom || x.date >= filterFrom) &&
+      (!filterTo || x.date <= filterTo) &&
+      (!filterSource || x.source === filterSource) &&
+      (!filterPerson || x.person.toLowerCase().includes(filterPerson.toLowerCase())) &&
+      (!filterProject || x.project.toLowerCase().includes(filterProject.toLowerCase())) &&
+      (!filterTag || x.tags.some((t) => t.toLowerCase().includes(filterTag.toLowerCase()))) &&
       JSON.stringify(x).toLowerCase().includes(search.toLowerCase()),
   );
   const latestRows = [...records]
@@ -339,7 +580,6 @@ export function Records({
               .split(",")
               .map((x) => x.trim())
               .filter(Boolean),
-            monthlyExpense: false,
             cashAccount: kind === "cash" ? "" : resolvedSource,
             listName: "",
           };
@@ -414,26 +654,40 @@ export function Records({
           }
         />
         <div>
-          <label className="light fileButton">
-            ⇧ {tx(language, "Excel Ekle", "Import Excel", "Excel Têxe")}
-            <input
-              hidden
-              type="file"
-              accept=".xlsx"
-              onChange={(e) => {
-                importExcel(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-          </label>
+          {!readOnly && (
+            <label className="light fileButton">
+              ⇧ {tx(language, "Excel Ekle", "Import Excel", "Excel Têxe")}
+              <input
+                hidden
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => {
+                  importExcel(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
           <button className="light" onClick={exportExcel}>
             ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
           </button>
-          <button className="primary" onClick={onAdd}>
-            ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")}
-          </button>
+          {!readOnly && (
+            <button className="primary" onClick={onAdd}>
+              ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")}
+            </button>
+          )}
         </div>
       </div>
+      {readOnly && (
+        <div className="readOnlyBanner">
+          👁 {tx(
+            language,
+            "Bu, başka bir kullanıcının paylaştığı verilerdir — yalnızca görüntüleyebilirsiniz.",
+            "This is another user's shared data — you can only view it.",
+            "Ev daneyên bikarhênerek din in ku hatine parvekirin — hûn tenê dikarin bibînin.",
+          )}
+        </div>
+      )}
       <div className="groups">
         <button
           className={source === "Tümü" && !showAllLists ? "selected" : ""}
@@ -456,7 +710,9 @@ export function Records({
             {moneyBreakdown(overallByCurrency)}
           </strong>
         </button>
-        {visibleGroups.map((g) => (
+        {visibleGroups.map((g) => {
+          const matchingAccount = g.kind === "cash" ? cashAccounts.find((a) => a.name === g.name) : undefined;
+          return (
           <div className="groupCard" key={g.name}>
             <button
               className={source === g.name && !showAllLists ? "selected" : ""}
@@ -477,7 +733,7 @@ export function Records({
               </small>
               <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
             </button>
-            {source === g.name && (
+            {!readOnly && source === g.name && (
               <button
                 className="cashEditIcon"
                 title={tx(language, "Kaydı Düzenle", "Edit Record", "Qeydê Biguherîne")}
@@ -487,43 +743,28 @@ export function Records({
                 🗂
               </button>
             )}
-            <div className="groupCardTooltip">
-              {g.kind === "cash" ? (
-                <>
-                  <div>
-                    <small>{tx(language, "Toplam Kasa", "Total In", "Giştî")}</small>
-                    <strong>{moneyBreakdown(g.totalInByCurrency)}</strong>
-                  </div>
-                  <div>
-                    <small>{tx(language, "Gider", "Expense", "Mesref")}</small>
-                    <strong className="negative">{moneyBreakdown(g.totalOutByCurrency)}</strong>
-                  </div>
-                  <div>
-                    <small>{tx(language, "Sonuç", "Result", "Encam")}</small>
-                    <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <small>
-                      {g.kind === "income"
-                        ? tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî")
-                        : tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî")}
-                    </small>
-                    <strong className={g.kind === "expense" ? "negative" : ""}>
-                      {moneyBreakdown(g.totalByCurrency)}
-                    </strong>
-                  </div>
-                  <div>
-                    <small>{tx(language, "Kayıt Sayısı", "Record Count", "Hejmara Qeydan")}</small>
-                    <strong>{g.count}</strong>
-                  </div>
-                </>
+            {source === g.name &&
+              kind === "cash" &&
+              matchingAccount && (
+                // Shown even while readOnly (browsing a shared owner's workspace):
+                // matchingAccount only ever exists here because the server already
+                // scoped `cashAccounts` to kasas this user can see (owned or shared)
+                // — anyone with visibility into a kasa may manage its sharing, not
+                // just its owner (see canManageCashAccountAccess). readOnly still
+                // blocks editing records themselves, just not who can see them.
+                <button
+                  className="cashEditIcon"
+                  title={tx(language, "Kasayı Paylaş", "Share Kasa", "Qaseyê Parve Bike")}
+                  aria-label={tx(language, "Kasayı Paylaş", "Share Kasa", "Qaseyê Parve Bike")}
+                  onClick={() => setShareTarget(matchingAccount)}
+                >
+                  🔗
+                </button>
               )}
-            </div>
+            {renderGroupTooltip(g, matchingAccount)}
           </div>
-        ))}
+          );
+        })}
         {overflowGroups.length > 0 && (
           <div className="groupCard groupCardOverflow">
             <select
@@ -547,6 +788,12 @@ export function Records({
                 </option>
               ))}
             </select>
+            {(() => {
+              const selected = overflowGroups.find((g) => g.name === source);
+              if (!selected) return null;
+              const matchingAccount = selected.kind === "cash" ? cashAccounts.find((a) => a.name === selected.name) : undefined;
+              return renderGroupTooltip(selected, matchingAccount);
+            })()}
           </div>
         )}
       </div>
@@ -587,7 +834,7 @@ export function Records({
                 </small>
                 <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
               </button>
-              {activeList === g.name && (
+              {!readOnly && activeList === g.name && (
                 <button
                   className="cashEditIcon"
                   title={tx(language, "Kaydı Düzenle", "Edit Record", "Qeydê Biguherîne")}
@@ -646,23 +893,71 @@ export function Records({
             ? tx(language, "Detay / Not Göster", "Show Detail / Note", "Hûragahî / Nîşe Nîşan Bide")
             : tx(language, "Liste Kaydı Göster", "Show List Record", "Qeyda Lîsteyê Nîşan Bide")}
         </button>
-        <input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setActiveList("");
-          }}
-          placeholder={tx(
-            language,
-            "Kayıtlarda ara…",
-            "Search records…",
-            "Di qeydan de bigere…",
-          )}
-        />
+        {kind === "cash" && (
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setActiveList("");
+            }}
+            placeholder={tx(
+              language,
+              "Kayıtlarda ara…",
+              "Search records…",
+              "Di qeydan de bigere…",
+            )}
+          />
+        )}
+        <button
+          type="button"
+          className={`light compact${activeFilterCount ? " filterActive" : ""}`}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          ▤ {tx(language, "Filtrele", "Filter", "Parzûn")}
+          {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
         <small>
           {rows.length} {recordWord}
         </small>
       </div>
+      {filtersOpen && (
+        <div className="filterPanel">
+          <label>
+            {tx(language, "Başlangıç Tarihi", "From Date", "Ji Tarîxê")}
+            <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Bitiş Tarihi", "To Date", "Heta Tarîxê")}
+            <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Ana Başlık", "Main Category", "Sernavê Sereke")}
+            <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+              <option value="">{tx(language, "Tümü", "All", "Hemû")}</option>
+              {filterSourceOptions.map((name) => (
+                <option key={name} value={name}>
+                  {localizeData(name, language)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {tx(language, "Kişi", "Person", "Kes")}
+            <input value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Proje / Birim", "Project / Unit", "Proje / Yekîne")}
+            <input value={filterProject} onChange={(e) => setFilterProject(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Etiket", "Tag", "Etîket")}
+            <input value={filterTag} onChange={(e) => setFilterTag(e.target.value)} />
+          </label>
+          <button type="button" className="light" onClick={clearFilters} disabled={!activeFilterCount}>
+            {tx(language, "Filtreleri Temizle", "Clear Filters", "Parzûnan Paqij Bike")}
+          </button>
+        </div>
+      )}
       <div className={kind === "cash" ? "" : "recordsGrid"}>
         <div className="recordsTable">
           <table>
@@ -706,11 +1001,20 @@ export function Records({
             </tr>
           </thead>
           <tbody>
-            {rows.map((x) => (
-              <tr key={x.id}>
+            {rows.map((x) => {
+              const pendingTransfer =
+                kind !== "cash" ? cashTransfers.find((t) => t.toRecordId === x.id && t.status === "pending") : undefined;
+              const canApprove = pendingTransfer && cashAccounts.some((a) => a.id === pendingTransfer.toCashAccountId);
+              return (
+              <tr key={x.id} className={pendingTransfer ? "pendingTransferRow" : ""}>
                 <td>{date(x.date, language)}</td>
                 <td>
                   <b className="cellTitle" title={localizeData(x.source, language)}>{localizeData(x.source, language)}</b>
+                  {pendingTransfer && (
+                    <small className="subNote pendingBadge">
+                      ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}
+                    </small>
+                  )}
                 </td>
                 <td>
                   {showListColumn ? (
@@ -751,23 +1055,39 @@ export function Records({
                   </div>
                 </td>
                 <td>
-                  <button
-                    className="icon edit"
-                    title={tx(language, "Düzenle", "Edit", "Biguherîne")}
-                    onClick={() => onEdit(x)}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className="icon delete"
-                    title={tx(language, "Sil", "Delete", "Jêbirin")}
-                    onClick={() => setDeleteTarget(x)}
-                  >
-                    🗑
-                  </button>
+                  {!readOnly && canApprove && (
+                    <button
+                      type="button"
+                      className="icon approve"
+                      title={tx(language, "Aktarımı Onayla", "Approve Transfer", "Veguhastinê Erê Bike")}
+                      disabled={approvingId === pendingTransfer!.id}
+                      onClick={() => approveTransfer(pendingTransfer!.id)}
+                    >
+                      ✓
+                    </button>
+                  )}
+                  {!readOnly && (
+                    <>
+                      <button
+                        className="icon edit"
+                        title={tx(language, "Düzenle", "Edit", "Biguherîne")}
+                        onClick={() => onEdit(x)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        className="icon delete"
+                        title={tx(language, "Sil", "Delete", "Jêbirin")}
+                        onClick={() => setDeleteTarget(x)}
+                      >
+                        🗑
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           </table>
         </div>
@@ -813,6 +1133,18 @@ export function Records({
           }}
         />
       )}
+      {shareTarget && (
+        <ShareKasaModal
+          language={language}
+          account={shareTarget}
+          users={users}
+          busyKey={shareBusyKey}
+          onToggle={toggleShare}
+          onToggleDashboardShare={toggleDashboardShare}
+          dashboardShareBusy={dashboardShareBusy}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -825,6 +1157,9 @@ export function RecordModal({
   onCreateNote,
   onClose,
   onSave,
+  cashAccounts,
+  users,
+  onTransfersChanged,
 }: {
   language: Language;
   kind: Kind;
@@ -833,6 +1168,9 @@ export function RecordModal({
   onCreateNote: (input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt">) => void;
   onClose: () => void;
   onSave: (x: Omit<RecordItem, "id">, id?: number) => void;
+  cashAccounts: CashAccountSummary[];
+  users: UserAccount[];
+  onTransfersChanged: () => void;
 }) {
   const defaultNoteRelation: NoteRelation =
     kind === "cash" ? "cash" : kind === "income" ? "income" : "expense";
@@ -873,7 +1211,6 @@ export function RecordModal({
         currency: "USD",
         project: "",
         tags: [],
-        monthlyExpense: false,
         cashAccount: "",
         listName: "",
       };
@@ -1044,35 +1381,6 @@ export function RecordModal({
                 </option>
                 {[...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))].map((name) => <option key={name} value={name}>{localizeData(name, language)}</option>)}
               </select>
-            </label>
-          )}
-          {kind === "expense" && (
-            <label className="wide check">
-              <input
-                type="checkbox"
-                checked={form.monthlyExpense}
-                onChange={(e) =>
-                  setForm({ ...form, monthlyExpense: e.target.checked })
-                }
-              />
-              <span>
-                <b>
-                  {tx(
-                    language,
-                    "Aylık giderlere ekle",
-                    "Add to monthly expenses",
-                    "Li mesrefên mehane zêde bike",
-                  )}
-                </b>
-                <small>
-                  {tx(
-                    language,
-                    "Bu kayıt Arşiv'de aylık gider olarak işaretlenir.",
-                    "This record is flagged as a monthly expense in Archive.",
-                    "Ev qeyd di Arşîvê de wek mesrefeke mehane tê nîşankirin.",
-                  )}
-                </small>
-              </span>
             </label>
           )}
           <label>
@@ -1253,6 +1561,15 @@ export function RecordModal({
             </div>
           </div>
         )}
+        {kind === "cash" && initial && (
+          <KasaTransferSection
+            language={language}
+            kasa={initial}
+            cashAccounts={cashAccounts}
+            users={users}
+            onTransfersChanged={onTransfersChanged}
+          />
+        )}
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Vazgeç", "Cancel", "Betal")}
@@ -1284,6 +1601,297 @@ export function RecordModal({
             commitSave();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// "Kasa Aktarımı": moves money from `kasa` to another kasa (existing or
+// brand new), pending until the recipient side confirms receipt — see
+// app/api/cash-transfers. Nothing here touches app/page.tsx's `records`
+// state directly; a confirm calls `onTransfersChanged` so the parent
+// refetches and every kasa's balance reflects the new ledger rows.
+function KasaTransferSection({
+  language,
+  kasa,
+  cashAccounts,
+  users,
+  onTransfersChanged,
+}: {
+  language: Language;
+  kasa: RecordItem;
+  cashAccounts: CashAccountSummary[];
+  users: UserAccount[];
+  onTransfersChanged: () => void;
+}) {
+  const thisAccount = cashAccounts.find((a) => a.name === kasa.source);
+  const [open, setOpen] = useState(false);
+  const [transfers, setTransfers] = useState<CashTransfer[] | null>(null);
+  const [allAccounts, setAllAccounts] = useState<{ id: number; name: string }[] | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [targetId, setTargetId] = useState("");
+  const [newKasaName, setNewKasaName] = useState("");
+  const [recipientPerson, setRecipientPerson] = useState("");
+  const [recipientUserId, setRecipientUserId] = useState("");
+  const [tDate, setTDate] = useState(new Date().toISOString().slice(0, 10));
+  const [tAmount, setTAmount] = useState(0);
+  const [tCurrency, setTCurrency] = useState("USD");
+  const [tDetail, setTDetail] = useState("");
+  const [tNote, setTNote] = useState("");
+  const [sentConfirmed, setSentConfirmed] = useState(false);
+
+  async function loadTransfers() {
+    try {
+      const response = await fetch("/api/cash-transfers");
+      const data = await response.json().catch(() => ({}));
+      setTransfers(response.ok ? (data.cashTransfers ?? []) : []);
+    } catch {
+      setTransfers([]);
+    }
+  }
+
+  async function loadAllAccounts() {
+    try {
+      const response = await fetch("/api/cash-accounts/all");
+      const data = await response.json().catch(() => ({}));
+      setAllAccounts(response.ok ? (data.cashAccounts ?? []) : []);
+    } catch {
+      setAllAccounts([]);
+    }
+  }
+
+  useEffect(() => {
+    loadTransfers();
+    loadAllAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kasa.source]);
+
+  const outgoing = (transfers ?? []).filter((t) => t.fromCashAccountId === thisAccount?.id);
+  const incoming = (transfers ?? []).filter((t) => t.toCashAccountId === thisAccount?.id);
+  // Every kasa in the system, not just the ones this user can already see —
+  // sending money to a kasa shouldn't require having view access to it.
+  const otherAccounts = (allAccounts ?? cashAccounts).filter((a) => a.id !== thisAccount?.id);
+  const valid = Boolean(thisAccount) && tAmount > 0 && Boolean(targetId || newKasaName.trim()) && sentConfirmed;
+
+  async function submitTransfer() {
+    if (!thisAccount || !valid) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/cash-transfers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromCashAccountId: thisAccount.id,
+          ...(targetId ? { toCashAccountId: Number(targetId) } : { toCashAccountName: newKasaName.trim() }),
+          amount: tAmount,
+          currency: tCurrency,
+          date: tDate,
+          detail: tDetail,
+          note: tNote,
+          recipientPerson,
+          ...(recipientUserId ? { recipientUserId: Number(recipientUserId) } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        alert(body.error || tx(language, "Aktarım oluşturulamadı.", "The transfer could not be created.", "Veguhastin nehat afirandin."));
+        return;
+      }
+      setTargetId("");
+      setNewKasaName("");
+      setRecipientPerson("");
+      setRecipientUserId("");
+      setTAmount(0);
+      setTDetail("");
+      setTNote("");
+      setSentConfirmed(false);
+      await loadTransfers();
+      // A brand-new target kasa gets a zero-balance placeholder record on
+      // creation (see POST /api/cash-transfers) — refresh so it shows up
+      // immediately instead of only after the next full reload.
+      onTransfersChanged();
+    } catch {
+      alert(tx(language, "Aktarım oluşturulamadı.", "The transfer could not be created.", "Veguhastin nehat afirandin."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmTransfer(id: number) {
+    setBusyId(id);
+    try {
+      const response = await fetch(`/api/cash-transfers/${id}/confirm`, { method: "POST" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        alert(body.error || tx(language, "Aktarım onaylanamadı.", "The transfer could not be confirmed.", "Veguhastin nehat erêkirin."));
+        return;
+      }
+      await loadTransfers();
+      onTransfersChanged();
+    } catch {
+      alert(tx(language, "Aktarım onaylanamadı.", "The transfer could not be confirmed.", "Veguhastin nehat erêkirin."));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const statusLabel = (s: CashTransfer["status"]) =>
+    s === "pending"
+      ? tx(language, "Bekliyor", "Pending", "Li benda")
+      : s === "confirmed"
+        ? tx(language, "Onaylandı", "Confirmed", "Hat erêkirin")
+        : tx(language, "İptal", "Cancelled", "Betal");
+
+  return (
+    <div className="cashTransferSection">
+      <div className="cashTransferHead">
+        <h3>{tx(language, "Kasa Aktarımı", "Kasa Transfer", "Veguhastina Qaseyê")}</h3>
+        <button type="button" className="light" onClick={() => setOpen((o) => !o)}>
+          {open
+            ? tx(language, "Kapat", "Close", "Bigire")
+            : tx(language, "Kasa Aktar", "Transfer Kasa", "Qaseyê Veguhezîne")}
+        </button>
+      </div>
+
+      {open && thisAccount && (
+        <div className="formGrid cashTransferForm">
+          <label>
+            {tx(language, "Aktarılacak Kasa", "Target Kasa", "Qaseya Armanc")}
+            <select
+              value={targetId}
+              onChange={(e) => {
+                setTargetId(e.target.value);
+                if (e.target.value) setNewKasaName("");
+              }}
+            >
+              <option value="">
+                {tx(language, "— Seçin —", "— Select —", "— Hilbijêre —")}
+              </option>
+              {otherAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {tx(language, "Yeni Kasa Adı", "New Kasa Name", "Navê Qaseya Nû")}
+            <input
+              value={newKasaName}
+              disabled={Boolean(targetId)}
+              onChange={(e) => setNewKasaName(e.target.value)}
+              placeholder={tx(
+                language,
+                "Listede yoksa buraya yazın",
+                "Type here if not in the list above",
+                "Heke ne di lîsteyê de be li vir binivîse",
+              )}
+            />
+          </label>
+          <label>
+            {tx(language, "Aktarılacak Kişi", "Recipient", "Kesê Wergir")}
+            <input value={recipientPerson} onChange={(e) => setRecipientPerson(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Alıcı Kullanıcı", "Recipient User", "Bikarhênerê Wergir")}
+            <select value={recipientUserId} onChange={(e) => setRecipientUserId(e.target.value)}>
+              <option value="">{tx(language, "Belirtilmedi", "Unspecified", "Nehatiye diyarkirin")}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {tx(language, "Tarih", "Date", "Tarîx")}
+            <input type="date" value={tDate} onChange={(e) => setTDate(e.target.value)} />
+          </label>
+          <label>
+            {tx(language, "Miktar / Para Birimi", "Amount / Currency", "Meblağ / Yekeya Pere")}
+            <div className="amountCurrency">
+              <input type="number" min="0" value={tAmount} onChange={(e) => setTAmount(Number(e.target.value))} />
+              <select value={tCurrency} onChange={(e) => setTCurrency(e.target.value)}>
+                <option>USD</option>
+                <option>IQD</option>
+                <option>TRY</option>
+                <option>EUR</option>
+              </select>
+            </div>
+          </label>
+          <label>
+            {tx(language, "Detay", "Detail", "Hûragahî")}
+            <input value={tDetail} onChange={(e) => setTDetail(e.target.value)} />
+          </label>
+          <label className="wide">
+            {tx(language, "Not", "Note", "Nîşe")}
+            <textarea rows={2} value={tNote} onChange={(e) => setTNote(e.target.value)} />
+          </label>
+          <label className="wide check">
+            <input type="checkbox" checked={sentConfirmed} onChange={(e) => setSentConfirmed(e.target.checked)} />
+            <span>
+              <b>{tx(language, "Kasa aktarıldı", "Kasa has been sent", "Qase hat veguhastin")}</b>
+              <small>
+                {tx(
+                  language,
+                  "Tutar bu kasadan hemen düşülür ve hedef kasada gelir olarak görünür; karşı taraf onaylayana kadar o kayıt 'Onay Bekliyor' tonunda gösterilir.",
+                  "The amount is deducted from this kasa immediately and appears as income in the target kasa right away; that record shows an 'Awaiting Approval' tone until the other side confirms it.",
+                  "Meblağ tavilê ji vê qaseyê tê kêmkirin û di qaseya armanc de wek dahat xuya dike; heta alîyê din erê neke, ew qeyd bi rengê 'Li Benda Erêkirinê' tê nîşandan.",
+                )}
+              </small>
+            </span>
+          </label>
+          <button type="button" className="wide primary" disabled={!valid || submitting} onClick={submitTransfer}>
+            {tx(language, "Kasayı Aktar", "Transfer Kasa", "Qaseyê Veguhezîne")}
+          </button>
+        </div>
+      )}
+
+      {(outgoing.length > 0 || incoming.length > 0) && (
+        <div className="cashTransferList">
+          {outgoing.length > 0 && (
+            <div>
+              <small>{tx(language, "Gönderilen Aktarımlar", "Outgoing Transfers", "Veguhastinên Şandî")}</small>
+              {outgoing.map((t) => (
+                <div className="cashTransferRow" key={t.id}>
+                  <span>{date(t.date, language)}</span>
+                  <span>{localizeData(t.toCashAccountName, language)}</span>
+                  <span>{t.recipientPerson || t.recipientUserName || "—"}</span>
+                  <strong>{money(t.amount, t.currency)}</strong>
+                  <em className={`transferStatus transferStatus-${t.status}`}>{statusLabel(t.status)}</em>
+                </div>
+              ))}
+            </div>
+          )}
+          {incoming.length > 0 && (
+            <div>
+              <small>{tx(language, "Bu Kasaya Gelen Aktarımlar", "Incoming Transfers", "Veguhastinên Hatî")}</small>
+              {incoming.map((t) => (
+                <div className="cashTransferRow" key={t.id}>
+                  <span>{date(t.date, language)}</span>
+                  <span>{localizeData(t.fromCashAccountName, language)}</span>
+                  <span>{t.recipientPerson || t.recipientUserName || "—"}</span>
+                  <strong>{money(t.amount, t.currency)}</strong>
+                  {t.status === "pending" ? (
+                    <label className="check transferConfirm">
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        disabled={busyId === t.id}
+                        onChange={() => confirmTransfer(t.id)}
+                      />
+                      {tx(language, "Aktarılan Kasa Alındı", "Received", "Hat Wergirtin")}
+                    </label>
+                  ) : (
+                    <em className={`transferStatus transferStatus-${t.status}`}>{statusLabel(t.status)}</em>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

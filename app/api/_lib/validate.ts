@@ -48,7 +48,6 @@ export const recordInputSchema = z.object({
   currency: currencySchema.optional().default("USD"),
   project: shortText(200),
   tags: tagsSchema,
-  monthlyExpense: z.boolean().optional().default(false),
   cashAccount: shortText(200),
   listName: shortText(200),
 });
@@ -69,7 +68,6 @@ export const recordUpdateSchema = z.object({
   currency: currencySchema.optional(),
   project: z.string().max(200).optional(),
   tags: z.array(z.string().max(64)).max(20).optional(),
-  monthlyExpense: z.boolean().optional(),
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
   // Optimistic-locking token: the updatedAt the client last saw. If it
@@ -84,6 +82,20 @@ export const recordUpdateSchema = z.object({
 const importDateSchema = z.union([z.literal(""), dateSchema]);
 export const recordImportSchema = z.object({
   items: z.array(recordInputSchema.partial({ date: true }).extend({ date: importDateSchema.optional().default("") })).min(1).max(2000),
+});
+
+export const cashTransferInputSchema = z.object({
+  fromCashAccountId: z.number().int().positive(),
+  // Exactly one of these: an existing kasa's id, or a brand new kasa's name.
+  toCashAccountId: z.number().int().positive().optional(),
+  toCashAccountName: z.string().max(200).optional(),
+  amount: amountSchema.refine((n) => n > 0, "Amount must be greater than zero"),
+  currency: currencySchema.optional().default("USD"),
+  date: dateSchema,
+  detail: shortText(2000),
+  note: shortText(2000),
+  recipientPerson: shortText(200),
+  recipientUserId: z.number().int().positive().optional(),
 });
 
 const noteStatusSchema = z.enum(["important", "urgent", "pending", "completed"]);
@@ -126,6 +138,10 @@ export const userCreateSchema = z.object({
   name: z.string().max(200).optional().default(""),
   roleLabel: z.string().max(200).optional().default(""),
   isAdmin: z.boolean().optional().default(false),
+  // Only actually applied when the requester is themself a super admin —
+  // see app/api/users/route.ts. Accepted here so the request body can carry
+  // it; authorization happens at the route, not the schema.
+  isSuperAdmin: z.boolean().optional().default(false),
   permissions: z.array(pageSchema).max(restrictablePages.length).optional().default([]),
 });
 
@@ -134,6 +150,7 @@ export const userUpdateSchema = z.object({
   name: z.string().max(200).optional(),
   roleLabel: z.string().max(200).optional(),
   isAdmin: z.boolean().optional().default(false),
+  isSuperAdmin: z.boolean().optional().default(false),
   permissions: z.array(pageSchema).max(restrictablePages.length).optional().default([]),
 });
 
@@ -146,6 +163,12 @@ export const profileUpdateSchema = z.object({
 export const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(1),
+});
+
+// Ayarlar > Görüntüle (super admin only) — which other users' kasas get
+// merged into this super admin's own Ana Sayfa totals.
+export const dashboardScopeInputSchema = z.object({
+  includedUserIds: z.array(z.number().int().positive()).max(500),
 });
 
 // GET /api/database/export produces exactly this shape; POST .../import

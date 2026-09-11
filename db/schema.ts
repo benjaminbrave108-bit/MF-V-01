@@ -1,4 +1,4 @@
-import { boolean, check, index, integer, jsonb, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
@@ -8,6 +8,11 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   roleLabel: text("role_label").notNull(),
   isAdmin: boolean("is_admin").notNull().default(false),
+  // Super admins are a small subset of admins (typically 1-2 people) who see
+  // every kasa unconditionally and manage kasa-level access grants in
+  // Ayarlar > Kasa Erişimi. A plain admin only sees kasas they own or were
+  // granted — see cashAccounts/cashAccountAccess below.
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   permissions: jsonb("permissions").notNull().default([]),
   avatar: text("avatar").notNull().default(""),
   // Per-user UI language — takes over from settings.language once signed
@@ -19,6 +24,12 @@ export const users = pgTable("users", {
   locked: boolean("locked").notNull().default(false),
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   lockReason: text("lock_reason").notNull().default(""),
+  // Super-admin-only "Görüntüle" preference (Ayarlar): other users' ids
+  // whose kasas should be merged into *this* super admin's own Ana Sayfa
+  // totals (Toplam Gelir/Gider/Net/Bakiye). Empty means Ana Sayfa stays
+  // limited to their own data — see dashboardCashAccountIds in page.tsx.
+  // Meaningless for a non-super-admin account.
+  dashboardIncludedUserIds: jsonb("dashboard_included_user_ids").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -41,6 +52,38 @@ export const sessions = pgTable("sessions", {
   index("sessions_expires_at_idx").on(table.expiresAt),
 ]);
 
+// A kasa (cash account) as a first-class entity, decoupled from the
+// `records.source` string match the app used to rely on exclusively. The
+// `records` row with kind='cash' is still what carries the kasa's own
+// opening/adjustment amount (unchanged), but access control now hangs off
+// this table + cashAccountAccess below rather than off free-text names.
+export const cashAccounts = pgTable("cash_accounts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  ownerUserId: integer("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Owner-controlled opt-in (Kasalar > Paylaş, or Ayarlar > Paylaşım): when
+  // true, a super admin may fold this kasa's totals into their own Ana
+  // Sayfa via Ayarlar > Görüntüle (see users.dashboardIncludedUserIds).
+  // Independent of cashAccountAccess — a kasa can be shared for viewing
+  // without ever appearing in anyone's dashboard aggregate, and vice versa.
+  dashboardShareEnabled: boolean("dashboard_share_enabled").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Grants: presence of a row = that user can see this kasa (and its
+// linked income/expense records). Super admins bypass this table entirely
+// (see requireCashAccountAccess in app/api/_lib/cash-access.ts).
+export const cashAccountAccess = pgTable("cash_account_access", {
+  cashAccountId: integer("cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.cashAccountId, table.userId] }),
+  index("cash_account_access_cash_account_id_idx").on(table.cashAccountId),
+  index("cash_account_access_user_id_idx").on(table.userId),
+]);
+
 export const records = pgTable("records", {
   id: serial("id").primaryKey(),
   kind: text("kind").notNull(),
@@ -53,16 +96,54 @@ export const records = pgTable("records", {
   currency: text("currency").notNull().default("USD"),
   project: text("project").notNull().default(""),
   tags: jsonb("tags").notNull().default([]),
-  monthlyExpense: boolean("monthly_expense").notNull().default(false),
   cashAccount: text("cash_account").notNull().default(""),
+  // Nullable so legacy/orphan rows (a kasa name with no matching
+  // cash_accounts row, which shouldn't happen after the 0007 migration's
+  // backfill but is not worth a hard constraint over) don't block writes.
+  cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "set null" }),
   listName: text("list_name").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("records_kind_idx").on(table.kind),
   index("records_date_idx").on(table.date),
+  index("records_cash_account_id_idx").on(table.cashAccountId),
   index("records_cash_account_idx").on(table.cashAccount),
   check("records_kind_check", sql`${table.kind} IN ('cash', 'income', 'expense')`),
+]);
+
+// A pending money movement between two kasas. Creating one does NOT touch
+// either kasa's balance — only when the recipient side confirms (POST
+// /api/cash-transfers/:id/confirm) do the two ledger `records` rows
+// (fromRecordId/toRecordId) get created, which is what actually moves the
+// amount out of the sender's kasa and into the target one. See "Kasa
+// Aktarımı" in the kasa edit modal (app/components/Records.tsx).
+export const cashTransfers = pgTable("cash_transfers", {
+  id: serial("id").primaryKey(),
+  fromCashAccountId: integer("from_cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
+  toCashAccountId: integer("to_cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  date: text("date").notNull(),
+  detail: text("detail").notNull().default(""),
+  note: text("note").notNull().default(""),
+  recipientPerson: text("recipient_person").notNull().default(""),
+  recipientUserId: integer("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdByUserId: integer("created_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  confirmedByUserId: integer("confirmed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  // The two ledger rows created on confirm — a negative "cash" record on the
+  // source kasa, a positive one on the target kasa. Null while pending.
+  fromRecordId: integer("from_record_id").references(() => records.id, { onDelete: "set null" }),
+  toRecordId: integer("to_record_id").references(() => records.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("cash_transfers_from_idx").on(table.fromCashAccountId),
+  index("cash_transfers_to_idx").on(table.toCashAccountId),
+  index("cash_transfers_status_idx").on(table.status),
+  check("cash_transfers_status_check", sql`${table.status} IN ('pending', 'confirmed', 'cancelled')`),
 ]);
 
 export const archive = pgTable("archive", {

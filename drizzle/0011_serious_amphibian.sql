@@ -1,0 +1,1 @@
+ALTER TABLE "cash_accounts" ADD COLUMN "dashboard_share_enabled" boolean DEFAULT false NOT NULL;

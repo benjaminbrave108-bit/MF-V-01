@@ -39,13 +39,16 @@ export const PUT = withErrorHandling(async (request: Request) => {
     return json({ error: "Logo must be a data:image/(png|jpeg|webp|svg+xml) URI under 512KB" }, { status: 413 });
   }
 
-  await getOrCreateSettings();
+  const existing = await getOrCreateSettings();
   const db = getDb();
+  // Şirket Logosu / Program Adı: only a super admin may change these — a
+  // plain admin's request still saves (typography, language), it just keeps
+  // the existing company/logo values regardless of what was sent.
   const [row] = await db
     .update(settings)
     .set({
-      company: payload.company,
-      logo: payload.logo,
+      company: session.user.isSuperAdmin ? payload.company : existing.company,
+      logo: session.user.isSuperAdmin ? payload.logo : existing.logo,
       typography: payload.typography,
       language: payload.language,
       updatedAt: new Date(),

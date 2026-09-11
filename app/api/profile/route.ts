@@ -41,9 +41,11 @@ export const PUT = withErrorHandling(async (request: Request) => {
       username: account.username,
       role: account.roleLabel,
       isAdmin: account.isAdmin,
+      isSuperAdmin: account.isSuperAdmin,
       permissions: (account.permissions as Page[]) ?? [],
       avatar: account.avatar,
       language: account.language,
+      dashboardIncludedUserIds: (account.dashboardIncludedUserIds as number[]) ?? [],
     },
   });
 });

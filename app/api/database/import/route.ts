@@ -40,7 +40,6 @@ export const POST = withErrorHandling(async (request: Request) => {
           currency: r.currency,
           project: r.project,
           tags: r.tags,
-          monthlyExpense: r.monthlyExpense,
           cashAccount: r.cashAccount,
           listName: r.listName,
         })),

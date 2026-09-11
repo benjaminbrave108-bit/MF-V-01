@@ -50,7 +50,6 @@ export function Archive({
   const [year, setYear] = useState("Tümü"),
     [unit, setUnit] = useState("Tümü"),
     [cash, setCash] = useState("Tümü"),
-    [monthly, setMonthly] = useState("Tümü"),
     [kind, setKind] = useState("Tümü"),
     [action, setAction] = useState("Tümü");
   const years = [...new Set(rows.map((x) => x.old.date.slice(0, 4)))],
@@ -65,7 +64,6 @@ export function Archive({
       (year === "Tümü" || x.old.date.startsWith(year)) &&
       (unit === "Tümü" || x.old.project === unit) &&
       (cash === "Tümü" || x.old.source === cash) &&
-      (monthly === "Tümü" || (monthly === "Evet") === !!x.old.monthlyExpense) &&
       (kind === "Tümü" || x.old.kind === kind) &&
       (action === "Tümü" || x.action === action),
   );
@@ -88,9 +86,9 @@ export function Archive({
           )}
           sub={tx(
             language,
-            "Kasa kayıtları, aylık raporlar ve eski notlar tek yerde düzenli biçimde saklanır",
-            "Cash records, monthly reports and older notes are organized in one place",
-            "Qeydên qase, raporên mehane û nîşeyên kevn li cîhekî bi rêkûpêk tên parastin",
+            "Kasa kayıtları, hazırlanan raporlar ve eski notlar tek yerde düzenli biçimde saklanır",
+            "Cash records, prepared reports and older notes are organized in one place",
+            "Qeydên qase, raporên amadekirî û nîşeyên kevn li cîhekî bi rêkûpêk tên parastin",
           )}
         />
       </div>
@@ -127,22 +125,6 @@ export function Archive({
           value={cash}
           set={setCash}
           options={cashes}
-        />
-        <Filter
-          language={language}
-          label={tx(
-            language,
-            "Aylık Gider",
-            "Monthly Expense",
-            "Mesrefa Mehane",
-          )}
-          value={monthly}
-          set={setMonthly}
-          options={["Evet", "Hayır"]}
-          names={{
-            Evet: tx(language, "Evet", "Yes", "Erê"),
-            Hayır: tx(language, "Hayır", "No", "Na"),
-          }}
         />
         <Filter
           language={language}
@@ -189,7 +171,6 @@ export function Archive({
               <th>
                 {tx(language, "Birim / Kasa", "Unit / Cash", "Yekîne / Qase")}
               </th>
-              <th>{tx(language, "Aylık", "Monthly", "Mehane")}</th>
               <th>
                 {tx(language, "Eski Tutar", "Previous Amount", "Meblağa Berê")}
               </th>
@@ -228,18 +209,13 @@ export function Archive({
                     language,
                   )}
                 </td>
-                <td>
-                  {x.old.monthlyExpense
-                    ? tx(language, "Evet", "Yes", "Erê")
-                    : "—"}
-                </td>
                 <td className="amount">{money(x.old.amount)}</td>
                 <td>{localizeData(x.user, language)}</td>
               </tr>
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan={9} className="empty">
+                <td colSpan={8} className="empty">
                   {tx(
                     language,
                     "Seçilen filtrelere uygun arşiv kaydı bulunamadı.",

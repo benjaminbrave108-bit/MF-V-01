@@ -3,7 +3,8 @@ import { getDb } from "../../../../db";
 import { archive, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
-import { ensureFallbackKasa, fallbackKasaNameFor } from "../../_lib/records";
+import { canWriteCashAccount } from "../../_lib/cash-access";
+import { ensureCashAccountLink } from "../../_lib/records";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
@@ -43,12 +44,22 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   if (!canAccessKind(session.user, old.kind) || !canAccessKind(session.user, kind)) {
     return json({ error: "Forbidden" }, { status: 403 });
   }
+  // Kind-level permission alone isn't enough: the record's *current* kasa
+  // (if it has one) must also be one this user owns — sharing only grants
+  // read access, not the right to edit/move a record by id.
+  if (old.cashAccountId !== null && !(await canWriteCashAccount(session.user, old.cashAccountId, db))) {
+    return json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  const fallbackKasaName = fallbackKasaNameFor(kind);
   const source = payload.source ?? old.source;
-  const cashAccount = payload.cashAccount || old.cashAccount || fallbackKasaName;
+  const cashAccountName = payload.cashAccount ?? old.cashAccount;
+  const linkName = kind === "cash" ? source : cashAccountName;
 
-  const { record, archiveEntry, ensuredCash } = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
+    const link = await ensureCashAccountLink({ name: linkName, kind, user: session.user }, tx);
+    if (link.forbidden) return { forbidden: true as const };
+    const cashAccount = kind === "cash" ? source : (cashAccountName || "");
+
     const [updatedRecord] = await tx
       .update(records)
       .set({
@@ -62,8 +73,8 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
         currency: payload.currency ?? old.currency,
         project: payload.project ?? old.project,
         tags: payload.tags ?? old.tags,
-        monthlyExpense: payload.monthlyExpense ?? old.monthlyExpense,
         cashAccount,
+        cashAccountId: link.cashAccountId,
         listName: payload.listName ?? old.listName,
         updatedAt: new Date(),
       })
@@ -71,7 +82,9 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
       .returning();
 
     // Cascade: if a cash account's display name changed, keep every record
-    // that referenced it by name pointing at the new name.
+    // that referenced it by name pointing at the new name. The FK
+    // (cashAccountId) already stays correct through a rename on its own —
+    // this only refreshes the display-text copy on linked records.
     if (old.kind === "cash" && old.source !== source) {
       await tx.update(records).set({ cashAccount: source }).where(eq(records.cashAccount, old.source));
     }
@@ -85,12 +98,11 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
       })
       .returning();
 
-    const createdCash = await ensureFallbackKasa(fallbackKasaName, tx);
-
-    return { record: updatedRecord, archiveEntry: insertedArchive, ensuredCash: createdCash };
+    return { forbidden: false as const, record: updatedRecord, archiveEntry: insertedArchive, ensuredCash: link.ensuredCashRecord };
   });
 
-  return json({ record, archiveEntry: toClientArchiveItem(archiveEntry), ensuredCash });
+  if (result.forbidden) return json({ error: "Forbidden" }, { status: 403 });
+  return json({ record: result.record, archiveEntry: toClientArchiveItem(result.archiveEntry), ensuredCash: result.ensuredCash });
 });
 
 export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
@@ -107,6 +119,9 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   if (!old) return json({ error: "Record not found" }, { status: 404 });
 
   if (!canAccessKind(session.user, old.kind)) {
+    return json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (old.cashAccountId !== null && !(await canWriteCashAccount(session.user, old.cashAccountId, db))) {
     return json({ error: "Forbidden" }, { status: 403 });
   }
 
