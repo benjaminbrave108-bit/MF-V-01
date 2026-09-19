@@ -146,6 +146,53 @@ export const cashTransfers = pgTable("cash_transfers", {
   check("cash_transfers_status_check", sql`${table.status} IN ('pending', 'confirmed', 'cancelled')`),
 ]);
 
+// A discussion thread attached to one records row (Kasalar/Gelir/Gider).
+// Added from the "💬" action on that record's row, or replied to from
+// Mali Özel Notlar > Yorumlar, which lists every record that has at least
+// one comment as a card — same thread, two entry points.
+export const recordComments = pgTable("record_comments", {
+  id: serial("id").primaryKey(),
+  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  userName: text("user_name").notNull().default(""),
+  text: text("text").notNull(),
+  // "⚠️ Dikkat" — the author flags this comment as needing attention; such
+  // comments get a warning style wherever they render and are what Yorumlar
+  // > "Dikkat Yorumları" filters down to (see app/components/Comments.tsx).
+  isAttention: boolean("is_attention").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("record_comments_record_id_idx").on(table.recordId),
+]);
+
+// One user's emoji reaction on one comment — presence of a row = reacted,
+// same "presence-as-state" pattern as cashAccountAccess. The composite key
+// lets the same user drop several different emoji on one comment, but never
+// the same emoji twice (the POST toggles: exists → delete, absent → insert).
+export const commentReactions = pgTable("comment_reactions", {
+  commentId: integer("comment_id").notNull().references(() => recordComments.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.commentId, table.userId, table.emoji] }),
+  index("comment_reactions_comment_id_idx").on(table.commentId),
+]);
+
+// Per-user "read up to" marker for one record's comment thread — powers the
+// unread-count badge next to "Yorumlar" in the sidebar (see
+// app/api/comments/unread-count). Opening a thread (its modal or its card
+// on the Yorumlar page) upserts this row to now; any comment on that record
+// newer than lastReadAt, written by someone else, still counts as unread.
+export const commentReads = pgTable("comment_reads", {
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }),
+  lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.recordId] }),
+  index("comment_reads_user_id_idx").on(table.userId),
+]);
+
 export const archive = pgTable("archive", {
   id: serial("id").primaryKey(),
   action: text("action").notNull(),
@@ -181,6 +228,54 @@ export const preparedReports = pgTable("prepared_reports", {
   income: jsonb("income").notNull().default([]),
   expense: jsonb("expense").notNull().default([]),
 });
+
+// Gelir > Gelir Çizelgesi / Gider > Gider Çizelgesi: one row per kasa/project
+// being tracked against a manually-entered budget, tagged 'income' or
+// 'expense' by `kind` so the same table backs both pages. Actual spend/income
+// and the per-person breakdown are NOT stored here — they are computed
+// client-side, live, from `records` (kind=this row's kind, cashAccount =
+// cashAccountName, grouped by person) so the sheet never drifts from the
+// underlying ledger.
+export const cashExpenseSheets = pgTable("cash_expense_sheets", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull().default("expense"),
+  // Short display code (e.g. "26-01"), assigned once at creation time.
+  code: text("code").notNull().default(""),
+  cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "set null" }),
+  cashAccountName: text("cash_account_name").notNull().default(""),
+  startDate: text("start_date").notNull().default(""),
+  endDate: text("end_date").notNull().default(""),
+  budget: numeric("budget", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  reportReady: boolean("report_ready").notNull().default(false),
+  reportDelivered: boolean("report_delivered").notNull().default(false),
+  reportDate: text("report_date").notNull().default(""),
+  responsible: text("responsible").notNull().default(""),
+  note: text("note").notNull().default(""),
+  resultNote: text("result_note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("cash_expense_sheets_cash_account_id_idx").on(table.cashAccountId),
+  index("cash_expense_sheets_cash_account_name_idx").on(table.cashAccountName),
+  index("cash_expense_sheets_kind_idx").on(table.kind),
+  check("cash_expense_sheets_kind_check", sql`${table.kind} IN ('income', 'expense')`),
+]);
+
+// A simple (no reactions/attention-flag) comment thread attached to one
+// Kasa Gider Çizelgesi row — the "Detay" section's "Yorum" entry point.
+// Deliberately a separate table from record_comments rather than reusing it:
+// recordComments.recordId is a FK to records.id, and a sheet row is not a
+// records row.
+export const cashExpenseSheetComments = pgTable("cash_expense_sheet_comments", {
+  id: serial("id").primaryKey(),
+  sheetRowId: integer("sheet_row_id").notNull().references(() => cashExpenseSheets.id, { onDelete: "cascade" }),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  userName: text("user_name").notNull().default(""),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("cash_expense_sheet_comments_sheet_row_id_idx").on(table.sheetRowId),
+]);
 
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),

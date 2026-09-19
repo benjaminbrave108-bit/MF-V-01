@@ -645,6 +645,39 @@ header > h1 {
   .reportBuilderPickerGrid { grid-template-columns: 1fr; }
   .reportSignatureRow { flex-direction: column; }
 }
+.cashExpenseSheet { margin-top: 18px; }
+.cashExpenseSheetTable table { min-width: 1180px; }
+.cashExpenseSheetTable th, .cashExpenseSheetTable td { white-space: nowrap; }
+.cashExpenseSheetTable td.sheetNoteCell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cashExpenseSheetTable td.sheetNoteCell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.cashExpenseSheetTable tfoot td { background: #e7f4ef; font-weight: 750; border-top: 2px solid #cfe4da; }
+.cashExpenseSheetTable input[type="checkbox"] { width: auto; }
+/* Kasa Gider Çizelgesi — 3 bölüm: Kasa/Bütçe (mavi), Rapor Durumu (amber),
+   Detay/Kişi Dağılımı/Yorum (yeşil, daraltılıp açılabilir). Her bölümün
+   kendi hafif zemin rengi var; bölüm sonlarında belirgin dikey çizgi. */
+.cashExpenseSheetTable .sheetGroupRow th { font-size: 10px; letter-spacing: .02em; cursor: default; overflow: visible; text-overflow: clip; white-space: normal; }
+.cashExpenseSheetTable .sheetGroupRow th small { font-weight: 700; text-transform: none; letter-spacing: 0; }
+.cashExpenseSheetTable .sheetGroupRow th.sheetGroupToggle { cursor: pointer; }
+.cashExpenseSheetTable th.sheetSection1, .cashExpenseSheetTable td.sheetSection1 { background: #eaf3f6; }
+.cashExpenseSheetTable thead th.sheetSection1 { background: #d7e8ed; color: #1f4652; }
+.cashExpenseSheetTable th.sheetSection2, .cashExpenseSheetTable td.sheetSection2 { background: #fdf6e8; }
+.cashExpenseSheetTable thead th.sheetSection2 { background: #f5e6c2; color: #6b4f14; }
+.cashExpenseSheetTable th.sheetSection3, .cashExpenseSheetTable td.sheetSection3 { background: #eef6ec; }
+.cashExpenseSheetTable thead th.sheetSection3 { background: #d9ead4; color: #2c4f24; }
+.cashExpenseSheetTable th.sheetSectionEnd, .cashExpenseSheetTable td.sheetSectionEnd { border-right: 2px solid #aebfc4; }
+/* İşlem (edit/delete) sütunu — 3 bölümden ayrı, kendi rengiyle belirgin. */
+.cashExpenseSheetTable th.sheetSectionAction, .cashExpenseSheetTable td.sheetSectionAction { background: #f1eaf8; border-left: 2px solid #c9b7e4; }
+.cashExpenseSheetTable thead th.sheetSectionAction { background: #ded0f0; color: #4a2e73; }
+.cashExpenseSheetTable tbody tr:hover td.sheetSectionAction { background: #e6daf5; }
+.cashExpenseSheetTable tbody tr:hover td.sheetSection1 { background: #dfeef2; }
+.cashExpenseSheetTable tbody tr:hover td.sheetSection2 { background: #f9edd2; }
+.cashExpenseSheetTable tbody tr:hover td.sheetSection3 { background: #e2f0dd; }
+.sheetGroupToggle { cursor: pointer; user-select: none; }
+.sheetGroupToggle:hover { filter: brightness(0.97); }
+.recordsPageTabs { margin-bottom: 16px; }
+.rowActions { display: flex; align-items: center; gap: 2px; }
+.checkboxField { flex-direction: row !important; align-items: center; gap: 8px !important; }
+.checkboxField input { width: auto; }
 .yearCard {
   position: relative;
   overflow: hidden;
@@ -1063,6 +1096,19 @@ textarea {
 }
 .navReportGroup > button {
   width: 100%;
+}
+.navBadge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #d76b3a;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
 }
 .navSubmenu {
   display: grid;
@@ -1727,6 +1773,45 @@ header h1 {
   border-radius: 10px;
   min-width: 0;
 }
+/* Kasalar/Gelir/Gider tablosu — sütun sırası/genişliği kullanıcı tarafından
+   ayarlanabilir (bkz. Records.tsx columnOrder/columnWidths). Fixed layout,
+   <colgroup>'taki genişlikleri gerçek anlamda uygulanan tek yol. */
+.resizableTable table {
+  table-layout: fixed;
+}
+.resizableTable th {
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+}
+.resizableTable th:active {
+  cursor: grabbing;
+}
+.resizableTable th.colDragging {
+  opacity: 0.4;
+}
+.colHeaderLabel {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.colResizeHandle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.colResizeHandle:hover {
+  background: #c7d3d6;
+}
 .recordsGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(260px, 0.9fr);
@@ -1850,6 +1935,23 @@ td {
   border-radius: 7px;
   cursor: pointer;
 }
+.rowDragHandle {
+  display: inline-block;
+  margin-left: 3px;
+  color: #9fb0b6;
+  cursor: grab;
+  user-select: none;
+}
+.rowDragHandle:hover {
+  color: #52696f;
+  background: #f3f6f7;
+}
+.rowDragHandle:active {
+  cursor: grabbing;
+}
+.rowDragging {
+  opacity: 0.45;
+}
 .icon.edit {
   color: #287b98;
   background: #eaf4f7;
@@ -1862,6 +1964,61 @@ td {
   color: #2f8f52;
   background: #e2f3e8;
   margin-right: 3px;
+}
+/* Mesajlar column (Kasalar/Gelir/Gider table, right after Detay/Not) — a
+   single-line, table-row-sized preview of that record's comment thread
+   instead of a tiny icon buried in the action column. Click opens
+   RecordCommentsModal. Sized to match the surrounding td's normal row
+   height — no card/box styling, it's just readable inline text. */
+.messagesCell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  line-height: inherit;
+  color: #40545c;
+  cursor: pointer;
+  text-align: left;
+}
+.messagesCell:hover {
+  text-decoration: underline;
+}
+.messagesCell b {
+  font-weight: 700;
+  color: #2b3d44;
+  flex: none;
+}
+.messagesCellText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.messagesCellCount {
+  flex: none;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #d76b3a;
+  color: white;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+}
+.messagesCell.attention {
+  color: #c94b4b;
+}
+.messagesCell.attention .messagesCellCount {
+  background: #c94b4b;
+}
+.messagesCellEmpty {
+  color: var(--muted);
 }
 .pendingTransferRow {
   background: #fdf8ec;
@@ -2177,7 +2334,12 @@ td {
 .archiveAccordion[open] > summary em::after { transform: rotate(180deg); }
 .archiveAccordionBody { padding: 16px; }
 .archiveDescription { margin: 0 0 14px; color: #74868c; font-size: 10px; }
+.archiveSubAccordion { margin-top: 12px; box-shadow: none; }
+.archiveSubAccordion > summary { min-height: 44px; }
+.archiveSubAccordion > summary span b { width: 24px; height: 24px; font-size: 11px; }
+.archiveSubAccordion > summary strong { font-size: 11px; }
 .archiveFilters { margin-bottom: 14px; }
+.archiveFiltersStandalone { margin-bottom: 18px; padding: 14px 16px; background: #fff; border: 1px solid #d9e4e6; border-radius: 13px; box-shadow: 0 4px 14px #173b4708; }
 .archiveReportGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
 .archiveReportGrid article { border: 1px solid #dce6e8; border-radius: 11px; background: #f9fbfc; padding: 14px; }
 .archiveReportGrid article > small { display: inline-block; padding: 3px 7px; border-radius: 10px; background: #e5f2f5; color: #2d8098; font-size: 8px; font-weight: 800; }
@@ -2638,6 +2800,204 @@ main { min-width: 0; overflow-x: hidden; }
 .toolbar { flex-wrap: wrap; }
 .toolbar > * { min-width: 0; }
 .headerActions { min-width: 0; }
+
+/* Yorumlar (Mali Özel Notlar > Yorumlar) — the record-comments feature:
+   a thread per Kasalar/Gelir/Gider row, shown either in RecordCommentsModal
+   (from that row's 💬 icon) or as a card here. */
+.commentsModal {
+  width: min(560px, 100%);
+}
+.commentThread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.commentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.commentEmpty {
+  color: var(--muted);
+}
+.commentItem {
+  background: #f6f9fa;
+  border: 1px solid #e7edef;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.commentItemHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.commentItemHead strong {
+  font-size: 11px;
+  color: #2b3d44;
+}
+.commentItemHead small {
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.commentItem p {
+  margin: 0;
+  font-size: 12px;
+  color: #40545c;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.commentItemAttention {
+  background: #fdf3ec;
+  border-color: #f0c9a3;
+}
+.commentAttentionBadge {
+  margin-right: 4px;
+}
+.commentReactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+.commentReactionPill {
+  border: 1px solid #d8e2e5;
+  background: white;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #40545c;
+}
+.commentReactionPill.mine {
+  border-color: #2f8f52;
+  background: #e2f3e8;
+  color: #226b3c;
+  font-weight: 700;
+}
+.commentReactionAddWrap {
+  position: relative;
+}
+.commentReactionAdd {
+  border: 1px dashed #c7d3d6;
+  background: transparent;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #65777f;
+}
+.commentReactionAdd:hover {
+  background: #f3f6f7;
+}
+.commentReactionPicker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  gap: 4px;
+  background: white;
+  border: 1px solid #e4eaec;
+  border-radius: 999px;
+  padding: 5px 7px;
+  box-shadow: 0 8px 20px rgba(20, 35, 42, 0.15);
+  z-index: 6;
+}
+.commentReactionPicker button {
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+}
+.commentReactionPicker button:hover {
+  background: #f3f6f7;
+}
+.commentReplyForm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.commentReplyBox {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.commentReplyForm textarea {
+  resize: vertical;
+  border: 1px solid #d8e2e5;
+  border-radius: 9px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: 0;
+}
+.commentAttentionToggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #a8641c;
+  cursor: pointer;
+  width: fit-content;
+}
+.commentAttentionToggle input {
+  width: auto;
+}
+.tabBarCount {
+  margin-left: 4px;
+  display: inline-block;
+  min-width: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #d76b3a;
+  color: white;
+  font-size: 9px;
+  line-height: 15px;
+  text-align: center;
+}
+.commentCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.commentCard {
+  border: 1px solid #e4eaec;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: white;
+}
+.commentCard > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.commentCard > header strong {
+  display: block;
+  font-size: 13px;
+  color: #263c46;
+}
+.commentCard > header small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.commentCard .commentList {
+  max-height: 220px;
+}
 
 .appShell.sidebarCompact { grid-template-columns: 76px minmax(0, 1fr); }
 .appShell.sidebarCompact .sidebar { padding-left: 9px; padding-right: 9px; }

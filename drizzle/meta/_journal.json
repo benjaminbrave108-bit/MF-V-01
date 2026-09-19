@@ -85,6 +85,55 @@
       "when": 1788953688098,
       "tag": "0011_serious_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789464670124,
+      "tag": "0012_parched_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789469941619,
+      "tag": "0013_striped_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789470958411,
+      "tag": "0014_bizarre_tony_stark",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1789473066241,
+      "tag": "0015_sleepy_cannonball",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789797855203,
+      "tag": "0016_modern_micromax",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789799160397,
+      "tag": "0017_lovely_maverick",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789800085128,
+      "tag": "0018_chunky_robin_chapel",
+      "breakpoints": true
     }
   ]
 }

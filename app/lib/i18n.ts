@@ -44,6 +44,15 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
     icon: "✎",
   },
   {
+    id: "comments",
+    label: {
+      tr: "Yorumlar",
+      en: "Comments",
+      ku: "Şîrove",
+    },
+    icon: "💬",
+  },
+  {
     id: "archive",
     label: { tr: "Arşiv", en: "Archive", ku: "Arşîv" },
     icon: "◴",

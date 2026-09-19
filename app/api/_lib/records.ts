@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
 import { cashAccounts, records } from "../../../db/schema";
-import { canCreateCashAccounts, canWriteCashAccount, grantCashAccountAccess } from "./cash-access";
+import { canAccessCashAccount, canCreateCashAccounts, canWriteCashAccount, grantCashAccountAccess } from "./cash-access";
 import type { SessionUser } from "./auth";
 
 export function fallbackKasaNameFor(kind: string): string {
@@ -49,6 +49,20 @@ export async function ensureFallbackKasa(name: string, cashAccountId: number, db
     })
     .returning();
   return created;
+}
+
+// Whether `user` may see (and comment on) a given record: the same
+// kind-permission + kasa-visibility combo GET /api/records already scopes
+// its list by (see scopeToAccessibleKasas there) — a record with no kasa
+// link at all stays visible to anyone with the page permission.
+export async function canAccessRecord(
+  user: Pick<SessionUser, "id" | "isAdmin" | "isSuperAdmin" | "permissions">,
+  record: { kind: string; cashAccountId: number | null },
+  db: DbClient = getDb(),
+): Promise<boolean> {
+  if (!user.isAdmin && !user.permissions.includes(record.kind as SessionUser["permissions"][number])) return false;
+  if (record.cashAccountId === null) return true;
+  return canAccessCashAccount(user, record.cashAccountId, db);
 }
 
 export type CashAccountLinkResult =

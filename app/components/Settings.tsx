@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Title, DeleteConfirmModal } from "./shared";
+import { Title } from "./shared";
 import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
 import type { BlockedIp, Language, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
@@ -46,7 +46,6 @@ export function Settings({
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
   const [blockedIpsLoaded, setBlockedIpsLoaded] = useState(false);
   const [dbBusy, setDbBusy] = useState(false);
-  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   useEffect(() => setTypographyDraft(typography), [typography]);
 
@@ -170,26 +169,6 @@ export function Settings({
       );
     }
     setDbBusy(false);
-  }
-
-  async function clearDatabase() {
-    setDbBusy(true);
-    try {
-      const response = await fetch("/api/database/clear", { method: "POST" });
-      if (!response.ok) throw new Error();
-      alert(
-        tx(
-          language,
-          "Mali veriler silindi. Sayfa yenileniyor.",
-          "Financial data cleared. Reloading the page.",
-          "Daneyên darayî hatin jêbirin. Rûpel tê nûvekirin.",
-        ),
-      );
-      window.location.reload();
-    } catch {
-      alert(dbErrorMessage);
-      setDbBusy(false);
-    }
   }
 
   return (
@@ -471,9 +450,6 @@ export function Settings({
                   }}
                 />
               </label>
-              <button type="button" className="light redText" disabled={dbBusy} onClick={() => setClearConfirmOpen(true)}>
-                🗑 {tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
-              </button>
             </div>
             <small className="databaseHint">
               {tx(
@@ -487,31 +463,6 @@ export function Settings({
         </div>
       )}
 
-      {clearConfirmOpen && (
-        <DeleteConfirmModal
-          language={language}
-          title={tx(language, "Tüm Mali Verileri Sil", "Clear All Financial Data", "Hemû Daneyên Darayî Jêbibe")}
-          itemLabel={tx(
-            language,
-            "Tüm kayıtlar, arşiv, notlar ve raporlar",
-            "All records, archive, notes and reports",
-            "Hemû qeyd, arşîv, nîşe û rapor",
-          )}
-          warningText={tx(
-            language,
-            "Tüm kayıtlar, arşiv, notlar ve hazırlanan raporlar kalıcı olarak silinecektir. Kullanıcılar ve ayarlar korunur. Devam etmeden önce dışa aktarma ile yedek almanız önerilir.",
-            "All records, archive, notes and prepared reports will be permanently deleted. Users and settings are preserved. Exporting a backup first is recommended.",
-            "Hemû qeyd, arşîv, nîşe û raporên amade dê bi awayekî domdar werin jêbirin. Bikarhêner û mîheng têne parastin.",
-          )}
-          confirmLabel={tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}
-          checkPassword={checkPassword}
-          onClose={() => setClearConfirmOpen(false)}
-          onConfirm={() => {
-            setClearConfirmOpen(false);
-            clearDatabase();
-          }}
-        />
-      )}
     </div>
   );
 }

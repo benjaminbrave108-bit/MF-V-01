@@ -1,0 +1,1 @@
+ALTER TABLE "record_comments" ADD COLUMN "is_attention" boolean DEFAULT false NOT NULL;

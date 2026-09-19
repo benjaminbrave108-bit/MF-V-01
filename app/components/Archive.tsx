@@ -6,6 +6,65 @@ import { tx, localizeData, kindName } from "../lib/i18n";
 import { date, money } from "../lib/finance";
 import type { ArchiveItem, FinanceNote, Language, PreparedReport } from "../lib/types";
 
+// Silinenler/Düzenlenenler alt-başlıklarının ikisi de aynı kolonları
+// kullanıyor — tek yerden render edip iki kez çağırıyoruz.
+function ArchiveRecordsTable({ language, rows }: { language: Language; rows: ArchiveItem[] }) {
+  return (
+    <div className="recordsTable">
+      <table>
+        <thead>
+          <tr>
+            <th>{tx(language, "İşlem Tarihi", "Action Date", "Tarîxa Çalakiyê")}</th>
+            <th>{tx(language, "Kayıt Yılı", "Record Year", "Sala Qeydê")}</th>
+            <th>{tx(language, "Bölüm", "Section", "Beş")}</th>
+            <th>{tx(language, "İşlem", "Action", "Çalakî")}</th>
+            <th>{tx(language, "Eski Başlık", "Previous Category", "Sernavê Berê")}</th>
+            <th>{tx(language, "Birim / Kasa", "Unit / Cash", "Yekîne / Qase")}</th>
+            <th>{tx(language, "Eski Tutar", "Previous Amount", "Meblağa Berê")}</th>
+            <th>{tx(language, "Kullanıcı", "User", "Bikarhêner")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((x) => (
+            <tr key={x.id}>
+              <td>
+                {new Date(x.at).toLocaleString(language === "ku" ? "ku-TR" : language === "en" ? "en-GB" : "tr-TR")}
+              </td>
+              <td>{x.old.date.slice(0, 4)}</td>
+              <td>{kindName(x.old.kind, language)}</td>
+              <td>
+                <span className={`action ${x.action === "Silindi" ? "red" : ""}`}>
+                  {x.action === "Silindi"
+                    ? tx(language, "Silindi", "Deleted", "Hat jêbirin")
+                    : tx(language, "Düzenlendi", "Edited", "Hat guherandin")}
+                </span>
+              </td>
+              <td>
+                <b>{localizeData(x.old.source, language)}</b>
+              </td>
+              <td>{localizeData(x.old.kind === "cash" ? x.old.source : x.old.project, language)}</td>
+              <td className="amount">{money(x.old.amount)}</td>
+              <td>{localizeData(x.user, language)}</td>
+            </tr>
+          ))}
+          {!rows.length && (
+            <tr>
+              <td colSpan={8} className="empty">
+                {tx(
+                  language,
+                  "Seçilen filtrelere uygun arşiv kaydı bulunamadı.",
+                  "No archive records match the selected filters.",
+                  "Qeyda arşîvê ya li gorî fîltreyên hilbijartî nehat dîtin.",
+                )}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Filter({
   language,
   label,
@@ -50,8 +109,7 @@ export function Archive({
   const [year, setYear] = useState("Tümü"),
     [unit, setUnit] = useState("Tümü"),
     [cash, setCash] = useState("Tümü"),
-    [kind, setKind] = useState("Tümü"),
-    [action, setAction] = useState("Tümü");
+    [kind, setKind] = useState("Tümü");
   const years = [...new Set(rows.map((x) => x.old.date.slice(0, 4)))],
     units = [...new Set(rows.map((x) => x.old.project).filter(Boolean))],
     cashes = [
@@ -64,9 +122,13 @@ export function Archive({
       (year === "Tümü" || x.old.date.startsWith(year)) &&
       (unit === "Tümü" || x.old.project === unit) &&
       (cash === "Tümü" || x.old.source === cash) &&
-      (kind === "Tümü" || x.old.kind === kind) &&
-      (action === "Tümü" || x.action === action),
+      (kind === "Tümü" || x.old.kind === kind),
   );
+  // Silinenler/Düzenlenenler kendi başlıkları altında ayrı ayrı, varsayılan
+  // olarak kapalı gruplanır — İşlem filtresi artık gereksiz, kategori onun
+  // yerini alıyor.
+  const deletedRows = filtered.filter((x) => x.action === "Silindi");
+  const editedRows = filtered.filter((x) => x.action === "Düzenlendi");
   const archivedNotes = notes
     .filter((note) => note.status === "completed")
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -92,14 +154,8 @@ export function Archive({
           )}
         />
       </div>
-      <details className="archiveAccordion" open>
-        <summary>
-          <span><b>▣</b><strong>{tx(language, "Kasa Arşivi", "Cash Archive", "Arşîva Qase")}</strong></span>
-          <em>{rows.length} {tx(language, "kayıt", "records", "qeyd")}</em>
-        </summary>
-        <div className="archiveAccordionBody">
-          <p className="archiveDescription">{tx(language, "Düzenlenen veya silinen kasa ve mali kayıtların önceki halleri", "Previous versions of edited or deleted cash and finance records", "Guhertoyên berê yên qeydên qase û darayî")}</p>
-      <div className="filters archiveFilters">
+
+      <div className="filters archiveFilters archiveFiltersStandalone">
         <Filter
           language={language}
           label={tx(language, "Yıl", "Year", "Sal")}
@@ -138,96 +194,35 @@ export function Archive({
             cash: tx(language, "Kasa", "Cash", "Qase"),
           }}
         />
-        <Filter
-          language={language}
-          label={tx(language, "İşlem", "Action", "Çalakî")}
-          value={action}
-          set={setAction}
-          options={["Düzenlendi", "Silindi"]}
-          names={{
-            Düzenlendi: tx(language, "Düzenlendi", "Edited", "Hat guherandin"),
-            Silindi: tx(language, "Silindi", "Deleted", "Hat jêbirin"),
-          }}
-        />
       </div>
-      <div className="recordsTable">
-        <table>
-          <thead>
-            <tr>
-              <th>
-                {tx(language, "İşlem Tarihi", "Action Date", "Tarîxa Çalakiyê")}
-              </th>
-              <th>{tx(language, "Kayıt Yılı", "Record Year", "Sala Qeydê")}</th>
-              <th>{tx(language, "Bölüm", "Section", "Beş")}</th>
-              <th>{tx(language, "İşlem", "Action", "Çalakî")}</th>
-              <th>
-                {tx(
-                  language,
-                  "Eski Başlık",
-                  "Previous Category",
-                  "Sernavê Berê",
-                )}
-              </th>
-              <th>
-                {tx(language, "Birim / Kasa", "Unit / Cash", "Yekîne / Qase")}
-              </th>
-              <th>
-                {tx(language, "Eski Tutar", "Previous Amount", "Meblağa Berê")}
-              </th>
-              <th>{tx(language, "Kullanıcı", "User", "Bikarhêner")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((x) => (
-              <tr key={x.id}>
-                <td>
-                  {new Date(x.at).toLocaleString(
-                    language === "ku"
-                      ? "ku-TR"
-                      : language === "en"
-                        ? "en-GB"
-                        : "tr-TR",
-                  )}
-                </td>
-                <td>{x.old.date.slice(0, 4)}</td>
-                <td>{kindName(x.old.kind, language)}</td>
-                <td>
-                  <span
-                    className={`action ${x.action === "Silindi" ? "red" : ""}`}
-                  >
-                    {x.action === "Silindi"
-                      ? tx(language, "Silindi", "Deleted", "Hat jêbirin")
-                      : tx(language, "Düzenlendi", "Edited", "Hat guherandin")}
-                  </span>
-                </td>
-                <td>
-                  <b>{localizeData(x.old.source, language)}</b>
-                </td>
-                <td>
-                  {localizeData(
-                    x.old.kind === "cash" ? x.old.source : x.old.project,
-                    language,
-                  )}
-                </td>
-                <td className="amount">{money(x.old.amount)}</td>
-                <td>{localizeData(x.user, language)}</td>
-              </tr>
-            ))}
-            {!filtered.length && (
-              <tr>
-                <td colSpan={8} className="empty">
-                  {tx(
-                    language,
-                    "Seçilen filtrelere uygun arşiv kaydı bulunamadı.",
-                    "No archive records match the selected filters.",
-                    "Qeyda arşîvê ya li gorî fîltreyên hilbijartî nehat dîtin.",
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      <details className="archiveAccordion" open>
+        <summary>
+          <span><b>▣</b><strong>{tx(language, "Kasa Arşivi", "Cash Archive", "Arşîva Qase")}</strong></span>
+          <em>{rows.length} {tx(language, "kayıt", "records", "qeyd")}</em>
+        </summary>
+        <div className="archiveAccordionBody">
+          <p className="archiveDescription">{tx(language, "Düzenlenen veya silinen kasa ve mali kayıtların önceki halleri", "Previous versions of edited or deleted cash and finance records", "Guhertoyên berê yên qeydên qase û darayî")}</p>
+
+      <details className="archiveAccordion archiveSubAccordion">
+        <summary>
+          <span><b>🗑</b><strong>{tx(language, "Silinenler", "Deleted", "Hatine Jêbirin")}</strong></span>
+          <em>{deletedRows.length} {tx(language, "kayıt", "records", "qeyd")}</em>
+        </summary>
+        <div className="archiveAccordionBody">
+          <ArchiveRecordsTable language={language} rows={deletedRows} />
+        </div>
+      </details>
+
+      <details className="archiveAccordion archiveSubAccordion">
+        <summary>
+          <span><b>✎</b><strong>{tx(language, "Düzenlenenler", "Edited", "Hatine Guherandin")}</strong></span>
+          <em>{editedRows.length} {tx(language, "kayıt", "records", "qeyd")}</em>
+        </summary>
+        <div className="archiveAccordionBody">
+          <ArchiveRecordsTable language={language} rows={editedRows} />
+        </div>
+      </details>
         </div>
       </details>
 

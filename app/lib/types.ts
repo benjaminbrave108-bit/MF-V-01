@@ -4,6 +4,7 @@ export type Page =
   | Kind
   | "reportBuilder"
   | "notes"
+  | "comments"
   | "archive"
   | "users"
   | "settings";
@@ -119,7 +120,21 @@ export type CashTransfer = {
   toRecordId: number | null;
   createdAt: string;
 };
-export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "archive"];
+export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "comments", "archive"];
+// A comment thread on one records row — added from the "💬" action on its
+// Kasalar/Gelir/Gider row, or replied to from Mali Özel Notlar > Yorumlar
+// (see Comments.tsx), which lists every record that has at least one.
+export type CommentReaction = { emoji: string; count: number; mine: boolean };
+export type RecordComment = {
+  id: number;
+  recordId: number;
+  userId: number | null;
+  userName: string;
+  text: string;
+  isAttention: boolean;
+  createdAt: string;
+  reactions: CommentReaction[];
+};
 // "users" is intentionally not here — every signed-in user may open
 // Kullanıcılar to view/edit their own account; Users.tsx itself restricts
 // non-admins to just their own card and a name/password-only edit form.
@@ -136,6 +151,36 @@ export type PreparedReport = {
   signature: string;
   income: ReportLine[];
   expense: ReportLine[];
+};
+// Gelir Çizelgesi / Gider Çizelgesi row — see db/schema.ts's cashExpenseSheets
+// for why the actual-spend/income and per-person breakdown are NOT part of
+// this type: they are derived client-side from RecordItem[], never stored.
+export type CashExpenseSheetRow = {
+  id: number;
+  kind: "income" | "expense";
+  code: string;
+  cashAccountName: string;
+  startDate: string;
+  endDate: string;
+  budget: number;
+  reportReady: boolean;
+  reportDelivered: boolean;
+  reportDate: string;
+  responsible: string;
+  note: string;
+  resultNote: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+// Kasa Gider Çizelgesi row's "Yorum" thread — simpler than RecordComment
+// (no reactions, no attention flag), see db/schema.ts's cashExpenseSheetComments.
+export type CashExpenseSheetComment = {
+  id: number;
+  sheetRowId: number;
+  userId: number | null;
+  userName: string;
+  text: string;
+  createdAt: string;
 };
 export type TypographyKey = "pageTitle" | "sectionTitle" | "cardTitle" | "body" | "tableHeader" | "formText";
 export type TypographyRule = { size: number; font: string; color: string };

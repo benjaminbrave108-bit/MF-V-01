@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
+import { RecordCommentsModal } from "./Comments";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
 import type { CashAccountSummary, CashTransfer, FinanceNote, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
@@ -140,6 +141,27 @@ function SuggestInput({
   );
 }
 
+// Kasalar/Gelir/Gider tablosunun sütunları — kullanıcı bunları sürükleyerek
+// sırasını değiştirebilir ve kenarından tutup genişliğini ayarlayabilir
+// (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
+// kimliklerini hem de varsayılan genişliklerini taşır; sırası
+// DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
+type ColumnId = "date" | "title" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "detail", "messages", "person", "amount", "location", "tags", "action"];
+const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
+  date: 100,
+  title: 150,
+  detail: 220,
+  messages: 210,
+  person: 90,
+  amount: 110,
+  location: 150,
+  tags: 140,
+  action: 110,
+};
+const MIN_COLUMN_WIDTH = 64;
+const COLUMNS_STORAGE_KEY = "mf-records-columns-v1";
+
 export function Records({
   language,
   kind,
@@ -157,6 +179,7 @@ export function Records({
   setSearch,
   cashTransfers,
   onTransfersChanged,
+  onCommentsRead,
   readOnly,
 }: {
   language: Language;
@@ -175,9 +198,267 @@ export function Records({
   setSearch: (v: string) => void;
   cashTransfers: CashTransfer[];
   onTransfersChanged: () => void;
+  onCommentsRead?: () => void;
   readOnly: boolean;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
+  const [commentTarget, setCommentTarget] = useState<RecordItem | null>(null);
+  // Manual row order (drag handle in the İşlem column) — a per-kind override
+  // on top of the default date/id sort, kept in localStorage since it's a
+  // personal display preference, not app data. Ids not in the saved order
+  // (new records) fall back to their normal sorted position, after the ones
+  // the user has placed.
+  const [rowOrder, setRowOrder] = useState<number[]>([]);
+  const [draggedRowId, setDraggedRowId] = useState<number | null>(null);
+  const rowOrderStorageKey = `mf-row-order-${kind}`;
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(rowOrderStorageKey);
+      setRowOrder(saved ? JSON.parse(saved) : []);
+    } catch {
+      setRowOrder([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
+  function persistRowOrder(order: number[]) {
+    setRowOrder(order);
+    try {
+      localStorage.setItem(rowOrderStorageKey, JSON.stringify(order));
+    } catch {
+      // Quota or private-mode failure — the order just won't survive reload.
+    }
+  }
+  // Sütun sırası ve genişlikleri — Kasalar/Gelir/Gider üçünde de aynı
+  // sütun kimlikleri geçerli olduğu için tek, paylaşılan bir tercih olarak
+  // saklanır (kind'a göre ayrı değil).
+  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(DEFAULT_COLUMN_ORDER);
+  const [columnWidths, setColumnWidths] = useState<Record<ColumnId, number>>(DEFAULT_COLUMN_WIDTHS);
+  const [columnsLoaded, setColumnsLoaded] = useState(false);
+  const [draggedColumn, setDraggedColumn] = useState<ColumnId | null>(null);
+  const resizingRef = useRef<{ id: ColumnId; startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COLUMNS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { order?: string[]; widths?: Partial<Record<ColumnId, number>> };
+        if (Array.isArray(parsed.order)) {
+          const valid = parsed.order.filter((id): id is ColumnId => (DEFAULT_COLUMN_ORDER as string[]).includes(id));
+          const missing = DEFAULT_COLUMN_ORDER.filter((id) => !valid.includes(id));
+          setColumnOrder([...valid, ...missing]);
+        }
+        if (parsed.widths) setColumnWidths((w) => ({ ...w, ...parsed.widths }));
+      }
+    } catch {
+      // Corrupt/unavailable storage — defaults stay in place.
+    }
+    setColumnsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!columnsLoaded) return;
+    try {
+      localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify({ order: columnOrder, widths: columnWidths }));
+    } catch {
+      // Quota or private-mode failure — the layout just won't survive reload.
+    }
+  }, [columnOrder, columnWidths, columnsLoaded]);
+
+  function reorderColumn(draggedId: ColumnId, targetId: ColumnId) {
+    setColumnOrder((order) => {
+      const from = order.indexOf(draggedId);
+      const to = order.indexOf(targetId);
+      if (from === -1 || to === -1 || from === to) return order;
+      const next = [...order];
+      next.splice(from, 1);
+      next.splice(to, 0, draggedId);
+      return next;
+    });
+  }
+
+  function onResizeMove(e: MouseEvent) {
+    const r = resizingRef.current;
+    if (!r) return;
+    const next = Math.max(MIN_COLUMN_WIDTH, r.startWidth + (e.clientX - r.startX));
+    setColumnWidths((w) => ({ ...w, [r.id]: next }));
+  }
+  function onResizeEnd() {
+    resizingRef.current = null;
+    window.removeEventListener("mousemove", onResizeMove);
+    window.removeEventListener("mouseup", onResizeEnd);
+  }
+  function startResize(e: ReactMouseEvent, id: ColumnId) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = { id, startX: e.clientX, startWidth: columnWidths[id] };
+    window.addEventListener("mousemove", onResizeMove);
+    window.addEventListener("mouseup", onResizeEnd);
+  }
+
+  function columnLabel(id: ColumnId): string {
+    switch (id) {
+      case "date":
+        return tx(language, "Tarih", "Date", "Tarîx");
+      case "title":
+        return kind === "cash"
+          ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
+          : tx(language, "Ana Başlık", "Main Category", "Sernavê Sereke");
+      case "detail":
+        return showListColumn
+          ? tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")
+          : tx(language, "Detay / Not", "Detail / Note", "Hûragahî / Nîşe");
+      case "messages":
+        return tx(language, "Mesajlar", "Messages", "Peyam");
+      case "person":
+        return tx(language, "Kişi", "Person", "Kes");
+      case "amount":
+        return tx(language, "Miktar", "Amount", "Meblağ");
+      case "location":
+        return kind === "cash"
+          ? tx(language, "Kasa Yeri", "Cash Location", "Cihê Qaseyê")
+          : tx(language, "Proje / Birim", "Project / Unit", "Proje / Yekîne");
+      case "tags":
+        return tx(language, "Etiket", "Tag", "Etîket");
+      case "action":
+        return tx(language, "İşlem", "Action", "Çalakî");
+    }
+  }
+  function columnCellClassName(id: ColumnId): string {
+    return id === "amount" ? "amount" : "";
+  }
+  function renderCell(
+    id: ColumnId,
+    x: RecordItem,
+    ctx: { pendingTransfer?: CashTransfer; canApprove?: boolean },
+  ) {
+    switch (id) {
+      case "date":
+        return date(x.date, language);
+      case "title":
+        return (
+          <>
+            <b className="cellTitle" title={localizeData(x.source, language)}>
+              {localizeData(x.source, language)}
+            </b>
+            {ctx.pendingTransfer && (
+              <small className="subNote pendingBadge">
+                ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}
+              </small>
+            )}
+          </>
+        );
+      case "detail":
+        return showListColumn ? (
+          x.listName ? (
+            <button
+              type="button"
+              className="linkButton"
+              onClick={() => openList(x.listName)}
+              title={tx(
+                language,
+                "Bu listeye ait tüm kayıtları göster",
+                "Show all records in this list",
+                "Hemû qeydên vê lîsteyê nîşan bide",
+              )}
+            >
+              {localizeData(x.listName, language)}
+            </button>
+          ) : (
+            "—"
+          )
+        ) : (
+          <>
+            {localizeData(x.detail || x.note, language)}
+            <small className="subNote">{x.detail && localizeData(x.note, language)}</small>
+          </>
+        );
+      case "messages":
+        return (
+          <button
+            type="button"
+            className={`messagesCell${commentSummaries[x.id] ? "" : " messagesCellEmpty"}${
+              commentSummaries[x.id]?.hasAttention ? " attention" : ""
+            }`}
+            title={commentSummaries[x.id]?.lastText}
+            onClick={() => setCommentTarget(x)}
+          >
+            {commentSummaries[x.id] ? (
+              <>
+                {commentSummaries[x.id].hasAttention ? "⚠️" : "💬"}
+                <b>{commentSummaries[x.id].lastUserName}:</b>
+                <span className="messagesCellText">{commentSummaries[x.id].lastText}</span>
+                <span className="messagesCellCount">{commentSummaries[x.id].count}</span>
+              </>
+            ) : (
+              <>💬 {tx(language, "Yorum ekle", "Add a comment", "Şîrove zêde bike")}</>
+            )}
+          </button>
+        );
+      case "person":
+        return localizeData(x.person, language);
+      case "amount":
+        return money(x.amount, x.currency);
+      case "location":
+        return (
+          <>
+            {localizeData(x.project, language)}
+            {x.cashAccount && <small className="subNote">▣ {localizeData(x.cashAccount, language)}</small>}
+          </>
+        );
+      case "tags":
+        return (
+          <div className="tagRow">
+            {(x.tags || []).map((t) => (
+              <span key={t}>{localizeData(t, language)}</span>
+            ))}
+          </div>
+        );
+      case "action":
+        return (
+          <>
+            {!readOnly && ctx.canApprove && (
+              <button
+                type="button"
+                className="icon approve"
+                title={tx(language, "Aktarımı Onayla", "Approve Transfer", "Veguhastinê Erê Bike")}
+                disabled={approvingId === ctx.pendingTransfer!.id}
+                onClick={() => approveTransfer(ctx.pendingTransfer!.id)}
+              >
+                ✓
+              </button>
+            )}
+            {!readOnly && (
+              <>
+                <button className="icon edit" title={tx(language, "Düzenle", "Edit", "Biguherîne")} onClick={() => onEdit(x)}>
+                  ✎
+                </button>
+                <button
+                  className="icon delete"
+                  title={tx(language, "Sil", "Delete", "Jêbirin")}
+                  onClick={() => setDeleteTarget(x)}
+                >
+                  🗑
+                </button>
+              </>
+            )}
+            <span
+              className="icon rowDragHandle"
+              title={tx(
+                language,
+                "Satırı sürükleyerek yukarı/aşağı taşı",
+                "Drag to move this row up/down",
+                "Ji bo derbaskirina jor/jêr rêzê bikişîne",
+              )}
+            >
+              ⠿
+            </span>
+          </>
+        );
+    }
+  }
+  const [commentSummaries, setCommentSummaries] = useState<
+    Record<number, { count: number; lastText: string; lastUserName: string; hasAttention: boolean }>
+  >({});
   const [shareTarget, setShareTarget] = useState<CashAccountSummary | null>(null);
   const [shareBusyKey, setShareBusyKey] = useState<string | null>(null);
   const [dashboardShareBusy, setDashboardShareBusy] = useState(false);
@@ -448,9 +729,51 @@ export function Records({
       (!filterTag || x.tags.some((t) => t.toLowerCase().includes(filterTag.toLowerCase()))) &&
       JSON.stringify(x).toLowerCase().includes(search.toLowerCase()),
   );
+  const orderedRows = useMemo(() => {
+    if (!rowOrder.length) return rows;
+    const index = new Map(rowOrder.map((id, i) => [id, i]));
+    return [...rows].sort((a, b) => {
+      const ai = index.has(a.id) ? index.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const bi = index.has(b.id) ? index.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, rowOrder]);
+  function moveRow(draggedId: number, targetId: number) {
+    if (draggedId === targetId) return;
+    const currentIds = orderedRows.map((r) => r.id);
+    const from = currentIds.indexOf(draggedId);
+    const to = currentIds.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    const next = [...currentIds];
+    next.splice(from, 1);
+    next.splice(to, 0, draggedId);
+    persistRowOrder(next);
+  }
   const latestRows = [...records]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
     .slice(0, 5);
+  const rowIdsKey = rows.map((x) => x.id).join(",");
+  async function refreshCommentSummaries() {
+    if (!rowIdsKey) {
+      setCommentSummaries({});
+      return;
+    }
+    try {
+      const response = await fetch(`/api/comments/summary?ids=${rowIdsKey}`);
+      const data = await response.json().catch(() => ({}));
+      setCommentSummaries(response.ok ? (data.summaries ?? {}) : {});
+    } catch {
+      setCommentSummaries({});
+    }
+  }
+  // Powers the 💬 icon's hover preview (only shown once a record has ≥1
+  // comment) — refetched whenever the visible row set changes, and again
+  // right after the comment modal closes so a just-added comment shows up.
+  useEffect(() => {
+    refreshCommentSummaries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowIdsKey]);
   const title =
     kind === "cash"
       ? tx(language, "Kasalar", "Cash Accounts", "Qasayên Pere")
@@ -475,7 +798,7 @@ export function Records({
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Kayitlar");
     sheet.addRow(columns);
-    for (const x of rows) {
+    for (const x of orderedRows) {
       sheet.addRow([
         date(x.date),
         x.source,
@@ -959,132 +1282,84 @@ export function Records({
         </div>
       )}
       <div className={kind === "cash" ? "" : "recordsGrid"}>
-        <div className="recordsTable">
+        <div className="recordsTable resizableTable">
           <table>
+          <colgroup>
+            {columnOrder.map((id) => (
+              <col key={id} style={{ width: columnWidths[id] }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th>{tx(language, "Tarih", "Date", "Tarîx")}</th>
-              <th>
-                {kind === "cash"
-                  ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
-                  : tx(
-                      language,
-                      "Ana Başlık",
-                      "Main Category",
-                      "Sernavê Sereke",
-                    )}
-              </th>
-              <th>
-                {showListColumn
-                  ? tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")
-                  : tx(
-                      language,
-                      "Detay / Not",
-                      "Detail / Note",
-                      "Hûragahî / Nîşe",
-                    )}
-              </th>
-              <th>{tx(language, "Kişi", "Person", "Kes")}</th>
-              <th>{tx(language, "Miktar", "Amount", "Meblağ")}</th>
-              <th>
-                {kind === "cash"
-                  ? tx(language, "Kasa Yeri", "Cash Location", "Cihê Qaseyê")
-                  : tx(
-                      language,
-                      "Proje / Birim",
-                      "Project / Unit",
-                      "Proje / Yekîne",
-                    )}
-              </th>
-              <th>{tx(language, "Etiket", "Tag", "Etîket")}</th>
-              <th>{tx(language, "İşlem", "Action", "Çalakî")}</th>
+              {columnOrder.map((id) => (
+                <th
+                  key={id}
+                  className={draggedColumn === id ? "colDragging" : ""}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedColumn(id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(e) => {
+                    if (draggedColumn !== null) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedColumn !== null) reorderColumn(draggedColumn, id);
+                    setDraggedColumn(null);
+                  }}
+                  onDragEnd={() => setDraggedColumn(null)}
+                  title={tx(
+                    language,
+                    "Sürükleyerek sütunu taşı, kenarından tutup genişliğini ayarla",
+                    "Drag to move this column, drag its edge to resize",
+                    "Ji bo derbaskirina stûnê bikişîne, ji kêleka wê genîtiyê saz bike",
+                  )}
+                >
+                  <span className="colHeaderLabel">{columnLabel(id)}</span>
+                  <span
+                    className="colResizeHandle"
+                    draggable={false}
+                    onMouseDown={(e) => startResize(e, id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((x) => {
+            {orderedRows.map((x) => {
               const pendingTransfer =
                 kind !== "cash" ? cashTransfers.find((t) => t.toRecordId === x.id && t.status === "pending") : undefined;
               const canApprove = pendingTransfer && cashAccounts.some((a) => a.id === pendingTransfer.toCashAccountId);
               return (
-              <tr key={x.id} className={pendingTransfer ? "pendingTransferRow" : ""}>
-                <td>{date(x.date, language)}</td>
-                <td>
-                  <b className="cellTitle" title={localizeData(x.source, language)}>{localizeData(x.source, language)}</b>
-                  {pendingTransfer && (
-                    <small className="subNote pendingBadge">
-                      ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}
-                    </small>
-                  )}
-                </td>
-                <td>
-                  {showListColumn ? (
-                    x.listName ? (
-                      <button
-                        type="button"
-                        className="linkButton"
-                        onClick={() => openList(x.listName)}
-                        title={tx(
-                          language,
-                          "Bu listeye ait tüm kayıtları göster",
-                          "Show all records in this list",
-                          "Hemû qeydên vê lîsteyê nîşan bide",
-                        )}
-                      >
-                        {localizeData(x.listName, language)}
-                      </button>
-                    ) : (
-                      "—"
-                    )
-                  ) : (
-                    <>
-                      {localizeData(x.detail || x.note, language)}
-                      <small className="subNote">
-                        {x.detail && localizeData(x.note, language)}
-                      </small>
-                    </>
-                  )}
-                </td>
-                <td>{localizeData(x.person, language)}</td>
-                <td className="amount">{money(x.amount, x.currency)}</td>
-                <td>{localizeData(x.project, language)}{x.cashAccount && <small className="subNote">▣ {localizeData(x.cashAccount, language)}</small>}</td>
-                <td>
-                  <div className="tagRow">
-                    {(x.tags || []).map((t) => (
-                      <span key={t}>{localizeData(t, language)}</span>
-                    ))}
-                  </div>
-                </td>
-                <td>
-                  {!readOnly && canApprove && (
-                    <button
-                      type="button"
-                      className="icon approve"
-                      title={tx(language, "Aktarımı Onayla", "Approve Transfer", "Veguhastinê Erê Bike")}
-                      disabled={approvingId === pendingTransfer!.id}
-                      onClick={() => approveTransfer(pendingTransfer!.id)}
-                    >
-                      ✓
-                    </button>
-                  )}
-                  {!readOnly && (
-                    <>
-                      <button
-                        className="icon edit"
-                        title={tx(language, "Düzenle", "Edit", "Biguherîne")}
-                        onClick={() => onEdit(x)}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="icon delete"
-                        title={tx(language, "Sil", "Delete", "Jêbirin")}
-                        onClick={() => setDeleteTarget(x)}
-                      >
-                        🗑
-                      </button>
-                    </>
-                  )}
-                </td>
+              <tr
+                key={x.id}
+                className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}`}
+                draggable
+                onDragStart={(e) => {
+                  if (!(e.target as HTMLElement).closest(".rowDragHandle")) {
+                    e.preventDefault();
+                    return;
+                  }
+                  setDraggedRowId(x.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  if (draggedRowId !== null) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedRowId !== null) moveRow(draggedRowId, x.id);
+                  setDraggedRowId(null);
+                }}
+                onDragEnd={() => setDraggedRowId(null)}
+              >
+                {columnOrder.map((id) => (
+                  <td key={id} className={columnCellClassName(id)}>
+                    {renderCell(id, x, { pendingTransfer, canApprove })}
+                  </td>
+                ))}
               </tr>
               );
             })}
@@ -1143,6 +1418,17 @@ export function Records({
           onToggleDashboardShare={toggleDashboardShare}
           dashboardShareBusy={dashboardShareBusy}
           onClose={() => setShareTarget(null)}
+        />
+      )}
+      {commentTarget && (
+        <RecordCommentsModal
+          language={language}
+          record={commentTarget}
+          onRead={onCommentsRead}
+          onClose={() => {
+            setCommentTarget(null);
+            refreshCommentSummaries();
+          }}
         />
       )}
     </div>
