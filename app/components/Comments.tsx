@@ -333,6 +333,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
 
   const attentionThreads = (threads ?? []).filter((t) => t.comments.some((c) => c.isAttention));
   const unreadThreadCount = (threads ?? []).filter((t) => t.hasUnread).length;
+  const unreadAttentionCount = attentionThreads.filter((t) => t.hasUnread).length;
   const visibleThreads = tab === "attention" ? attentionThreads : threads ?? [];
   useEffect(() => {
     if (!visibleThreads.some((t) => t.record.id === selectedId)) {
@@ -366,7 +367,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
           onClick={() => setTab("attention")}
         >
           ⚠️ {tx(language, "Dikkat Yorumları", "Attention Comments", "Şîroveyên Balkêş")}
-          {attentionThreads.length > 0 && <b className="tabBarCount">{attentionThreads.length}</b>}
+          {unreadAttentionCount > 0 && <b className="tabBarCount">{unreadAttentionCount}</b>}
         </button>
       </div>
       {threads === null ? (
