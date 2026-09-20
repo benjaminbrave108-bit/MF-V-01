@@ -108,6 +108,20 @@ function toSessionUser(user: typeof users.$inferSelect): SessionUser {
   };
 }
 
+// Bumping lastSeenAt on every request would mean an UPDATE per API call —
+// throttled to once per ~30s per session instead, which is still frequent
+// enough to keep the online dot accurate against the client's 45s poll
+// (see refreshUnreadCommentsCount's interval in app/page.tsx) without
+// meaningfully adding write load to the hot request path. Fire-and-forget:
+// this must never slow down or fail the request it's riding on.
+const PRESENCE_BUMP_THROTTLE_MS = 30_000;
+function bumpLastSeen(db: ReturnType<typeof getDb>, token: string): void {
+  db.update(sessions)
+    .set({ lastSeenAt: new Date() })
+    .where(and(eq(sessions.id, token), lt(sessions.lastSeenAt, new Date(Date.now() - PRESENCE_BUMP_THROTTLE_MS))))
+    .catch(() => {});
+}
+
 export async function getSessionUser(request: Request): Promise<SessionUser | null> {
   const token = getSessionToken(request);
   if (!token) return null;
@@ -119,7 +133,20 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
     .where(and(eq(sessions.id, token), gt(sessions.expiresAt, new Date())))
     .limit(1);
   const row = rows[0];
-  return row ? toSessionUser(row.user) : null;
+  if (!row) return null;
+  bumpLastSeen(db, token);
+  return toSessionUser(row.user);
+}
+
+// "Online" = at least one session last seen within this window. Generous
+// enough to survive a couple of missed 45s polls without flickering offline.
+const ONLINE_WINDOW_MS = 120_000;
+export async function onlineUserIds(db: ReturnType<typeof getDb> = getDb()): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ userId: sessions.userId })
+    .from(sessions)
+    .where(gt(sessions.lastSeenAt, new Date(Date.now() - ONLINE_WINDOW_MS)));
+  return rows.map((r) => r.userId);
 }
 
 export async function requireSession(request: Request): Promise<{ user: SessionUser } | { response: Response }> {

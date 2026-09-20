@@ -134,6 +134,13 @@
       "when": 1789800085128,
       "tag": "0018_chunky_robin_chapel",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789889092875,
+      "tag": "0019_high_wendigo",
+      "breakpoints": true
     }
   ]
 }

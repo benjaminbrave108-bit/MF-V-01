@@ -32,6 +32,7 @@ export function Users({
   currentUserIsAdmin,
   currentUserIsSuperAdmin,
   checkPassword,
+  onlineUserIds,
 }: {
   language: Language;
   users: UserAccount[];
@@ -40,7 +41,9 @@ export function Users({
   currentUserIsAdmin: boolean;
   currentUserIsSuperAdmin: boolean;
   checkPassword: (password: string) => Promise<boolean>;
+  onlineUserIds: number[];
 }) {
+  const onlineSet = new Set(onlineUserIds);
   const [editing, setEditing] = useState<UserAccount | "new" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null);
   const [accessTarget, setAccessTarget] = useState<UserAccount | null>(null);
@@ -79,12 +82,22 @@ export function Users({
           const isSelf = u.username === currentUsername;
           const isLastAdmin = u.isAdmin && adminCount <= 1;
           const isLastSuperAdmin = u.isSuperAdmin && superAdminCount <= 1;
+          const isOnline = onlineSet.has(u.id);
           return (
             <article key={u.id}>
-              <b>{u.name.slice(0, 1).toUpperCase()}</b>
+              <b className="userAvatarWrap">
+                {u.name.slice(0, 1).toUpperCase()}
+                <span
+                  className={`userOnlineDot${isOnline ? " online" : ""}`}
+                  title={isOnline ? tx(language, "Çevrimiçi", "Online", "Girêdayî") : tx(language, "Çevrimdışı", "Offline", "Negirêdayî")}
+                />
+              </b>
               <span>
                 <strong>{u.name}</strong>
                 <small>@{u.username}</small>
+                <small className={`userOnlineLabel${isOnline ? " online" : ""}`}>
+                  {isOnline ? tx(language, "● Çevrimiçi", "● Online", "● Girêdayî") : tx(language, "○ Çevrimdışı", "○ Offline", "○ Negirêdayî")}
+                </small>
                 <em>{u.roleLabel}</em>
                 {u.locked && (
                   <span className="userPermTag userPermTagLocked">

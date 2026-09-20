@@ -10,10 +10,14 @@ import type { CashExpenseSheetComment, CashExpenseSheetRow, Language, RecordItem
 // One kasa's live total for this sheet's kind — sum of every income/expense
 // record linked to cashAccountName (records.cashAccount). This is what keeps
 // the sheet's Asıl Gelir/Gider column always matching the ledger instead of
-// drifting like a manually-typed spreadsheet.
-function kasaTotal(records: RecordItem[], cashAccountName: string, kind: "income" | "expense"): number {
+// drifting like a manually-typed spreadsheet. When both startDate and
+// endDate are given, only records dated within that range (inclusive) are
+// summed — a row with a Başlangıç/Bitiş range set is scoped to that period,
+// same as its Bütçe is when budgetAuto is on.
+function kasaTotal(records: RecordItem[], cashAccountName: string, kind: "income" | "expense", startDate?: string, endDate?: string): number {
   return records
     .filter((x) => x.kind === kind && x.cashAccount === cashAccountName)
+    .filter((x) => (!startDate || x.date >= startDate) && (!endDate || x.date <= endDate))
     .reduce((sum, row) => sum + row.amount, 0);
 }
 
@@ -67,7 +71,7 @@ export function CashExpenseSheet({
   const actualLabel = kind === "income"
     ? tx(language, "Asıl Gelir", "Actual Income", "Dahata Rastîn")
     : tx(language, "Asıl Gider", "Actual Expense", "Mesrefa Rastîn");
-  const budgetTotalLabel = tx(language, "Toplam Kasa Gelir Tutarı", "Total Kasa Income Amount", "Bi Giştî Meblağa Dahata Qase");
+  const budgetTotalLabel = tx(language, "Toplam Bütçe", "Total Budget", "Bi Giştî Budçe");
 
   // Sütun sırası/genişliği — Kasalar/Gelir/Gider tablosundaki gibi
   // sürükleyerek taşınabilir ve kenarından tutup boyutlandırılabilir. Tek,
@@ -165,7 +169,7 @@ export function CashExpenseSheet({
   }
 
   const kasaTotals = useMemo(
-    () => new Map(rows.map((row) => [row.id, kasaTotal(records, row.cashAccountName, kind)])),
+    () => new Map(rows.map((row) => [row.id, kasaTotal(records, row.cashAccountName, kind, row.startDate, row.endDate)])),
     [rows, records, kind],
   );
   const orderedRows = useMemo(() => {
@@ -225,7 +229,7 @@ export function CashExpenseSheet({
         onDragEnd={() => setDraggedColumn(null)}
         title={tx(language, "Sürükleyerek taşı, kenarından tutup genişliğini ayarla", "Drag to reorder, drag the edge to resize", "Ji bo veguhastinê bikişîne, ji kêleka wê bigire da ku firehiyê saz bike")}
       >
-        <span className="colHeaderLabel">{id === "budget" ? (<>{columnLabel(id)}<br /><small>({tx(language, "Kasa Gelir Tutarı", "Kasa Income Amount", "Meblağa Dahata Qase")})</small></>) : columnLabel(id)}</span>
+        <span className="colHeaderLabel">{id === "budget" ? (<>{columnLabel(id)}<br /><small>({tx(language, "Otomatik veya Elle", "Automatic or Manual", "Bixweber an bi Dest")})</small></>) : columnLabel(id)}</span>
         <span className="colResizeHandle" draggable={false} onMouseDown={(e) => startResize(e, id)} onClick={(e) => e.stopPropagation()} />
       </th>
     );
@@ -559,6 +563,7 @@ function CashExpenseSheetModal({
   const [startDate, setStartDate] = useState(initial?.startDate ?? new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
   const [budget, setBudget] = useState(initial?.budget ?? 0);
+  const [budgetAuto, setBudgetAuto] = useState(initial?.budgetAuto ?? true);
   const [reportReady, setReportReady] = useState(initial?.reportReady ?? false);
   const [reportDelivered, setReportDelivered] = useState(initial?.reportDelivered ?? false);
   const [reportDate, setReportDate] = useState(initial?.reportDate ?? "");
@@ -566,17 +571,29 @@ function CashExpenseSheetModal({
   const [note, setNote] = useState(initial?.note ?? "");
   const [resultNote, setResultNote] = useState(initial?.resultNote ?? "");
   const valid = Boolean(cashAccountName);
+  const hasRange = Boolean(startDate && endDate);
 
-  // Yeni satır eklerken kasayı seçer seçmez Bütçe'yi o kasanın kendi
-  // (gelir) tutarından, Sorumlu'yu da o kasanın kayıtlarında tek bir kişi
-  // varsa ondan otomatik doldur — kullanıcı isterse yine elle değiştirebilir.
-  // Düzenleme modunda (initial dolu) dokunmuyoruz, zaten kayıtlı değerler var.
+  // Bütçe otomatik modda: Başlangıç/Bitiş ikisi de girildiyse o aralıktaki
+  // kayıtların toplamı, girilmediyse kasanın kendi tutarı. Kasa, tarih
+  // aralığı veya mod değiştikçe canlı yeniden hesaplanır — kullanıcı "Elle
+  // gir" işaretlerse (budgetAuto=false) bir daha üzerine yazılmaz.
   useEffect(() => {
-    if (initial || !cashAccountName) return;
+    if (!budgetAuto || !cashAccountName) return;
+    if (hasRange) {
+      setBudget(kasaTotal(records, cashAccountName, kind, startDate, endDate));
+      return;
+    }
     const kasaRecord = records.find((x) => x.kind === "cash" && x.source === cashAccountName);
     // Kasa tutarı eksi (borç/düzeltme) olabilir — Bütçe kavramsal olarak
     // her zaman pozitif bir hedef olduğundan mutlak değerini kullanıyoruz.
     if (kasaRecord) setBudget(Math.abs(kasaRecord.amount));
+  }, [budgetAuto, cashAccountName, startDate, endDate, hasRange, records, kind]);
+
+  // Sorumlu'yu, kasa seçilince o kasanın kayıtlarında tek bir kişi varsa
+  // ondan otomatik doldur — sadece yeni satır eklerken (initial dolu
+  // değilken), kullanıcı isterse yine elle değiştirebilir.
+  useEffect(() => {
+    if (initial || !cashAccountName) return;
     const involvedPersons = [...new Set(
       records.filter((x) => x.kind === kind && x.cashAccount === cashAccountName).map((x) => x.person.trim()).filter(Boolean),
     )];
@@ -590,13 +607,13 @@ function CashExpenseSheetModal({
         onSubmit={(e) => {
           e.preventDefault();
           if (!valid) return;
-          onSave({ cashAccountName, startDate, endDate, budget, reportReady, reportDelivered, reportDate, responsible: responsible.trim(), note: note.trim(), resultNote: resultNote.trim() });
+          onSave({ cashAccountName, startDate, endDate, budget, budgetAuto, reportReady, reportDelivered, reportDate, responsible: responsible.trim(), note: note.trim(), resultNote: resultNote.trim() });
         }}
       >
         <div className="modalHead">
           <div>
             <h2>{initial ? tx(language, "Çizelge Satırını Düzenle", "Edit Sheet Row", "Rêza Çîzelgeyê Biguherîne") : tx(language, "Çizelgeye Kasa Ekle", "Add Cash Account to Sheet", "Qaseyê Li Çîzelgeyê Zêde Bike")}</h2>
-            <p>{tx(language, "Kasayı seçin; o kasaya ait tüm kayıtlar (tarih, kimden, tutar) çizelgeye olduğu gibi işlenir.", "Select the kasa; all of its records (date, from whom, amount) are carried into the sheet as-is.", "Qaseyê hilbijêre; hemû qeydên wê qaseyê (dîrok, ji kê, meblağ) wekî xwe tên çîzelgeyê.")}</p>
+            <p>{tx(language, "Kasayı seçin; Başlangıç ve Bitiş tarihi girerseniz Bütçe o aralıktaki kayıtların toplamı olarak otomatik hesaplanır, isterseniz elle de girebilirsiniz.", "Select the kasa; if you enter a Start and End date, Budget is automatically calculated as the total for that range — or you can enter it manually instead.", "Qaseyê hilbijêre; heke tu Dîroka Destpêk û Dawî binivîsî, Budçe wek giştiya wê navberê bixweber tê hesibandin — an tu dikarî bi dest jî binivîsî.")}</p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
@@ -617,8 +634,19 @@ function CashExpenseSheetModal({
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </label>
           <label>
-            {tx(language, "Bütçe (Kasa Gelir Tutarı)", "Budget (Kasa Income Amount)", "Budçe (Meblağa Dahata Qase)")}
-            <input type="number" min="0" value={budget || ""} onChange={(e) => setBudget(Number(e.target.value))} />
+            {tx(language, "Bütçe", "Budget", "Budçe")}
+            <input type="number" min="0" value={budget || ""} disabled={budgetAuto} onChange={(e) => setBudget(Number(e.target.value))} />
+            <small>
+              {budgetAuto
+                ? hasRange
+                  ? tx(language, "Otomatik: seçili tarih aralığındaki toplam", "Automatic: total for the selected date range", "Bixweber: giştiya navbera dîrokê ya hilbijartî")
+                  : tx(language, "Otomatik: kasanın kendi tutarı", "Automatic: the kasa's own amount", "Bixweber: meblağa xweya qaseyê")
+                : tx(language, "Elle girildi", "Entered manually", "Bi dest hate nivîsîn")}
+            </small>
+          </label>
+          <label className="checkboxField">
+            <input type="checkbox" checked={!budgetAuto} onChange={(e) => setBudgetAuto(!e.target.checked)} />
+            {tx(language, "Bütçeyi elle gireceğim", "I'll enter the budget manually", "Ez ê budçeyê bi dest binivîsim")}
           </label>
           <label>
             {tx(language, "Sorumlu / Kimden", "Responsible", "Berpirsiyar")}

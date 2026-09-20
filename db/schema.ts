@@ -47,6 +47,11 @@ export const sessions = pgTable("sessions", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  // Bumped (throttled, at most every ~30s) on every authenticated request
+  // that resolves this session — see getSessionUser in app/api/_lib/auth.ts.
+  // Powers Kullanıcılar' online/offline dot: a user counts as online while
+  // this is within the last couple of minutes.
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("sessions_user_id_idx").on(table.userId),
   index("sessions_expires_at_idx").on(table.expiresAt),
@@ -246,6 +251,11 @@ export const cashExpenseSheets = pgTable("cash_expense_sheets", {
   startDate: text("start_date").notNull().default(""),
   endDate: text("end_date").notNull().default(""),
   budget: numeric("budget", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  // true (default): budget is auto-summed from records in [startDate,
+  // endDate] (or the kasa's own amount when no range is set) — see
+  // CashExpenseSheetModal's auto-recompute effect. false: the user typed
+  // it in and it's never overwritten automatically.
+  budgetAuto: boolean("budget_auto").notNull().default(true),
   reportReady: boolean("report_ready").notNull().default(false),
   reportDelivered: boolean("report_delivered").notNull().default(false),
   reportDate: text("report_date").notNull().default(""),

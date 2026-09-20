@@ -163,6 +163,11 @@ export type CashExpenseSheetRow = {
   startDate: string;
   endDate: string;
   budget: number;
+  // true (default): Bütçe, Başlangıç/Bitiş tarih aralığındaki kayıtların
+  // toplamından otomatik hesaplanır (aralık boşsa kasanın kendi tutarına
+  // düşer). false: kullanıcı Bütçe'yi elle girdi, otomatik hesaplama onu
+  // bir daha ezmez.
+  budgetAuto: boolean;
   reportReady: boolean;
   reportDelivered: boolean;
   reportDate: string;

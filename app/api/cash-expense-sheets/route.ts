@@ -52,6 +52,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       startDate: payload.startDate,
       endDate: payload.endDate,
       budget: payload.budget,
+      budgetAuto: payload.budgetAuto,
       reportReady: payload.reportReady,
       reportDelivered: payload.reportDelivered,
       reportDate: payload.reportDate,

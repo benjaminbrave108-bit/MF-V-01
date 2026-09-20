@@ -2371,6 +2371,7 @@ td {
   align-items: flex-start;
 }
 .users article > b {
+  position: relative;
   flex: 0 0 auto;
   width: 49px;
   height: 49px;
@@ -2379,6 +2380,27 @@ td {
   color: #147b67;
   display: grid;
   place-items: center;
+}
+.userOnlineDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #b7c1c4;
+  border: 2px solid white;
+}
+.userOnlineDot.online {
+  background: #2f8f52;
+  box-shadow: 0 0 0 2px #2f8f5222;
+}
+.userOnlineLabel {
+  font-weight: 700;
+  color: #8a979b;
+}
+.userOnlineLabel.online {
+  color: #2f8f52;
 }
 .users span {
   min-width: 0;

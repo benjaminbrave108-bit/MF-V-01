@@ -136,6 +136,7 @@ export const cashExpenseSheetInputSchema = z.object({
   startDate: shortText(20),
   endDate: shortText(20),
   budget: z.number().finite().min(0).default(0),
+  budgetAuto: z.boolean().optional().default(true),
   reportReady: z.boolean().optional().default(false),
   reportDelivered: z.boolean().optional().default(false),
   reportDate: shortText(20),

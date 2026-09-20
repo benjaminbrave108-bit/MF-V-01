@@ -94,6 +94,26 @@ export default function Home() {
     const interval = setInterval(refreshUnreadCommentsCount, 45000);
     return () => clearInterval(interval);
   }, [signedIn]);
+  // Kullanıcılar sayfasındaki çevrimiçi noktası — admin için tüm o an aktif
+  // kullanıcıları, herkes için sadece kendi id'sini döner (bkz.
+  // /api/users/online). Aynı 45s ritmiyle yenilenir, bu istek zaten her
+  // oturumun lastSeenAt'ini de güncelliyor (see getSessionUser).
+  const [onlineUserIds, setOnlineUserIds] = useState<number[]>([]);
+  async function refreshOnlineUsers() {
+    try {
+      const response = await fetch("/api/users/online");
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setOnlineUserIds(data.onlineUserIds ?? []);
+    } catch {
+      // Leave the last known set in place.
+    }
+  }
+  useEffect(() => {
+    if (!signedIn) return;
+    refreshOnlineUsers();
+    const interval = setInterval(refreshOnlineUsers, 45000);
+    return () => clearInterval(interval);
+  }, [signedIn]);
   // Which "workspace" Kasa/Gelir/Gider/Ana Sayfa currently show: null is the
   // signed-in user's own data, otherwise the id of a user who shared kasas
   // with them (read-only — see the Ana Sayfa sidebar submenu below).
@@ -928,6 +948,7 @@ export default function Home() {
               currentUserIsAdmin={profile.isAdmin}
               currentUserIsSuperAdmin={profile.isSuperAdmin}
               checkPassword={checkPassword}
+              onlineUserIds={onlineUserIds}
             />
           )}
           {page === "settings" && (
