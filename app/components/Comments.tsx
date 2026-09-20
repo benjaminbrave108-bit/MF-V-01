@@ -226,9 +226,7 @@ export function RecordCommentsModal({
         <div className="modalHead">
           <div>
             <h2>{tx(language, "Yorumlar", "Comments", "Şîrove")}</h2>
-            <small>
-              {localizeData(record.source, language)} · {money(record.amount, record.currency)}
-            </small>
+            <small>{localizeData(record.source, language)}</small>
           </div>
           <button type="button" onClick={onClose}>
             ×
@@ -434,7 +432,6 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
                       {date(selected.record.date, language)} · {nav.find((n) => n.id === selected.record.kind)?.label[language] ?? selected.record.kind}
                     </small>
                   </div>
-                  <span className="amount">{money(selected.record.amount, selected.record.currency)}</span>
                 </header>
                 {selected.record.tags?.length ? (
                   <div className="tagRow">
