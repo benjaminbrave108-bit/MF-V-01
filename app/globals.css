@@ -645,36 +645,6 @@ header > h1 {
   .reportBuilderPickerGrid { grid-template-columns: 1fr; }
   .reportSignatureRow { flex-direction: column; }
 }
-.cashExpenseSheet { margin-top: 18px; }
-.cashExpenseSheetTable table { min-width: 1180px; }
-.cashExpenseSheetTable th, .cashExpenseSheetTable td { white-space: nowrap; }
-.cashExpenseSheetTable td.sheetNoteCell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cashExpenseSheetTable td.sheetNoteCell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-.cashExpenseSheetTable tfoot td { background: #e7f4ef; font-weight: 750; border-top: 2px solid #cfe4da; }
-.cashExpenseSheetTable input[type="checkbox"] { width: auto; }
-/* Kasa Gider Çizelgesi — 3 bölüm: Kasa/Bütçe (mavi), Rapor Durumu (amber),
-   Detay/Kişi Dağılımı/Yorum (yeşil, daraltılıp açılabilir). Her bölümün
-   kendi hafif zemin rengi var; bölüm sonlarında belirgin dikey çizgi. */
-.cashExpenseSheetTable .sheetGroupRow th { font-size: 10px; letter-spacing: .02em; cursor: default; overflow: visible; text-overflow: clip; white-space: normal; }
-.cashExpenseSheetTable .sheetGroupRow th small { font-weight: 700; text-transform: none; letter-spacing: 0; }
-.cashExpenseSheetTable .sheetGroupRow th.sheetGroupToggle { cursor: pointer; }
-.cashExpenseSheetTable th.sheetSection1, .cashExpenseSheetTable td.sheetSection1 { background: #eaf3f6; }
-.cashExpenseSheetTable thead th.sheetSection1 { background: #d7e8ed; color: #1f4652; }
-.cashExpenseSheetTable th.sheetSection2, .cashExpenseSheetTable td.sheetSection2 { background: #fdf6e8; }
-.cashExpenseSheetTable thead th.sheetSection2 { background: #f5e6c2; color: #6b4f14; }
-.cashExpenseSheetTable th.sheetSection3, .cashExpenseSheetTable td.sheetSection3 { background: #eef6ec; }
-.cashExpenseSheetTable thead th.sheetSection3 { background: #d9ead4; color: #2c4f24; }
-.cashExpenseSheetTable th.sheetSectionEnd, .cashExpenseSheetTable td.sheetSectionEnd { border-right: 2px solid #aebfc4; }
-/* İşlem (edit/delete) sütunu — 3 bölümden ayrı, kendi rengiyle belirgin. */
-.cashExpenseSheetTable th.sheetSectionAction, .cashExpenseSheetTable td.sheetSectionAction { background: #f1eaf8; border-left: 2px solid #c9b7e4; }
-.cashExpenseSheetTable thead th.sheetSectionAction { background: #ded0f0; color: #4a2e73; }
-.cashExpenseSheetTable tbody tr:hover td.sheetSectionAction { background: #e6daf5; }
-.cashExpenseSheetTable tbody tr:hover td.sheetSection1 { background: #dfeef2; }
-.cashExpenseSheetTable tbody tr:hover td.sheetSection2 { background: #f9edd2; }
-.cashExpenseSheetTable tbody tr:hover td.sheetSection3 { background: #e2f0dd; }
-.sheetGroupToggle { cursor: pointer; user-select: none; }
-.sheetGroupToggle:hover { filter: brightness(0.97); }
-.recordsPageTabs { margin-bottom: 16px; }
 .rowActions { display: flex; align-items: center; gap: 2px; }
 .checkboxField { flex-direction: row !important; align-items: center; gap: 8px !important; }
 .checkboxField input { width: auto; }

@@ -152,41 +152,6 @@ export type PreparedReport = {
   income: ReportLine[];
   expense: ReportLine[];
 };
-// Gelir Çizelgesi / Gider Çizelgesi row — see db/schema.ts's cashExpenseSheets
-// for why the actual-spend/income and per-person breakdown are NOT part of
-// this type: they are derived client-side from RecordItem[], never stored.
-export type CashExpenseSheetRow = {
-  id: number;
-  kind: "income" | "expense";
-  code: string;
-  cashAccountName: string;
-  startDate: string;
-  endDate: string;
-  budget: number;
-  // true (default): Bütçe, Başlangıç/Bitiş tarih aralığındaki kayıtların
-  // toplamından otomatik hesaplanır (aralık boşsa kasanın kendi tutarına
-  // düşer). false: kullanıcı Bütçe'yi elle girdi, otomatik hesaplama onu
-  // bir daha ezmez.
-  budgetAuto: boolean;
-  reportReady: boolean;
-  reportDelivered: boolean;
-  reportDate: string;
-  responsible: string;
-  note: string;
-  resultNote: string;
-  createdAt: string;
-  updatedAt?: string;
-};
-// Kasa Gider Çizelgesi row's "Yorum" thread — simpler than RecordComment
-// (no reactions, no attention flag), see db/schema.ts's cashExpenseSheetComments.
-export type CashExpenseSheetComment = {
-  id: number;
-  sheetRowId: number;
-  userId: number | null;
-  userName: string;
-  text: string;
-  createdAt: string;
-};
 export type TypographyKey = "pageTitle" | "sectionTitle" | "cardTitle" | "body" | "tableHeader" | "formText";
 export type TypographyRule = { size: number; font: string; color: string };
 export type TypographySettings = Record<TypographyKey, TypographyRule>;

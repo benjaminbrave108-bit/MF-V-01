@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { archive, cashExpenseSheets, financeNotes, preparedReports, records, settings, users } from "../../../db/schema";
+import { archive, financeNotes, preparedReports, records, settings, users } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
 import { accessibleCashAccountIds, accessibleCashAccountNames } from "../_lib/cash-access";
 import { json, withErrorHandling } from "../_lib/http";
@@ -55,7 +55,7 @@ export const GET = withErrorHandling(async (request: Request) => {
   const canArchive = user.isAdmin || user.permissions.includes("archive");
 
   const db = getDb();
-  const [accessibleIds, accessibleNames, recordRows, archiveRows, noteRows, reportRows, sheetRows, settingsRows, userRows] = await Promise.all([
+  const [accessibleIds, accessibleNames, recordRows, archiveRows, noteRows, reportRows, settingsRows, userRows] = await Promise.all([
     accessibleCashAccountIds(user, db),
     accessibleCashAccountNames(user, db),
     allowedKinds.length
@@ -64,9 +64,6 @@ export const GET = withErrorHandling(async (request: Request) => {
     canArchive ? db.select().from(archive).orderBy(desc(archive.at), desc(archive.id)) : Promise.resolve([]),
     canNotes ? db.select().from(financeNotes).orderBy(desc(financeNotes.updatedAt), desc(financeNotes.id)) : Promise.resolve([]),
     canReports ? db.select().from(preparedReports).orderBy(desc(preparedReports.createdAt)) : Promise.resolve([]),
-    allowedKinds.some((k) => k === "income" || k === "expense")
-      ? db.select().from(cashExpenseSheets).orderBy(desc(cashExpenseSheets.createdAt))
-      : Promise.resolve([]),
     db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).limit(1),
     // Every user gets their own row here even when not admin — Kullanıcılar
     // is open to everyone so they can view/edit their own account, just
@@ -84,16 +81,12 @@ export const GET = withErrorHandling(async (request: Request) => {
   const scopedReports = allowedNames === null
     ? reportRows
     : reportRows.filter((row) => !row.cashAccount || allowedNames.has(row.cashAccount));
-  const scopedSheets = sheetRows
-    .filter((row) => allowedKinds.includes(row.kind as Kind))
-    .filter((row) => allowedNames === null || !row.cashAccountName || allowedNames.has(row.cashAccountName));
 
   return json({
     records: scopeRecordsToAccessibleKasas(recordRows, accessibleIds),
     archive: scopedArchive.map(toClientArchiveItem),
     notes: noteRows,
     preparedReports: scopedReports,
-    cashExpenseSheets: scopedSheets,
     settings: settingsRows[0] ?? null,
     users: userRows.map(toClientUser),
   });

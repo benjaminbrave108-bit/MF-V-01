@@ -5,7 +5,6 @@ import { LanguageSetup, Login } from "./components/Login";
 import { ProfileModal } from "./components/ProfileModal";
 import { Dashboard } from "./components/Dashboard";
 import { Records, RecordModal } from "./components/Records";
-import { CashExpenseSheet } from "./components/CashExpenseSheet";
 import { Archive } from "./components/Archive";
 import { ReportBuilder } from "./components/ReportBuilder";
 import { Notes } from "./components/Notes";
@@ -19,7 +18,6 @@ import { adminOnlyPages } from "./lib/types";
 import type {
   ArchiveItem,
   CashAccountSummary,
-  CashExpenseSheetRow,
   CashTransfer,
   FinanceNote,
   Kind,
@@ -46,13 +44,6 @@ export default function Home() {
     null,
   );
   const [recordsSearch, setRecordsSearch] = useState("");
-  // Gelir sayfasındaki "Kayıtlar" / "Gelir Çizelgesi" alt sekmesi — Gider
-  // Çizelgesi kaldırıldı, Gider'de artık sadece Kayıtlar var. Sayfa
-  // değişince (Kasalar'a veya başka bir menüye geçince) "Kayıtlar"a döner.
-  const [recordsPageTab, setRecordsPageTab] = useState<"records" | "sheet">("records");
-  useEffect(() => {
-    setRecordsPageTab("records");
-  }, [page]);
   // Both start at a fixed, SSR-safe default and are corrected from
   // localStorage in an effect after mount (same pattern as uiZoom below) —
   // reading localStorage during the initial render would make the client's
@@ -196,7 +187,6 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
   const [preparedReports, setPreparedReports] = useState<PreparedReport[]>([]);
-  const [cashExpenseSheets, setCashExpenseSheets] = useState<CashExpenseSheetRow[]>([]);
   const [typography, setTypography] = useState<TypographySettings>(defaultTypography);
   const [uiZoom, setUiZoom] = useState(100);
   const [sidebarCompact, setSidebarCompact] = useState(false);
@@ -280,7 +270,6 @@ export default function Home() {
             : { ...note, relation: note.relation ?? "none", relationDetail: note.relationDetail ?? "" },
         ));
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
-        if (Array.isArray(data.cashExpenseSheets)) setCashExpenseSheets(data.cashExpenseSheets);
         if (Array.isArray(data.users)) setUsers(data.users);
         refreshCashAccounts();
         refreshCashTransfers();
@@ -562,45 +551,6 @@ export default function Home() {
     }
   }
 
-  const sheetSaveError = tx(language, "Çizelge kaydedilemedi.", "The sheet could not be saved.", "Çîzelge nehat tomarkirin.");
-  async function createCashExpenseSheet(input: Omit<CashExpenseSheetRow, "id" | "code" | "createdAt" | "updatedAt">) {
-    try {
-      const response = await fetch("/api/cash-expense-sheets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      if (!response.ok) return alert(sheetSaveError);
-      const data = await response.json();
-      setCashExpenseSheets((current) => [data.cashExpenseSheet, ...current]);
-    } catch {
-      alert(sheetSaveError);
-    }
-  }
-  async function updateCashExpenseSheet(row: CashExpenseSheetRow) {
-    try {
-      const response = await fetch(`/api/cash-expense-sheets/${row.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(row),
-      });
-      if (!response.ok) return alert(sheetSaveError);
-      const data = await response.json();
-      setCashExpenseSheets((current) => current.map((x) => (x.id === row.id ? data.cashExpenseSheet : x)));
-    } catch {
-      alert(sheetSaveError);
-    }
-  }
-  async function deleteCashExpenseSheet(id: number) {
-    try {
-      const response = await fetch(`/api/cash-expense-sheets/${id}`, { method: "DELETE" });
-      if (!response.ok) return alert(sheetSaveError);
-      setCashExpenseSheets((current) => current.filter((x) => x.id !== id));
-    } catch {
-      alert(sheetSaveError);
-    }
-  }
-
   async function signIn(username: string, password: string): Promise<string | null> {
     try {
       const response = await fetch("/api/auth/login", {
@@ -868,56 +818,30 @@ export default function Home() {
             <Dashboard records={dashboardRecords} language={language} goTo={setPage} />
           )}
           {(["cash", "income", "expense"] as Page[]).includes(page) && (
-            <>
-              {page === "income" && (
-                <div className="settingsMainTabs recordsPageTabs" role="tablist">
-                  <button type="button" role="tab" aria-selected={recordsPageTab === "records"} className={recordsPageTab === "records" ? "active" : ""} onClick={() => setRecordsPageTab("records")}>
-                    {tx(language, "Kayıtlar", "Records", "Qeyd")}
-                  </button>
-                  <button type="button" role="tab" aria-selected={recordsPageTab === "sheet"} className={recordsPageTab === "sheet" ? "active" : ""} onClick={() => setRecordsPageTab("sheet")}>
-                    {tx(language, "Gelir Çizelgesi", "Income Sheet", "Çîzelgeya Dahatê")}
-                  </button>
-                </div>
+            <Records
+              language={language}
+              kind={page as Kind}
+              records={contextRecords.filter(
+                (x) =>
+                  x.kind === page ||
+                  (page === "income" && x.kind === "cash"),
               )}
-              {(page === "cash" || page === "expense" || recordsPageTab === "records") && (
-                <Records
-                  language={language}
-                  kind={page as Kind}
-                  records={contextRecords.filter(
-                    (x) =>
-                      x.kind === page ||
-                      (page === "income" && x.kind === "cash"),
-                  )}
-                  allRecords={contextRecords}
-                  onAdd={() => setModal({ kind: page as Kind })}
-                  onEdit={(item) => setModal({ kind: item.kind, item })}
-                  onDelete={removeRecord}
-                  onImport={importRecords}
-                  checkPassword={checkPassword}
-                  cashAccounts={contextCashAccounts}
-                  users={users}
-                  onCashAccountsChange={setCashAccounts}
-                  search={recordsSearch}
-                  setSearch={setRecordsSearch}
-                  cashTransfers={cashTransfers}
-                  onTransfersChanged={refreshAfterCashTransfer}
-                  onCommentsRead={refreshUnreadCommentsCount}
-                  readOnly={viewingUserId !== null}
-                />
-              )}
-              {page === "income" && recordsPageTab === "sheet" && (
-                <CashExpenseSheet
-                  language={language}
-                  kind="income"
-                  records={contextRecords}
-                  rows={cashExpenseSheets.filter((row) => row.kind === "income")}
-                  onCreate={(input) => createCashExpenseSheet({ ...input, kind: "income" })}
-                  onUpdate={updateCashExpenseSheet}
-                  onDelete={deleteCashExpenseSheet}
-                  checkPassword={checkPassword}
-                />
-              )}
-            </>
+              allRecords={contextRecords}
+              onAdd={() => setModal({ kind: page as Kind })}
+              onEdit={(item) => setModal({ kind: item.kind, item })}
+              onDelete={removeRecord}
+              onImport={importRecords}
+              checkPassword={checkPassword}
+              cashAccounts={contextCashAccounts}
+              users={users}
+              onCashAccountsChange={setCashAccounts}
+              search={recordsSearch}
+              setSearch={setRecordsSearch}
+              cashTransfers={cashTransfers}
+              onTransfersChanged={refreshAfterCashTransfer}
+              onCommentsRead={refreshUnreadCommentsCount}
+              readOnly={viewingUserId !== null}
+            />
           )}
           {page === "reportBuilder" && (
             <ReportBuilder

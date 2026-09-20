@@ -130,25 +130,6 @@ export const preparedReportInputSchema = z.object({
   expense: z.array(z.record(z.string(), z.unknown())).max(2000).optional().default([]),
 });
 
-export const cashExpenseSheetInputSchema = z.object({
-  kind: z.enum(["income", "expense"]),
-  cashAccountName: shortText(200),
-  startDate: shortText(20),
-  endDate: shortText(20),
-  budget: z.number().finite().min(0).default(0),
-  budgetAuto: z.boolean().optional().default(true),
-  reportReady: z.boolean().optional().default(false),
-  reportDelivered: z.boolean().optional().default(false),
-  reportDate: shortText(20),
-  responsible: shortText(200),
-  note: shortText(2000),
-  resultNote: shortText(2000),
-});
-
-export const sheetCommentInputSchema = z.object({
-  text: z.string().trim().min(1).max(2000),
-});
-
 const languageSchema = z.enum(["tr", "en", "ku"]);
 
 export const settingsInputSchema = z.object({
