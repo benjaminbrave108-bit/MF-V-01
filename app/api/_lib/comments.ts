@@ -65,9 +65,40 @@ async function accessibleCommentedRecordIds(
     .map((r) => r.id);
 }
 
-// Sidebar "Yorumlar" badge count: comments on records `user` can see, newer
-// than that record's read marker (or never read at all), written by anyone
-// but `user` themself — you don't need to be told about your own comment.
+// Per-record "does this thread have a comment `userId` hasn't seen yet"
+// flag — newer than that record's read marker (or never read at all),
+// written by anyone but `userId` themself (you don't need to be told about
+// your own comment). Shared by the unread badge count, the Yorumlar list's
+// per-thread indicator, and the 💬 summary's per-row indicator, so all three
+// agree on exactly the same definition of "unread".
+export async function unreadRecordIds(
+  userId: number,
+  recordIds: number[],
+  db: DbClient,
+): Promise<Set<number>> {
+  const result = new Set<number>();
+  if (!recordIds.length) return result;
+
+  const [commentRows, readRows] = await Promise.all([
+    db
+      .select({ recordId: recordComments.recordId, userId: recordComments.userId, createdAt: recordComments.createdAt })
+      .from(recordComments)
+      .where(inArray(recordComments.recordId, recordIds)),
+    db.select().from(commentReads).where(and(eq(commentReads.userId, userId), inArray(commentReads.recordId, recordIds))),
+  ]);
+
+  const lastReadByRecordId = new Map(readRows.map((r) => [r.recordId, new Date(r.lastReadAt).getTime()]));
+  for (const comment of commentRows) {
+    if (comment.userId === userId) continue;
+    const lastRead = lastReadByRecordId.get(comment.recordId);
+    if (lastRead === undefined || new Date(comment.createdAt).getTime() > lastRead) result.add(comment.recordId);
+  }
+  return result;
+}
+
+// Sidebar "Yorumlar" badge count — same "unread" definition as
+// unreadRecordIds, just counting matching comments instead of distinct
+// records.
 export async function unreadCommentCount(
   user: Pick<SessionUser, "id" | "isAdmin" | "isSuperAdmin" | "permissions">,
   db: DbClient,

@@ -378,12 +378,13 @@ export function Records({
             type="button"
             className={`messagesCell${commentSummaries[x.id] ? "" : " messagesCellEmpty"}${
               commentSummaries[x.id]?.hasAttention ? " attention" : ""
-            }`}
+            }${commentSummaries[x.id]?.hasUnread ? " unread" : ""}`}
             title={commentSummaries[x.id]?.lastText}
             onClick={() => setCommentTarget(x)}
           >
             {commentSummaries[x.id] ? (
               <>
+                {commentSummaries[x.id].hasUnread && <span className="commentUnreadDot" title={tx(language, "Okunmadı", "Unread", "Nexwendî")} />}
                 {commentSummaries[x.id].hasAttention ? "⚠️" : "💬"}
                 <b>{commentSummaries[x.id].lastUserName}:</b>
                 <span className="messagesCellText">{commentSummaries[x.id].lastText}</span>
@@ -457,7 +458,7 @@ export function Records({
     }
   }
   const [commentSummaries, setCommentSummaries] = useState<
-    Record<number, { count: number; lastText: string; lastUserName: string; hasAttention: boolean }>
+    Record<number, { count: number; lastText: string; lastUserName: string; hasAttention: boolean; hasUnread: boolean }>
   >({});
   const [shareTarget, setShareTarget] = useState<CashAccountSummary | null>(null);
   const [shareBusyKey, setShareBusyKey] = useState<string | null>(null);

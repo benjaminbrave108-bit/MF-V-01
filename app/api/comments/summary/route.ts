@@ -3,6 +3,7 @@ import { getDb } from "../../../../db";
 import { recordComments, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { canAccessRecord } from "../../_lib/records";
+import { unreadRecordIds } from "../../_lib/comments";
 import { json, withErrorHandling } from "../../_lib/http";
 
 // Lightweight per-record comment summary (count + last comment) for a batch
@@ -27,15 +28,18 @@ export const GET = withErrorHandling(async (request: Request) => {
   }
   if (!allowedIds.size) return json({ summaries: {} });
 
-  const commentRows = await db
-    .select()
-    .from(recordComments)
-    .where(inArray(recordComments.recordId, [...allowedIds]))
-    .orderBy(asc(recordComments.createdAt), asc(recordComments.id));
+  const [commentRows, unreadIds] = await Promise.all([
+    db
+      .select()
+      .from(recordComments)
+      .where(inArray(recordComments.recordId, [...allowedIds]))
+      .orderBy(asc(recordComments.createdAt), asc(recordComments.id)),
+    unreadRecordIds(session.user.id, [...allowedIds], db),
+  ]);
 
   const summaries: Record<
     number,
-    { count: number; lastText: string; lastUserName: string; lastCreatedAt: string; hasAttention: boolean }
+    { count: number; lastText: string; lastUserName: string; lastCreatedAt: string; hasAttention: boolean; hasUnread: boolean }
   > = {};
   for (const comment of commentRows) {
     const existing = summaries[comment.recordId];
@@ -45,6 +49,7 @@ export const GET = withErrorHandling(async (request: Request) => {
       lastUserName: comment.userName,
       lastCreatedAt: comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt,
       hasAttention: (existing?.hasAttention ?? false) || comment.isAttention,
+      hasUnread: unreadIds.has(comment.recordId),
     };
   }
 

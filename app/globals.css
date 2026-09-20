@@ -2020,6 +2020,23 @@ td {
 .messagesCellEmpty {
   color: var(--muted);
 }
+/* Okunmamış yorum — küçük mavi nokta + kalın yazı, hem Kasalar/Gelir/Gider
+   satırındaki 💬 hücresinde hem de Yorumlar sayfasının soldaki başlık
+   listesinde aynı görünüm. */
+.commentUnreadDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #176b87;
+  flex: none;
+  margin-right: 1px;
+}
+.messagesCell.unread b,
+.messagesCell.unread .messagesCellText {
+  font-weight: 800;
+  color: #17384a;
+}
 .pendingTransferRow {
   background: #fdf8ec;
 }
@@ -3072,6 +3089,16 @@ main { min-width: 0; overflow-x: hidden; }
 .commentListItemHead strong {
   font-size: 12px;
   color: #263c46;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.commentListItem.unread .commentListItemHead strong {
+  font-weight: 800;
+}
+.commentListItem.unread .commentListItemPreview {
+  color: #2b3d44;
+  font-weight: 700;
 }
 .commentListItemHead .amount {
   font-size: 11px;

@@ -255,7 +255,7 @@ export function RecordCommentsModal({
 // its full thread inline — replying here posts to the exact same thread the
 // "💬" row action on Kasalar/Gelir/Gider opens.
 export function Comments({ language, onRead }: { language: Language; onRead?: () => void }) {
-  const [threads, setThreads] = useState<{ record: RecordItem; comments: RecordComment[] }[] | null>(null);
+  const [threads, setThreads] = useState<{ record: RecordItem; comments: RecordComment[]; hasUnread: boolean }[] | null>(null);
   const [busyRecordId, setBusyRecordId] = useState<number | null>(null);
   const [tab, setTab] = useState<"all" | "attention">("all");
   // Solda başlık listesi, sağda seçilen başlığın yorum ipliği — Notes tarzı
@@ -265,15 +265,6 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
 
   useEffect(() => {
     load();
-    // Viewing this page reads every thread shown on it.
-    (async () => {
-      try {
-        await fetch("/api/comments/read-all", { method: "POST" });
-        onRead?.();
-      } catch {
-        // Non-fatal — the badge just won't update until the next open/poll.
-      }
-    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -286,6 +277,26 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
       setThreads([]);
     }
   }
+
+  // Okunmamışlar sayfayı açar açmaz değil, kullanıcı o başlığı gerçekten
+  // seçtiğinde (soldaki listeden tıklayınca ya da ilk başlık otomatik
+  // seçilince) okunmuş sayılır — böylece liste açıldığı anda her şey
+  // "okundu" olup gitmez, hangi başlıkların okunmadığı görülebilir kalır.
+  useEffect(() => {
+    if (selectedId === null) return;
+    const thread = (threads ?? []).find((t) => t.record.id === selectedId);
+    if (!thread || !thread.hasUnread) return;
+    (async () => {
+      try {
+        await fetch(`/api/records/${selectedId}/comments/read`, { method: "POST" });
+        setThreads((current) => (current ?? []).map((t) => (t.record.id === selectedId ? { ...t, hasUnread: false } : t)));
+        onRead?.();
+      } catch {
+        // Non-fatal — the badge/dot just won't update until the next open/poll.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, threads]);
 
   async function addComment(recordId: number, text: string, isAttention: boolean) {
     setBusyRecordId(recordId);
@@ -323,6 +334,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
   }
 
   const attentionThreads = (threads ?? []).filter((t) => t.comments.some((c) => c.isAttention));
+  const unreadThreadCount = (threads ?? []).filter((t) => t.hasUnread).length;
   const visibleThreads = tab === "attention" ? attentionThreads : threads ?? [];
   useEffect(() => {
     if (!visibleThreads.some((t) => t.record.id === selectedId)) {
@@ -346,6 +358,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
       <div className="settingsMainTabs commentsMainTabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
           {tx(language, "Tüm Yorumlar", "All Comments", "Hemû Şîrove")}
+          {unreadThreadCount > 0 && <b className="tabBarCount">{unreadThreadCount}</b>}
         </button>
         <button
           type="button"
@@ -381,18 +394,21 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
       ) : (
         <div className="commentSplitView">
           <div className="commentSplitList">
-            {visibleThreads.map(({ record, comments }) => {
+            {visibleThreads.map(({ record, comments, hasUnread }) => {
               const last = comments[comments.length - 1];
               const hasAttention = comments.some((c) => c.isAttention);
               return (
                 <button
                   type="button"
                   key={record.id}
-                  className={`commentListItem${selectedId === record.id ? " active" : ""}`}
+                  className={`commentListItem${selectedId === record.id ? " active" : ""}${hasUnread ? " unread" : ""}`}
                   onClick={() => setSelectedId(record.id)}
                 >
                   <span className="commentListItemHead">
-                    <strong>{localizeData(record.source, language)}</strong>
+                    <strong>
+                      {hasUnread && <span className="commentUnreadDot" title={tx(language, "Okunmadı", "Unread", "Nexwendî")} />}
+                      {localizeData(record.source, language)}
+                    </strong>
                     <span className="amount">{money(record.amount, record.currency)}</span>
                   </span>
                   <small>

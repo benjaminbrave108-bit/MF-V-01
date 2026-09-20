@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { recordComments, records } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
 import { accessibleCashAccountIds } from "../_lib/cash-access";
-import { reactionsByCommentId } from "../_lib/comments";
+import { reactionsByCommentId, unreadRecordIds } from "../_lib/comments";
 import { json, withErrorHandling } from "../_lib/http";
 import type { Kind } from "../_lib/types";
 
@@ -48,13 +48,17 @@ export const GET = withErrorHandling(async (request: Request) => {
   }
 
   const visibleCommentIds = commentRows.filter((c) => allowedRecordIds.has(c.recordId)).map((c) => c.id);
-  const reactions = await reactionsByCommentId(visibleCommentIds, session.user.id, db);
+  const [reactions, unreadIds] = await Promise.all([
+    reactionsByCommentId(visibleCommentIds, session.user.id, db),
+    unreadRecordIds(session.user.id, [...commentsByRecordId.keys()], db),
+  ]);
 
   const threads = recordRows
     .filter((r) => commentsByRecordId.has(r.id))
     .map((record) => ({
       record,
       comments: commentsByRecordId.get(record.id)!.map((c) => ({ ...c, reactions: reactions.get(c.id) ?? [] })),
+      hasUnread: unreadIds.has(record.id),
     }))
     .sort((a, b) => {
       const aLast = new Date(a.comments[a.comments.length - 1].createdAt).getTime();
