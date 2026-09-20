@@ -27,13 +27,13 @@ function kasaTotal(records: RecordItem[], cashAccountName: string, kind: "income
 // taşıma yok, sadece bölüm içinde sıralama, çünkü renkli gruplamanın anlamı
 // budur; bölüm başlığının colSpan'ı da böylece hep sabit sütun sayısına eşit
 // kalır.
-type SheetColumnId = "code" | "kasa" | "start" | "end" | "budget" | "actual" | "reportReady" | "reportDelivered" | "responsible" | "note" | "resultNote" | "comment";
+type SheetColumnId = "code" | "kasa" | "start" | "end" | "budget" | "actual" | "reportReady" | "reportDelivered" | "reportDate" | "responsible" | "note" | "resultNote" | "comment";
 const SECTION1_DEFAULT: SheetColumnId[] = ["code", "kasa", "start", "end", "budget", "actual"];
-const SECTION2_DEFAULT: SheetColumnId[] = ["reportReady", "reportDelivered"];
+const SECTION2_DEFAULT: SheetColumnId[] = ["reportReady", "reportDelivered", "reportDate"];
 const SECTION3_DEFAULT: SheetColumnId[] = ["responsible", "note", "resultNote", "comment"];
 const DEFAULT_SHEET_WIDTHS: Record<SheetColumnId, number> = {
   code: 70, kasa: 150, start: 110, end: 110, budget: 140, actual: 140,
-  reportReady: 90, reportDelivered: 120,
+  reportReady: 90, reportDelivered: 120, reportDate: 110,
   responsible: 130, note: 170, resultNote: 170, comment: 90,
 };
 const MIN_SHEET_COLUMN_WIDTH = 56;
@@ -204,8 +204,9 @@ export function CashExpenseSheet({
       case "end": return tx(language, "Bitiş", "End", "Dawî");
       case "budget": return tx(language, "Bütçe", "Budget", "Budçe");
       case "actual": return actualLabel;
-      case "reportReady": return tx(language, "Rapor", "Report", "Rapor");
+      case "reportReady": return tx(language, "Rapor Hazır", "Report Ready", "Rapor Amade");
       case "reportDelivered": return tx(language, "Rapor Verildi", "Report Delivered", "Rapor Hate Dayin");
+      case "reportDate": return tx(language, "Rapor Tarihi", "Report Date", "Dîroka Raporê");
       case "responsible": return tx(language, "Sorumlu", "Responsible", "Berpirsiyar");
       case "note": return tx(language, "Özel Not", "Note", "Nîşe");
       case "resultNote": return tx(language, "Sonuç", "Result", "Encam");
@@ -244,6 +245,7 @@ export function CashExpenseSheet({
       case "actual": return money(actual);
       case "reportReady": return <input type="checkbox" checked={row.reportReady} onChange={(e) => onUpdate({ ...row, reportReady: e.target.checked })} />;
       case "reportDelivered": return <input type="checkbox" checked={row.reportDelivered} onChange={(e) => onUpdate({ ...row, reportDelivered: e.target.checked })} />;
+      case "reportDate": return row.reportDate ? date(row.reportDate, language) : "—";
       case "responsible": return localizeData(row.responsible, language) || "—";
       case "note": return <span title={row.note}>{row.note || "—"}</span>;
       case "resultNote": return <span title={row.resultNote}>{row.resultNote || "—"}</span>;
@@ -282,7 +284,7 @@ export function CashExpenseSheet({
           <button type="button" className="light" disabled={!orderedRows.length} onClick={() => downloadCashFlowSheet(rows, kasaTotals, totals, kind, language)}>
             ⇩ {tx(language, "Excel'e Aktar", "Export to Excel", "Bal ve Excel Derxe")}
           </button>
-          <button className="primary" onClick={() => setCreating(true)}>＋ {tx(language, "Çizelgeye Kasa Ekle", "Add Cash Account to Sheet", "Qaseyê Li Çîzelgeyê Zêde Bike")}</button>
+          <button className="primary" onClick={() => setCreating(true)}>⚙ {tx(language, "Çizelge Filtresi Oluştur", "Create Sheet Filter", "Fîltreya Çîzelgeyê Biafirîne")}</button>
         </div>
       </div>
       <div className="recordsTable cashExpenseSheetTable resizableTable">
@@ -359,7 +361,7 @@ export function CashExpenseSheet({
             {!orderedRows.length && (
               <tr>
                 <td colSpan={totalCols} className="empty">
-                  {tx(language, "Henüz çizelgeye kasa eklenmedi.", "No cash account added to the sheet yet.", "Hîn qase li çîzelgeyê nehatiye zêdekirin.")}
+                  {tx(language, "Henüz çizelge filtresi oluşturulmadı.", "No sheet filter created yet.", "Hîn fîltreya çîzelgeyê nehatiye afirandin.")}
                 </td>
               </tr>
             )}
@@ -612,8 +614,8 @@ function CashExpenseSheetModal({
       >
         <div className="modalHead">
           <div>
-            <h2>{initial ? tx(language, "Çizelge Satırını Düzenle", "Edit Sheet Row", "Rêza Çîzelgeyê Biguherîne") : tx(language, "Çizelgeye Kasa Ekle", "Add Cash Account to Sheet", "Qaseyê Li Çîzelgeyê Zêde Bike")}</h2>
-            <p>{tx(language, "Kasayı seçin; Başlangıç ve Bitiş tarihi girerseniz Bütçe o aralıktaki kayıtların toplamı olarak otomatik hesaplanır, isterseniz elle de girebilirsiniz.", "Select the kasa; if you enter a Start and End date, Budget is automatically calculated as the total for that range — or you can enter it manually instead.", "Qaseyê hilbijêre; heke tu Dîroka Destpêk û Dawî binivîsî, Budçe wek giştiya wê navberê bixweber tê hesibandin — an tu dikarî bi dest jî binivîsî.")}</p>
+            <h2>{initial ? tx(language, "Çizelge Satırını Düzenle", "Edit Sheet Row", "Rêza Çîzelgeyê Biguherîne") : tx(language, "Çizelge Filtresi Oluştur", "Create Sheet Filter", "Fîltreya Çîzelgeyê Biafirîne")}</h2>
+            <p>{tx(language, "Aşağıdaki seçenekleri kullanarak kasayı ve tarih aralığını belirleyin; Bütçe o aralıktaki kayıtların toplamı olarak otomatik hesaplanır, isterseniz elle de girebilirsiniz.", "Use the options below to pick the kasa and date range; Budget is automatically calculated as the total for that range — or you can enter it manually instead.", "Bi karanîna vebijarkên jêrîn qase û navbera dîrokê diyar bike; Budçe wek giştiya wê navberê bixweber tê hesibandin — an tu dikarî bi dest jî binivîsî.")}</p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
@@ -675,7 +677,7 @@ function CashExpenseSheetModal({
         </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-          <button className="primary" disabled={!valid}>{initial ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Ekle", "Add", "Zêde Bike")}</button>
+          <button className="primary" disabled={!valid}>{initial ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Filtreyi Oluştur", "Create Filter", "Fîltreyê Biafirîne")}</button>
         </div>
       </form>
     </div>
@@ -711,13 +713,14 @@ async function downloadCashFlowSheet(
     tx(language, "Bitiş", "End", "Dawî"),
     tx(language, "Bütçe", "Budget", "Budçe"),
     actualLabel,
-    tx(language, "Rapor", "Report", "Rapor"),
+    tx(language, "Rapor Hazır", "Report Ready", "Rapor Amade"),
     tx(language, "Rapor Verildi", "Report Delivered", "Rapor Hate Dayin"),
+    tx(language, "Rapor Tarihi", "Report Date", "Dîroka Raporê"),
     tx(language, "Sorumlu", "Responsible", "Berpirsiyar"),
     tx(language, "Özel Not", "Note", "Nîşe"),
     tx(language, "Sonuç", "Result", "Encam"),
   ];
-  sheet.columns = headers.map((_, index) => ({ width: index < 2 ? 20 : index >= 8 && index <= 10 ? 24 : 16 }));
+  sheet.columns = headers.map((_, index) => ({ width: index < 2 ? 20 : index >= 9 && index <= 11 ? 24 : 16 }));
 
   const thin = { style: "thin" as const, color: { argb: "FFD3DDDD" } };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
@@ -753,6 +756,7 @@ async function downloadCashFlowSheet(
       kasaTotals.get(row.id) ?? 0,
       row.reportReady ? "✓" : "",
       row.reportDelivered ? "✓" : "",
+      row.reportDate ? date(row.reportDate, "tr") : "",
       row.responsible,
       row.note,
       row.resultNote,
