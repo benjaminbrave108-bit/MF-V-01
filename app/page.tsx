@@ -46,10 +46,9 @@ export default function Home() {
     null,
   );
   const [recordsSearch, setRecordsSearch] = useState("");
-  // Gelir/Gider sayfalarındaki "Kayıtlar" / "{Gelir|Gider} Çizelgesi" alt
-  // sekmesi — sayfa değişince (Kasalar'a veya başka bir menüye geçince)
-  // "Kayıtlar"a döner, aksi halde Gelir'de kalan sekim Gider'e taşınıp
-  // kafa karıştırmasın.
+  // Gelir sayfasındaki "Kayıtlar" / "Gelir Çizelgesi" alt sekmesi — Gider
+  // Çizelgesi kaldırıldı, Gider'de artık sadece Kayıtlar var. Sayfa
+  // değişince (Kasalar'a veya başka bir menüye geçince) "Kayıtlar"a döner.
   const [recordsPageTab, setRecordsPageTab] = useState<"records" | "sheet">("records");
   useEffect(() => {
     setRecordsPageTab("records");
@@ -870,19 +869,17 @@ export default function Home() {
           )}
           {(["cash", "income", "expense"] as Page[]).includes(page) && (
             <>
-              {(page === "income" || page === "expense") && (
+              {page === "income" && (
                 <div className="settingsMainTabs recordsPageTabs" role="tablist">
                   <button type="button" role="tab" aria-selected={recordsPageTab === "records"} className={recordsPageTab === "records" ? "active" : ""} onClick={() => setRecordsPageTab("records")}>
                     {tx(language, "Kayıtlar", "Records", "Qeyd")}
                   </button>
                   <button type="button" role="tab" aria-selected={recordsPageTab === "sheet"} className={recordsPageTab === "sheet" ? "active" : ""} onClick={() => setRecordsPageTab("sheet")}>
-                    {page === "income"
-                      ? tx(language, "Gelir Çizelgesi", "Income Sheet", "Çîzelgeya Dahatê")
-                      : tx(language, "Gider Çizelgesi", "Expense Sheet", "Çîzelgeya Mesrefê")}
+                    {tx(language, "Gelir Çizelgesi", "Income Sheet", "Çîzelgeya Dahatê")}
                   </button>
                 </div>
               )}
-              {(page === "cash" || recordsPageTab === "records") && (
+              {(page === "cash" || page === "expense" || recordsPageTab === "records") && (
                 <Records
                   language={language}
                   kind={page as Kind}
@@ -908,13 +905,13 @@ export default function Home() {
                   readOnly={viewingUserId !== null}
                 />
               )}
-              {(page === "income" || page === "expense") && recordsPageTab === "sheet" && (
+              {page === "income" && recordsPageTab === "sheet" && (
                 <CashExpenseSheet
                   language={language}
-                  kind={page}
+                  kind="income"
                   records={contextRecords}
-                  rows={cashExpenseSheets.filter((row) => row.kind === page)}
-                  onCreate={(input) => createCashExpenseSheet({ ...input, kind: page })}
+                  rows={cashExpenseSheets.filter((row) => row.kind === "income")}
+                  onCreate={(input) => createCashExpenseSheet({ ...input, kind: "income" })}
                   onUpdate={updateCashExpenseSheet}
                   onDelete={deleteCashExpenseSheet}
                   checkPassword={checkPassword}
