@@ -498,11 +498,11 @@ function SheetCommentsModal({
             ) : (
               comments.map((c) => (
                 <div className="commentItem" key={c.id}>
-                  <div className="commentItemHead">
+                  <div className="commentItemLine">
                     <strong>{c.userName || tx(language, "Silinmiş kullanıcı", "Deleted user", "Bikarhênerê hatiye jêbirin")}</strong>
                     <small>{new Date(c.createdAt).toLocaleString(language === "en" ? "en-GB" : "tr-TR")}</small>
+                    <span className="commentItemText">{c.text}</span>
                   </div>
-                  <p>{c.text}</p>
                 </div>
               ))
             )}

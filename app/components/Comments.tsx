@@ -90,18 +90,16 @@ export function CommentThread({
         ) : (
           comments.map((c) => (
             <div className={`commentItem${c.isAttention ? " commentItemAttention" : ""}`} key={c.id}>
-              <div className="commentItemHead">
-                <strong>
-                  {c.isAttention && (
-                    <span className="commentAttentionBadge" title={tx(language, "Dikkat", "Attention", "Balkêşî")}>
-                      ⚠️
-                    </span>
-                  )}
-                  {c.userName || tx(language, "Silinmiş kullanıcı", "Deleted user", "Bikarhênerê hatiye jêbirin")}
-                </strong>
+              <div className="commentItemLine">
+                {c.isAttention && (
+                  <span className="commentAttentionBadge" title={tx(language, "Dikkat", "Attention", "Balkêşî")}>
+                    ⚠️
+                  </span>
+                )}
+                <strong>{c.userName || tx(language, "Silinmiş kullanıcı", "Deleted user", "Bikarhênerê hatiye jêbirin")}</strong>
                 <small>{new Date(c.createdAt).toLocaleString(language === "en" ? "en-GB" : "tr-TR")}</small>
+                <span className="commentItemText">{c.text}</span>
               </div>
-              <p>{c.text}</p>
               <CommentReactions reactions={c.reactions} onToggle={(emoji) => onToggleReaction(c.id, emoji)} />
             </div>
           ))
@@ -260,6 +258,10 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
   const [threads, setThreads] = useState<{ record: RecordItem; comments: RecordComment[] }[] | null>(null);
   const [busyRecordId, setBusyRecordId] = useState<number | null>(null);
   const [tab, setTab] = useState<"all" | "attention">("all");
+  // Solda başlık listesi, sağda seçilen başlığın yorum ipliği — Notes tarzı
+  // ana/detay görünümü. Sekme değişince veya seçili başlık artık listede
+  // yoksa (attention filtresine takılınca vs.) ilk görünen başlığa döner.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
     load();
@@ -322,6 +324,13 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
 
   const attentionThreads = (threads ?? []).filter((t) => t.comments.some((c) => c.isAttention));
   const visibleThreads = tab === "attention" ? attentionThreads : threads ?? [];
+  useEffect(() => {
+    if (!visibleThreads.some((t) => t.record.id === selectedId)) {
+      setSelectedId(visibleThreads[0]?.record.id ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleThreads.map((t) => t.record.id).join(","), tab]);
+  const selected = visibleThreads.find((t) => t.record.id === selectedId) ?? null;
 
   return (
     <div className="panel">
@@ -329,12 +338,12 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
         title={tx(language, "Yorumlar", "Comments", "Şîrove")}
         sub={tx(
           language,
-          "Kasa, gelir ve gider kayıtlarına yapılan yorumlar — her kart ilgili kaydın kendi yorum kutusudur.",
-          "Comments made on cash, income and expense records — each card is that record's own comment box.",
-          "Şîroveyên li ser qeydên qase, dahat û mesrefan — her kart qutiya şîroveyê ya qeydê xwe ye.",
+          "Kasa, gelir ve gider kayıtlarına yapılan yorumlar — soldan bir başlık seçin, o kaydın yorum ipliği sağda açılır.",
+          "Comments made on cash, income and expense records — pick a title on the left, its thread opens on the right.",
+          "Şîroveyên li ser qeydên qase, dahat û mesrefan — ji milê çepê sernavekê hilbijêre, riştê şîroveyê li rastê vebe.",
         )}
       />
-      <div className="settingsMainTabs" role="tablist">
+      <div className="settingsMainTabs commentsMainTabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
           {tx(language, "Tüm Yorumlar", "All Comments", "Hemû Şîrove")}
         </button>
@@ -370,34 +379,68 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
           )}
         </small>
       ) : (
-        <div className="commentCardGrid">
-          {visibleThreads.map(({ record, comments }) => (
-            <article className="commentCard" key={record.id}>
-              <header>
-                <div>
-                  <strong>{localizeData(record.source, language)}</strong>
+        <div className="commentSplitView">
+          <div className="commentSplitList">
+            {visibleThreads.map(({ record, comments }) => {
+              const last = comments[comments.length - 1];
+              const hasAttention = comments.some((c) => c.isAttention);
+              return (
+                <button
+                  type="button"
+                  key={record.id}
+                  className={`commentListItem${selectedId === record.id ? " active" : ""}`}
+                  onClick={() => setSelectedId(record.id)}
+                >
+                  <span className="commentListItemHead">
+                    <strong>{localizeData(record.source, language)}</strong>
+                    <span className="amount">{money(record.amount, record.currency)}</span>
+                  </span>
                   <small>
                     {date(record.date, language)} · {nav.find((n) => n.id === record.kind)?.label[language] ?? record.kind}
                   </small>
-                </div>
-                <span className="amount">{money(record.amount, record.currency)}</span>
-              </header>
-              {record.tags?.length ? (
-                <div className="tagRow">
-                  {record.tags.map((t) => (
-                    <span key={t}>{localizeData(t, language)}</span>
-                  ))}
-                </div>
-              ) : null}
-              <CommentThread
-                language={language}
-                comments={comments}
-                onAddComment={(text, isAttention) => addComment(record.id, text, isAttention)}
-                onToggleReaction={(commentId, emoji) => toggleReaction(record.id, commentId, emoji)}
-                busy={busyRecordId === record.id}
-              />
-            </article>
-          ))}
+                  {last && (
+                    <p className="commentListItemPreview">
+                      {hasAttention && "⚠️ "}
+                      <b>{last.userName}:</b> {last.text}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="commentSplitDetail">
+            {selected ? (
+              <article className="commentCard" key={selected.record.id}>
+                <header>
+                  <div>
+                    <strong>{localizeData(selected.record.source, language)}</strong>
+                    <small>
+                      {date(selected.record.date, language)} · {nav.find((n) => n.id === selected.record.kind)?.label[language] ?? selected.record.kind}
+                    </small>
+                  </div>
+                  <span className="amount">{money(selected.record.amount, selected.record.currency)}</span>
+                </header>
+                {selected.record.tags?.length ? (
+                  <div className="tagRow">
+                    {selected.record.tags.map((t) => (
+                      <span key={t}>{localizeData(t, language)}</span>
+                    ))}
+                  </div>
+                ) : null}
+                <CommentThread
+                  language={language}
+                  comments={selected.comments}
+                  onAddComment={(text, isAttention) => addComment(selected.record.id, text, isAttention)}
+                  onToggleReaction={(commentId, emoji) => toggleReaction(selected.record.id, commentId, emoji)}
+                  busy={busyRecordId === selected.record.id}
+                />
+              </article>
+            ) : (
+              <div className="commentSplitEmpty">
+                {tx(language, "Soldan bir kayıt seçin.", "Select a record on the left.", "Ji milê çepê qeydekê hilbijêre.")}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

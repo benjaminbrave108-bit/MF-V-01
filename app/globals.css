@@ -2622,6 +2622,10 @@ td {
 .settingsMainTabs { display: flex; gap: 8px; padding: 6px; width: fit-content; background: #e5edf0; border-radius: 12px; }
 .settingsMainTabs button { border: 0; border-radius: 9px; padding: 11px 16px; background: transparent; color: #526b75; font-size: 11px; font-weight: 800; cursor: pointer; }
 .settingsMainTabs button.active { color: white; background: #176b87; box-shadow: 0 5px 14px #176b8730; }
+/* Yorumlar sayfasında iki sekmelik pill çok dar kalıp yanında biçimsiz bir
+   boşluk bırakıyordu — burada sekmeleri eşit paylaşacak şekilde uzatıyoruz. */
+.commentsMainTabs { width: 100%; max-width: 520px; }
+.commentsMainTabs button { flex: 1; text-align: center; }
 .databaseSettings { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr); gap: 19px; }
 .databaseSectionGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 16px 0; }
 .databaseSectionGrid label { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid #dbe6e8; border-radius: 10px; background: #f8fafb; color: #597078; font-size: 10px; font-weight: 750; cursor: pointer; }
@@ -2822,38 +2826,45 @@ main { min-width: 0; overflow-x: hidden; }
 .commentEmpty {
   color: var(--muted);
 }
+/* Sade, soldan hizalı yorum listesi — kutu/balon yok, her yorum kendi
+   satırında (isim · saat · metin soldan sağa akar), alt alta bir ince
+   ayraçla ayrılır. */
 .commentItem {
-  background: #f6f9fa;
-  border: 1px solid #e7edef;
-  border-radius: 10px;
-  padding: 10px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #eaeff0;
 }
-.commentItemHead {
+.commentItem:last-child {
+  border-bottom: 0;
+}
+.commentItemLine {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 4px;
+  gap: 7px;
+  text-align: left;
 }
-.commentItemHead strong {
+.commentItemLine strong {
   font-size: 11px;
   color: #2b3d44;
+  white-space: nowrap;
 }
-.commentItemHead small {
+.commentItemLine small {
   color: var(--muted);
   font-size: 9px;
   white-space: nowrap;
 }
-.commentItem p {
-  margin: 0;
+.commentItemText {
   font-size: 12px;
   color: #40545c;
   white-space: pre-wrap;
   word-break: break-word;
+  flex: 1 1 auto;
 }
 .commentItemAttention {
-  background: #fdf3ec;
-  border-color: #f0c9a3;
+  background: #fdf3ec55;
+}
+.commentItemAttention .commentItemText {
+  color: #8a5a2b;
 }
 .commentAttentionBadge {
   margin-right: 4px;
@@ -2966,11 +2977,6 @@ main { min-width: 0; overflow-x: hidden; }
   line-height: 15px;
   text-align: center;
 }
-.commentCardGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
 .commentCard {
   border: 1px solid #e4eaec;
   border-radius: 14px;
@@ -2995,8 +3001,90 @@ main { min-width: 0; overflow-x: hidden; }
   color: var(--muted);
   font-size: 10px;
 }
-.commentCard .commentList {
-  max-height: 220px;
+/* Yorumlar sayfası — soldan başlık listesi, sağda seçili başlığın yorum
+   ipliği (bir not uygulamasının liste/detay görünümü gibi). */
+.commentSplitView {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.commentSplitList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e4eaec;
+  border-radius: 14px;
+  background: white;
+  overflow: hidden;
+  max-height: 640px;
+  overflow-y: auto;
+}
+.commentListItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid #eef1f2;
+  background: transparent;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.commentListItem:last-child {
+  border-bottom: 0;
+}
+.commentListItem:hover {
+  background: #f6f9fa;
+}
+.commentListItem.active {
+  background: #eaf4f7;
+  box-shadow: inset 3px 0 0 #176b87;
+}
+.commentListItemHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.commentListItemHead strong {
+  font-size: 12px;
+  color: #263c46;
+}
+.commentListItemHead .amount {
+  font-size: 11px;
+}
+.commentListItem > small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.commentListItemPreview {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #63757c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commentListItemPreview b {
+  color: #40545c;
+}
+.commentSplitDetail {
+  min-width: 0;
+}
+.commentSplitDetail .commentList {
+  max-height: 420px;
+}
+.commentSplitEmpty {
+  border: 1px dashed #cad8d3;
+  border-radius: 14px;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+@media (max-width: 900px) {
+  .commentSplitView { grid-template-columns: 1fr; }
+  .commentSplitList { max-height: 280px; }
 }
 
 .appShell.sidebarCompact { grid-template-columns: 76px minmax(0, 1fr); }
