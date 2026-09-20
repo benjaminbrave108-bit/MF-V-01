@@ -244,6 +244,38 @@ body {
   align-items: center;
   gap: 12px;
 }
+.headerOnlineUsers {
+  height: 42px;
+  display: flex;
+  align-items: center;
+}
+.headerOnlineAvatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #d8e6f1;
+  color: #1f5f9a;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.headerOnlineAvatar + .headerOnlineAvatar { margin-left: 6px; }
+.headerOnlineAvatar.headerOnlineMore { background: #eef2f4; color: #5b6f77; font-size: 11px; }
+.headerOnlineDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2f8f52;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px #2f8f5222;
+}
 .language {
   height: 42px;
   display: flex;
@@ -3153,6 +3185,7 @@ main { min-width: 0; overflow-x: hidden; }
   .language { height: 38px; }
   .language span { display: none; }
   .zoomControl { height: 38px; }
+  .headerOnlineUsers { height: 38px; }
   .stats { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat { padding: 13px; }
   .twoCols { grid-template-columns: 1fr; }

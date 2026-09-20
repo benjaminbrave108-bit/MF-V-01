@@ -729,6 +729,26 @@ export default function Home() {
             )}
           </div>
           <div className="headerActions">
+            {onlineUserIds.length > 0 && (
+              <div className="headerOnlineUsers">
+                {users
+                  .filter((u) => onlineUserIds.includes(u.id))
+                  .slice(0, 4)
+                  .map((u) => (
+                    <span
+                      key={u.id}
+                      className="headerOnlineAvatar"
+                      title={`${u.name} — ${tx(language, "Çevrimiçi", "Online", "Girêdayî")}`}
+                    >
+                      {u.name.slice(0, 1).toUpperCase()}
+                      <i className="headerOnlineDot" />
+                    </span>
+                  ))}
+                {onlineUserIds.length > 4 && (
+                  <span className="headerOnlineAvatar headerOnlineMore">+{onlineUserIds.length - 4}</span>
+                )}
+              </div>
+            )}
             <div className="zoomControl" title={tx(language, "Ekran ölçeği (Ctrl + / Ctrl -)", "Interface zoom (Ctrl + / Ctrl -)", "Mezinahiya dîmenderê (Ctrl + / Ctrl -)")}>
               <button type="button" onClick={() => setUiZoom((current) => [125, 110, 100, 90, 80].find((level) => level < current) ?? 80)} aria-label={tx(language, "Küçült", "Zoom out", "Biçûk bike")}>−</button>
               <select value={uiZoom} onChange={(e) => setUiZoom(Number(e.target.value))} aria-label={tx(language, "Ekran ölçeği", "Interface zoom", "Mezinahiya dîmenderê")}>
