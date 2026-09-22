@@ -1161,6 +1161,13 @@ export function Records({
   const selectedKasaGroup = kasaSplitActive ? groups.find((g) => g.name === source) : undefined;
   const kasaIncomeRows = kasaSplitActive ? orderedRows.filter((x) => x.kind !== "expense") : [];
   const kasaExpenseRows = kasaSplitActive ? orderedRows.filter((x) => x.kind === "expense") : [];
+  // Gelir/Gider sayfalarındaki "En Son Gelirler/Giderler" panosuyla aynı
+  // düzen — kasa seçiliyken de sağda bu kasanın en son 5 hareketi (gelir +
+  // gider karışık) görünsün diye, kullanıcının elle sıraladığı orderedRows
+  // yerine `rows`'tan bağımsızca en güncel tarihe göre hesaplanır.
+  const kasaLatestRows = kasaSplitActive
+    ? [...rows].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 5)
+    : [];
   return (
     <div className="panel">
       <div className="toolbar">
@@ -1497,21 +1504,23 @@ export function Records({
           </button>
         </div>
       )}
-      <div className={kind === "cash" ? "" : "recordsGrid"}>
+      <div className={kind === "cash" && !kasaSplitActive ? "" : "recordsGrid"}>
         {kasaSplitActive ? (
           <div className="kasaResultSplit">
             <div className="kasaResultGroup kasaResultIncome">
               <div className="kasaResultGroupHead">
                 <span>↗</span>
                 <div>
-                  <h3>{tx(language, "Gelirler", "Income", "Dahat")}</h3>
+                  <h3>
+                    {tx(language, "Gelirler", "Income", "Dahat")}
+                    <strong className="positive">
+                      {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalInByCurrency) : money(0)}
+                    </strong>
+                  </h3>
                   <small>
                     {kasaIncomeRows.length} {recordWord}
                   </small>
                 </div>
-                <strong className="positive">
-                  {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalInByCurrency) : money(0)}
-                </strong>
               </div>
               {renderRecordsTable(kasaIncomeRows)}
             </div>
@@ -1519,14 +1528,16 @@ export function Records({
               <div className="kasaResultGroupHead">
                 <span>↘</span>
                 <div>
-                  <h3>{tx(language, "Giderler", "Expenses", "Mesref")}</h3>
+                  <h3>
+                    {tx(language, "Giderler", "Expenses", "Mesref")}
+                    <strong className="negative">
+                      {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalOutByCurrency) : money(0)}
+                    </strong>
+                  </h3>
                   <small>
                     {kasaExpenseRows.length} {recordWord}
                   </small>
                 </div>
-                <strong className="negative">
-                  {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalOutByCurrency) : money(0)}
-                </strong>
               </div>
               {renderRecordsTable(kasaExpenseRows)}
             </div>
@@ -1534,15 +1545,17 @@ export function Records({
         ) : (
           renderRecordsTable(orderedRows)
         )}
-        {kind !== "cash" && (
-          <aside className={`latestRecords ${kind}`}>
+        {(kind !== "cash" || kasaSplitActive) && (
+          <aside className={`latestRecords ${kasaSplitActive ? "cash" : kind}`}>
             <div className="latestHead">
-              <span>{kind === "income" ? "↗" : "↘"}</span>
+              <span>{kasaSplitActive ? "⇄" : kind === "income" ? "↗" : "↘"}</span>
               <div>
                 <h3>
-                  {kind === "income"
-                    ? tx(language, "En Son Gelirler", "Latest Income", "Dahatên Dawî")
-                    : tx(language, "En Son Giderler", "Latest Expenses", "Mesrefên Dawî")}
+                  {kasaSplitActive
+                    ? tx(language, "Son Hareketler", "Latest Activity", "Çalakiyên Dawî")
+                    : kind === "income"
+                      ? tx(language, "En Son Gelirler", "Latest Income", "Dahatên Dawî")
+                      : tx(language, "En Son Giderler", "Latest Expenses", "Mesrefên Dawî")}
                 </h3>
                 <small>
                   {tx(language, "Son eklenen 5 kayıt", "5 most recent records", "5 qeydên herî dawî")}
@@ -1550,14 +1563,14 @@ export function Records({
               </div>
             </div>
             <div className="latestList">
-              {latestRows.map((x) => (
-                <article key={x.id}>
+              {(kasaSplitActive ? kasaLatestRows : latestRows).map((x) => (
+                <article key={x.id} className={x.kind === "expense" ? "expense" : ""}>
                   <i />
                   <span>
                     <b>{localizeData(x.source, language)}</b>
                     <small>{date(x.date, language)} · {localizeData(x.person, language)}</small>
                   </span>
-                  <strong>{kind === "income" ? "+" : "−"}{money(x.amount, x.currency)}</strong>
+                  <strong>{x.kind === "expense" ? "−" : "+"}{money(x.amount, x.currency)}</strong>
                 </article>
               ))}
             </div>

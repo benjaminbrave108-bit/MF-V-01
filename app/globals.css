@@ -1911,6 +1911,10 @@ header h1 {
   background: #fff0df;
   color: #d06f22;
 }
+.latestRecords.cash .latestHead > span {
+  background: #e5eef7;
+  color: #2a5f9e;
+}
 .latestHead h3 {
   margin: 0 0 3px;
   font-size: 13px;
@@ -1934,7 +1938,7 @@ header h1 {
   border-radius: 50%;
   background: #18a17e;
 }
-.latestRecords.expense .latestList i { background: #e98534; }
+.latestList article.expense i { background: #e98534; }
 .latestList span b,
 .latestList span small { display: block; }
 .latestList span b {
@@ -1953,7 +1957,7 @@ header h1 {
   font-size: 10px;
   white-space: nowrap;
 }
-.latestRecords.expense .latestList strong { color: #c76b25; }
+.latestList article.expense strong { color: #c76b25; }
 /* Kasa detayında Gelir/Gider ayrımı — bir kasaya tıklandığında Gelirler ve
    Giderler artık aynı tabloda karışmıyor, alt alta iki ayrı, farklı renk
    tonlu kutuda gösteriliyor (bkz. Records.tsx kasaResultSplit). */
@@ -1992,6 +1996,9 @@ header h1 {
 }
 .kasaResultGroupHead h3 {
   margin: 0 0 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: 13px;
   font-weight: 800;
 }
