@@ -371,9 +371,25 @@ export function Records({
       case "title":
         return (
           <>
-            <b className="cellTitle" title={localizeData(x.source, language)}>
-              {localizeData(x.source, language)}
-            </b>
+            {readOnly ? (
+              <b className="cellTitle" title={localizeData(x.source, language)}>
+                {localizeData(x.source, language)}
+              </b>
+            ) : (
+              <button
+                type="button"
+                className="cellTitle cellTitleButton"
+                title={tx(
+                  language,
+                  "Girilen verileri görmek için tıklayın",
+                  "Click to view the entered data",
+                  "Ji bo dîtina daneyên hatine nivîsandin bitikîne",
+                )}
+                onClick={() => onEdit(x)}
+              >
+                {localizeData(x.source, language)}
+              </button>
+            )}
             {ctx.pendingTransfer && (
               <small className="subNote pendingBadge">
                 ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}

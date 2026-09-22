@@ -1854,6 +1854,24 @@ header h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 700;
+}
+/* Ana Başlık/Kasa Adı hücresi — tıklanınca o satırın girilmiş verilerini
+   Kaydı Düzenle penceresinde açar (bkz. Records.tsx renderCell "title").
+   Görsel olarak .cellTitle ile aynı, sadece <button> olduğu için sıfırlanan
+   varsayılan stiller geri eklendi. */
+.cellTitleButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cellTitleButton:hover {
+  color: #176b87;
+  text-decoration: underline;
 }
 /* Detay/Not hücresi — uzun metin satırı büyütmesin diye tek satırda "..."
    ile kesilir (örn. "Kasa Aktarımı ile gelen tutar — gönderen..." yerine
