@@ -148,19 +148,28 @@ function SuggestInput({
 // DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
 type ColumnId = "date" | "title" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
 const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "detail", "messages", "person", "amount", "location", "tags", "action"];
+// Detay/Not ve Mesajlar öntanımlı olarak en dar iki sütun — uzun metin
+// satıra sığmayınca satırı büyütmek yerine tek satırda "..." ile kesilir
+// (bkz. renderCell'deki .cellDetailText ve .messagesCellText), böylece
+// tablo hem dikeyde hem yatayda daha az yer kaplar. amount/action bilerek
+// küçültülmedi — tutarların ve satır aksiyon ikonlarının kesilmemesi
+// gerekiyor. Kullanıcı isterse sütun kenarından tutup yine genişletebilir.
 const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   date: 100,
-  title: 150,
-  detail: 220,
-  messages: 210,
-  person: 90,
+  title: 140,
+  detail: 110,
+  messages: 110,
+  person: 80,
   amount: 110,
-  location: 150,
-  tags: 140,
+  location: 120,
+  tags: 110,
   action: 110,
 };
 const MIN_COLUMN_WIDTH = 64;
-const COLUMNS_STORAGE_KEY = "mf-records-columns-v1";
+// v2: Detay/Not ve Mesajlar öntanımlı genişlikleri daraltıldı — anahtar
+// sürümü artırılmasa, daha önce kaydedilmiş (geniş) genişlikler yeni
+// varsayılanları maskeler ve kullanıcı hiçbir fark görmez.
+const COLUMNS_STORAGE_KEY = "mf-records-columns-v2";
 
 export function Records({
   language,
@@ -393,8 +402,12 @@ export function Records({
           )
         ) : (
           <>
-            {localizeData(x.detail || x.note, language)}
-            <small className="subNote">{x.detail && localizeData(x.note, language)}</small>
+            <span className="cellDetailText" title={localizeData(x.detail || x.note, language)}>
+              {localizeData(x.detail || x.note, language)}
+            </span>
+            <small className="subNote" title={x.detail ? localizeData(x.note, language) : undefined}>
+              {x.detail && localizeData(x.note, language)}
+            </small>
           </>
         );
       case "messages":
@@ -427,8 +440,14 @@ export function Records({
       case "location":
         return (
           <>
-            {localizeData(x.project, language)}
-            {x.cashAccount && <small className="subNote">▣ {localizeData(x.cashAccount, language)}</small>}
+            <span className="cellDetailText" title={localizeData(x.project, language)}>
+              {localizeData(x.project, language)}
+            </span>
+            {x.cashAccount && (
+              <small className="subNote" title={localizeData(x.cashAccount, language)}>
+                ▣ {localizeData(x.cashAccount, language)}
+              </small>
+            )}
           </>
         );
       case "tags":

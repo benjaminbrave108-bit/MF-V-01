@@ -422,9 +422,13 @@ header > h1 {
 }
 .subNote {
   display: block;
+  max-width: 100%;
   color: var(--muted);
   font-size: 9px;
   margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .filters {
   display: grid;
@@ -1838,7 +1842,7 @@ header h1 {
 }
 .recordsGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(0, 2.1fr) minmax(260px, 0.9fr);
   gap: 20px;
   align-items: start;
   min-width: 0;
@@ -1847,6 +1851,16 @@ header h1 {
 .cellTitle {
   display: block;
   max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Detay/Not hücresi — uzun metin satırı büyütmesin diye tek satırda "..."
+   ile kesilir (örn. "Kasa Aktarımı ile gelen tutar — gönderen..." yerine
+   "Kasa Aktarımı ile gelen tutar…"), alttaki not satırı da aynı şekilde. */
+.cellDetailText {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
