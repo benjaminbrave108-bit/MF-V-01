@@ -2830,6 +2830,13 @@ main { min-width: 0; overflow-x: hidden; }
   overscroll-behavior: contain;
   margin: auto;
 }
+/* Yeni Kayıt / Kaydı Düzenle penceresi — arkadaki tablo kasıtlı olarak
+   koyu perdenin altında hâlâ kaydırılabilir kalsın diye, perdenin kendisi
+   fare/tekerlek olaylarını yutmaz; sadece modal kutusunun içi etkileşimli
+   kalır. Böylece kullanıcı pencereyi kapatmadan arkadaki önceki kayıtları
+   kaydırıp görebilir. */
+.overlayScrollThrough { pointer-events: none; }
+.overlayScrollThrough .modal { pointer-events: auto; }
 .modalActions {
   position: sticky;
   bottom: -23px;

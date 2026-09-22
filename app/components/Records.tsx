@@ -1528,7 +1528,7 @@ export function RecordModal({
     onSave(form, initial?.id);
   }
   return (
-    <div className="overlay">
+    <div className="overlay overlayScrollThrough">
       <form
         className="modal"
         onSubmit={(e) => {
