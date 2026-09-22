@@ -1035,6 +1035,97 @@ export function Records({
       );
     }
   }
+  // Tek bir kolgroup/thead/tbody bloğu üretir — sütun sırası/genişliği ve
+  // satır sürükleme tüm tablolarda aynı davransın diye Kasa detayındaki
+  // Gelir/Gider ayrımında da (bkz. aşağıdaki kasaResultSplit) bu fonksiyon
+  // yeniden kullanılıyor, tek bir birleşik tabloda da.
+  function renderRecordsTable(tableRows: RecordItem[]) {
+    return (
+      <div className="recordsTable resizableTable">
+        <table>
+          <colgroup>
+            {columnOrder.map((id) => (
+              <col key={id} style={{ width: columnWidths[id] }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              {columnOrder.map((id) => (
+                <th
+                  key={id}
+                  className={draggedColumn === id ? "colDragging" : ""}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedColumn(id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(e) => {
+                    if (draggedColumn !== null) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedColumn !== null) reorderColumn(draggedColumn, id);
+                    setDraggedColumn(null);
+                  }}
+                  onDragEnd={() => setDraggedColumn(null)}
+                  title={tx(
+                    language,
+                    "Sürükleyerek sütunu taşı, kenarından tutup genişliğini ayarla",
+                    "Drag to move this column, drag its edge to resize",
+                    "Ji bo derbaskirina stûnê bikişîne, ji kêleka wê genîtiyê saz bike",
+                  )}
+                >
+                  <span className="colHeaderLabel">{columnLabel(id)}</span>
+                  <span
+                    className="colResizeHandle"
+                    draggable={false}
+                    onMouseDown={(e) => startResize(e, id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.length === 0 && (
+              <tr>
+                <td colSpan={columnOrder.length} className="empty">
+                  {tx(language, "Bu grupta kayıt yok.", "No records in this group.", "Di vê komê de qeyd tune.")}
+                </td>
+              </tr>
+            )}
+            {tableRows.map((x) => {
+              const pendingTransfer =
+                kind !== "cash" ? cashTransfers.find((t) => t.toRecordId === x.id && t.status === "pending") : undefined;
+              const canApprove = pendingTransfer && cashAccounts.some((a) => a.id === pendingTransfer.toCashAccountId);
+              return (
+                <tr
+                  key={x.id}
+                  data-row-id={x.id}
+                  className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}${dragOverRowId === x.id && draggedRowId !== null && draggedRowId !== x.id ? " rowDragOver" : ""}`}
+                >
+                  {columnOrder.map((id) => (
+                    <td key={id} className={columnCellClassName(id)}>
+                      {renderCell(id, x, { pendingTransfer, canApprove })}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  // Bir kasa seçildiğinde (source !== "Tümü"), Gelir ve Gider kayıtları aynı
+  // tabloda karışık görünmesin diye iki ayrı kutuya bölünür — kullanıcı
+  // hangisinin gelir hangisinin gider olduğunu tabloya bakmadan, kutunun
+  // rengi ve başlığından anlar. "Tümü" görünümünde ve Gelir/Gider
+  // sayfalarında (kind !== "cash") tek, birleşik tablo olarak kalır.
+  const kasaSplitActive = kind === "cash" && source !== "Tümü";
+  const selectedKasaGroup = kasaSplitActive ? groups.find((g) => g.name === source) : undefined;
+  const kasaIncomeRows = kasaSplitActive ? orderedRows.filter((x) => x.kind !== "expense") : [];
+  const kasaExpenseRows = kasaSplitActive ? orderedRows.filter((x) => x.kind === "expense") : [];
   return (
     <div className="panel">
       <div className="toolbar">
@@ -1372,73 +1463,42 @@ export function Records({
         </div>
       )}
       <div className={kind === "cash" ? "" : "recordsGrid"}>
-        <div className="recordsTable resizableTable">
-          <table>
-          <colgroup>
-            {columnOrder.map((id) => (
-              <col key={id} style={{ width: columnWidths[id] }} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr>
-              {columnOrder.map((id) => (
-                <th
-                  key={id}
-                  className={draggedColumn === id ? "colDragging" : ""}
-                  draggable
-                  onDragStart={(e) => {
-                    setDraggedColumn(id);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onDragOver={(e) => {
-                    if (draggedColumn !== null) e.preventDefault();
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggedColumn !== null) reorderColumn(draggedColumn, id);
-                    setDraggedColumn(null);
-                  }}
-                  onDragEnd={() => setDraggedColumn(null)}
-                  title={tx(
-                    language,
-                    "Sürükleyerek sütunu taşı, kenarından tutup genişliğini ayarla",
-                    "Drag to move this column, drag its edge to resize",
-                    "Ji bo derbaskirina stûnê bikişîne, ji kêleka wê genîtiyê saz bike",
-                  )}
-                >
-                  <span className="colHeaderLabel">{columnLabel(id)}</span>
-                  <span
-                    className="colResizeHandle"
-                    draggable={false}
-                    onMouseDown={(e) => startResize(e, id)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {orderedRows.map((x) => {
-              const pendingTransfer =
-                kind !== "cash" ? cashTransfers.find((t) => t.toRecordId === x.id && t.status === "pending") : undefined;
-              const canApprove = pendingTransfer && cashAccounts.some((a) => a.id === pendingTransfer.toCashAccountId);
-              return (
-              <tr
-                key={x.id}
-                data-row-id={x.id}
-                className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}${dragOverRowId === x.id && draggedRowId !== null && draggedRowId !== x.id ? " rowDragOver" : ""}`}
-              >
-                {columnOrder.map((id) => (
-                  <td key={id} className={columnCellClassName(id)}>
-                    {renderCell(id, x, { pendingTransfer, canApprove })}
-                  </td>
-                ))}
-              </tr>
-              );
-            })}
-          </tbody>
-          </table>
-        </div>
+        {kasaSplitActive ? (
+          <div className="kasaResultSplit">
+            <div className="kasaResultGroup kasaResultIncome">
+              <div className="kasaResultGroupHead">
+                <span>↗</span>
+                <div>
+                  <h3>{tx(language, "Gelirler", "Income", "Dahat")}</h3>
+                  <small>
+                    {kasaIncomeRows.length} {recordWord}
+                  </small>
+                </div>
+                <strong className="positive">
+                  {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalInByCurrency) : money(0)}
+                </strong>
+              </div>
+              {renderRecordsTable(kasaIncomeRows)}
+            </div>
+            <div className="kasaResultGroup kasaResultExpense">
+              <div className="kasaResultGroupHead">
+                <span>↘</span>
+                <div>
+                  <h3>{tx(language, "Giderler", "Expenses", "Mesref")}</h3>
+                  <small>
+                    {kasaExpenseRows.length} {recordWord}
+                  </small>
+                </div>
+                <strong className="negative">
+                  {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalOutByCurrency) : money(0)}
+                </strong>
+              </div>
+              {renderRecordsTable(kasaExpenseRows)}
+            </div>
+          </div>
+        ) : (
+          renderRecordsTable(orderedRows)
+        )}
         {kind !== "cash" && (
           <aside className={`latestRecords ${kind}`}>
             <div className="latestHead">

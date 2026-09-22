@@ -1922,6 +1922,63 @@ header h1 {
   white-space: nowrap;
 }
 .latestRecords.expense .latestList strong { color: #c76b25; }
+/* Kasa detayında Gelir/Gider ayrımı — bir kasaya tıklandığında Gelirler ve
+   Giderler artık aynı tabloda karışmıyor, alt alta iki ayrı, farklı renk
+   tonlu kutuda gösteriliyor (bkz. Records.tsx kasaResultSplit). */
+.kasaResultSplit {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kasaResultGroup {
+  border: 1px solid #e0e9eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.kasaResultGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.kasaResultGroupHead > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-weight: 900;
+}
+.kasaResultGroupHead > div {
+  flex: 1;
+  min-width: 0;
+}
+.kasaResultGroupHead h3 {
+  margin: 0 0 3px;
+  font-size: 13px;
+}
+.kasaResultGroupHead small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.kasaResultGroupHead strong {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.kasaResultIncome { background: linear-gradient(145deg, #fbfdfd, #f2f9f6); }
+.kasaResultIncome .kasaResultGroupHead { border-bottom: 1px solid #dcefe6; }
+.kasaResultIncome .kasaResultGroupHead > span { background: #dff5ed; color: #118164; }
+.kasaResultIncome .kasaResultGroupHead strong { color: #14795e; }
+.kasaResultExpense { background: linear-gradient(145deg, #fffaf6, #fdf3ec); }
+.kasaResultExpense .kasaResultGroupHead { border-bottom: 1px solid #f3e2d0; }
+.kasaResultExpense .kasaResultGroupHead > span { background: #fff0df; color: #d06f22; }
+.kasaResultExpense .kasaResultGroupHead strong { color: #b33d3d; }
+.kasaResultGroup .recordsTable {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 @media (max-width: 1180px) {
   .recordsGrid { grid-template-columns: 1fr; }
   .latestRecords { min-height: auto; }
