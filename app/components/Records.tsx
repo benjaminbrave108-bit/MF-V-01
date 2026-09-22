@@ -598,7 +598,7 @@ export function Records({
         return {
           name,
           kind: records.find((x) => x.source === name)?.kind ?? kind,
-          count: records.filter((x) => x.source === name).length,
+          count: directRows.length + linkedIncomeRows.length + linkedExpenseRows.length,
           totalIn: directAmount + linkedIncome,
           totalOut: linkedExpense,
           total: directAmount + linkedIncome - linkedExpense,
@@ -718,9 +718,18 @@ export function Records({
       ]),
     [listedRecords, allRecords, kind],
   );
-  const rows = records.filter(
+  // Belirli bir kasa seçildiğinde (source !== "Tümü"), o kasanın kart
+  // toplamına dahil edilen ama `records`'ta (sadece kind="cash" satırları)
+  // bulunmayan bağlı gelir/gider kayıtlarını da listeye kat — aksi halde
+  // "Toplam Kasa" tutarı bu kayıtları sayar ama liste onları hiç göstermez
+  // (bildirilen hata tam olarak buydu).
+  const linkedRowsForSelectedKasa =
+    kind === "cash" && source !== "Tümü"
+      ? allRecords.filter((x) => (x.kind === "income" || x.kind === "expense") && x.cashAccount === source)
+      : [];
+  const rows = [...records, ...linkedRowsForSelectedKasa].filter(
     (x) =>
-      (source === "Tümü" || x.source === source) &&
+      (source === "Tümü" || x.source === source || x.cashAccount === source) &&
       (!showAllLists || x.listName) &&
       (!filterFrom || x.date >= filterFrom) &&
       (!filterTo || x.date <= filterTo) &&
