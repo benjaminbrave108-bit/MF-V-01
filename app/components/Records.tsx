@@ -210,6 +210,7 @@ export function Records({
   // the user has placed.
   const [rowOrder, setRowOrder] = useState<number[]>([]);
   const [draggedRowId, setDraggedRowId] = useState<number | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const rowOrderStorageKey = `mf-row-order-${kind}`;
   useEffect(() => {
     try {
@@ -227,6 +228,30 @@ export function Records({
     } catch {
       // Quota or private-mode failure — the order just won't survive reload.
     }
+  }
+  // Tarihe göre / son eklenene göre sıralama — standart bir liste özelliği.
+  // Seçim değişince önceki elle sürükleme sırası (rowOrder) temizlenir, yoksa
+  // yeni seçim görünürde hiçbir şey değiştirmemiş gibi durur.
+  type SortMode = "dateDesc" | "dateAsc" | "addedDesc" | "addedAsc";
+  const [sortMode, setSortMode] = useState<SortMode>("dateDesc");
+  const sortModeStorageKey = `mf-sort-mode-${kind}`;
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(sortModeStorageKey) as SortMode | null;
+      setSortMode(saved && ["dateDesc", "dateAsc", "addedDesc", "addedAsc"].includes(saved) ? saved : "dateDesc");
+    } catch {
+      setSortMode("dateDesc");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
+  function changeSortMode(next: SortMode) {
+    setSortMode(next);
+    try {
+      localStorage.setItem(sortModeStorageKey, next);
+    } catch {
+      // Quota or private-mode failure — the choice just won't survive reload.
+    }
+    persistRowOrder([]);
   }
   // Sütun sırası ve genişlikleri — Kasalar/Gelir/Gider üçünde de aynı
   // sütun kimlikleri geçerli olduğu için tek, paylaşılan bir tercih olarak
@@ -444,6 +469,7 @@ export function Records({
             )}
             <span
               className="icon rowDragHandle"
+              onMouseDown={(e) => startRowDrag(e, x.id)}
               title={tx(
                 language,
                 "Satırı sürükleyerek yukarı/aşağı taşı",
@@ -739,16 +765,61 @@ export function Records({
       (!filterTag || x.tags.some((t) => t.toLowerCase().includes(filterTag.toLowerCase()))) &&
       JSON.stringify(x).toLowerCase().includes(search.toLowerCase()),
   );
+  const sortedRows = useMemo(() => {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      switch (sortMode) {
+        case "dateAsc":
+          return a.date.localeCompare(b.date) || a.id - b.id;
+        case "addedAsc":
+          return a.id - b.id;
+        case "addedDesc":
+          return b.id - a.id;
+        case "dateDesc":
+        default:
+          return b.date.localeCompare(a.date) || b.id - a.id;
+      }
+    });
+    return copy;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, sortMode]);
   const orderedRows = useMemo(() => {
-    if (!rowOrder.length) return rows;
+    if (!rowOrder.length) return sortedRows;
     const index = new Map(rowOrder.map((id, i) => [id, i]));
-    return [...rows].sort((a, b) => {
+    return [...sortedRows].sort((a, b) => {
       const ai = index.has(a.id) ? index.get(a.id)! : Number.MAX_SAFE_INTEGER;
       const bi = index.has(b.id) ? index.get(b.id)! : Number.MAX_SAFE_INTEGER;
       return ai - bi;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, rowOrder]);
+  }, [sortedRows, rowOrder]);
+  // Satır sürükleme — native HTML5 drag-and-drop (draggable + onDragStart/
+  // onDrop) tablo satırlarında (<tr>) tarayıcılar arasında güvenilir çalışmadığı
+  // için (sürükleme hiç başlamayabiliyor), fare olaylarıyla elle takip edilen
+  // aynı yöntem kullanılıyor — bkz. shared.tsx'teki useDraggableModals.
+  function startRowDrag(e: ReactMouseEvent, id: number) {
+    e.preventDefault();
+    setDraggedRowId(id);
+    document.body.classList.add("noSelectDragging");
+    function onMove(ev: MouseEvent) {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const rowEl = el?.closest("tr[data-row-id]") as HTMLElement | null;
+      setDragOverRowId(rowEl ? Number(rowEl.dataset.rowId) : null);
+    }
+    function onUp(ev: MouseEvent) {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const rowEl = el?.closest("tr[data-row-id]") as HTMLElement | null;
+      const targetId = rowEl ? Number(rowEl.dataset.rowId) : null;
+      if (targetId !== null) moveRow(id, targetId);
+      setDraggedRowId(null);
+      setDragOverRowId(null);
+      document.body.classList.remove("noSelectDragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
   function moveRow(draggedId: number, targetId: number) {
     if (draggedId === targetId) return;
     const currentIds = orderedRows.map((r) => r.id);
@@ -1249,6 +1320,15 @@ export function Records({
           ▤ {tx(language, "Filtrele", "Filter", "Parzûn")}
           {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
+        <label className="sortSelect">
+          <span>⇅</span>
+          <select value={sortMode} onChange={(e) => changeSortMode(e.target.value as typeof sortMode)}>
+            <option value="dateDesc">{tx(language, "Tarihe Göre (Yeni → Eski)", "By Date (Newest First)", "Li gorî Tarîxê (Ji Nû Ve Dawî)")}</option>
+            <option value="dateAsc">{tx(language, "Tarihe Göre (Eski → Yeni)", "By Date (Oldest First)", "Li gorî Tarîxê (Ji Kevn Ve Nû)")}</option>
+            <option value="addedDesc">{tx(language, "Son Eklenen (Yeni → Eski)", "Recently Added (Newest First)", "Ya Herî Dawî Hatiye Zêdekirin (Nû → Kevn)")}</option>
+            <option value="addedAsc">{tx(language, "Son Eklenen (Eski → Yeni)", "Recently Added (Oldest First)", "Ya Herî Dawî Hatiye Zêdekirin (Kevn → Nû)")}</option>
+          </select>
+        </label>
         <small>
           {rows.length} {recordWord}
         </small>
@@ -1345,25 +1425,8 @@ export function Records({
               return (
               <tr
                 key={x.id}
-                className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}`}
-                draggable
-                onDragStart={(e) => {
-                  if (!(e.target as HTMLElement).closest(".rowDragHandle")) {
-                    e.preventDefault();
-                    return;
-                  }
-                  setDraggedRowId(x.id);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(e) => {
-                  if (draggedRowId !== null) e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (draggedRowId !== null) moveRow(draggedRowId, x.id);
-                  setDraggedRowId(null);
-                }}
-                onDragEnd={() => setDraggedRowId(null)}
+                data-row-id={x.id}
+                className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}${dragOverRowId === x.id && draggedRowId !== null && draggedRowId !== x.id ? " rowDragOver" : ""}`}
               >
                 {columnOrder.map((id) => (
                   <td key={id} className={columnCellClassName(id)}>

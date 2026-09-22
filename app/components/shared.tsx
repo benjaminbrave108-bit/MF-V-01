@@ -30,7 +30,7 @@ export function useDraggableModals() {
       modal.style.top = `${rect.top}px`;
       drag = { el: modal, startX: e.clientX, startY: e.clientY, startLeft: rect.left, startTop: rect.top };
       modal.classList.add("modalDragging");
-      document.body.classList.add("modalDraggingActive");
+      document.body.classList.add("noSelectDragging");
       e.preventDefault();
     }
     function onMouseMove(e: MouseEvent) {
@@ -47,7 +47,7 @@ export function useDraggableModals() {
     function onMouseUp() {
       if (drag) drag.el.classList.remove("modalDragging");
       drag = null;
-      document.body.classList.remove("modalDraggingActive");
+      document.body.classList.remove("noSelectDragging");
     }
     document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("mousemove", onMouseMove);

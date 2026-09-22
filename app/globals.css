@@ -1740,6 +1740,28 @@ header h1 {
   color: white;
   border-color: var(--blue);
 }
+.sortSelect {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #e1e8ea;
+  border-radius: 7px;
+  background: white;
+  color: var(--muted);
+  font-size: 10px;
+}
+.sortSelect select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #344b54;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  max-width: 190px;
+}
 .filterPanel {
   display: flex;
   flex-wrap: wrap;
@@ -1954,6 +1976,9 @@ td {
 .rowDragging {
   opacity: 0.45;
 }
+.rowDragOver td {
+  box-shadow: inset 0 2px 0 0 #2f8f52;
+}
 .icon.edit {
   color: #287b98;
   background: #eaf4f7;
@@ -2078,7 +2103,7 @@ td {
    geçiyor, bu yüzden .overlay'in ortalama düzeni (margin: auto) burada
    ezilmiş oluyor; bu, kasıtlı ve beklenen. */
 .modalDragging { box-shadow: 0 18px 50px rgba(11, 34, 43, .35); }
-body.modalDraggingActive { user-select: none; }
+body.noSelectDragging { user-select: none; }
 .modalHead h2 {
   margin: 0;
   font-size: 19px;
