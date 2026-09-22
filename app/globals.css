@@ -1960,35 +1960,40 @@ header h1 {
 .kasaResultSplit {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
 }
 .kasaResultGroup {
   border: 1px solid #e0e9eb;
   border-radius: 12px;
   overflow: hidden;
 }
+/* Başlık (ikon + Gelirler/Giderler + tutar) artık kutunun tüm genişliğine
+   yayılmıyor — aradaki boşluk daralsın diye sadece kendi içeriği kadar yer
+   kaplıyor, ortadaki blok bilerek esnetilmiyor (flex: 1 yok). */
 .kasaResultGroupHead {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 12px;
+  padding: 10px 16px;
 }
 .kasaResultGroupHead > span {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 8px;
   font-weight: 900;
+  font-size: 13px;
 }
 .kasaResultGroupHead > div {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
 }
 .kasaResultGroupHead h3 {
-  margin: 0 0 3px;
+  margin: 0 0 2px;
   font-size: 13px;
+  font-weight: 800;
 }
 .kasaResultGroupHead small {
   color: var(--muted);
