@@ -1,8 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { tx } from "../lib/i18n";
 import type { Language } from "../lib/types";
+
+// Projedeki her pencere (.overlay > .modal, modalHead'iyle) fare ile
+// sürüklenebilir olsun — her modalın kendi JSX'ine tek tek dokunmak yerine,
+// document seviyesinde tek bir olay delegasyonu ile çalışan paylaşılan bir
+// mekanizma. Home (page.tsx) içinde bir kere çağrılır, tüm uygulama boyunca
+// açılan her pencereyi kapsar.
+export function useDraggableModals() {
+  useEffect(() => {
+    let drag: { el: HTMLElement; startX: number; startY: number; startLeft: number; startTop: number } | null = null;
+
+    function onMouseDown(e: MouseEvent) {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      const head = target.closest<HTMLElement>(".modalHead");
+      if (!head) return;
+      // Kapat (×) düğmesi, profil düzenle gibi kontroller sürüklemeyi
+      // başlatmasın — sadece başlığın boş alanından tutulunca sürüklensin.
+      if (target.closest("button, select, input, textarea, a, label")) return;
+      const modal = head.closest<HTMLElement>(".modal");
+      if (!modal) return;
+      const rect = modal.getBoundingClientRect();
+      modal.style.position = "fixed";
+      modal.style.margin = "0";
+      modal.style.left = `${rect.left}px`;
+      modal.style.top = `${rect.top}px`;
+      drag = { el: modal, startX: e.clientX, startY: e.clientY, startLeft: rect.left, startTop: rect.top };
+      modal.classList.add("modalDragging");
+      document.body.classList.add("modalDraggingActive");
+      e.preventDefault();
+    }
+    function onMouseMove(e: MouseEvent) {
+      if (!drag) return;
+      const { el, startX, startY, startLeft, startTop } = drag;
+      const margin = 40;
+      let left = startLeft + (e.clientX - startX);
+      let top = startTop + (e.clientY - startY);
+      left = Math.min(Math.max(left, margin - el.offsetWidth), window.innerWidth - margin);
+      top = Math.min(Math.max(top, 0), window.innerHeight - margin);
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+    }
+    function onMouseUp() {
+      if (drag) drag.el.classList.remove("modalDragging");
+      drag = null;
+      document.body.classList.remove("modalDraggingActive");
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+}
 
 export function Title({
   title,

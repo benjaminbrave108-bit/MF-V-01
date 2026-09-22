@@ -2070,7 +2070,15 @@ td {
   display: flex;
   justify-content: space-between;
   margin-bottom: 19px;
+  cursor: move;
+  user-select: none;
 }
+/* Pencereler (bkz. useDraggableModals) başlıklarından tutulup
+   sürüklenebilir — sürükleme sırasında modal konumu position:fixed'e
+   geçiyor, bu yüzden .overlay'in ortalama düzeni (margin: auto) burada
+   ezilmiş oluyor; bu, kasıtlı ve beklenen. */
+.modalDragging { box-shadow: 0 18px 50px rgba(11, 34, 43, .35); }
+body.modalDraggingActive { user-select: none; }
 .modalHead h2 {
   margin: 0;
   font-size: 19px;

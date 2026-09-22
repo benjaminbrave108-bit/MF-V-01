@@ -5,6 +5,7 @@ import { LanguageSetup, Login } from "./components/Login";
 import { ProfileModal } from "./components/ProfileModal";
 import { Dashboard } from "./components/Dashboard";
 import { Records, RecordModal } from "./components/Records";
+import { useDraggableModals } from "./components/shared";
 import { Archive } from "./components/Archive";
 import { ReportBuilder } from "./components/ReportBuilder";
 import { Notes } from "./components/Notes";
@@ -33,6 +34,7 @@ import type {
 } from "./lib/types";
 
 export default function Home() {
+  useDraggableModals();
   const [signedIn, setSignedIn] = useState(false);
   const [page, setPage] = useState<Page>("dashboard");
   const [records, setRecords] = useState<RecordItem[]>([]);
