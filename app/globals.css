@@ -2023,6 +2023,127 @@ header h1 {
   border-radius: 0;
   background: transparent;
 }
+/* Kasa Sonuç Raporu ("Sonuç Oluştur") — kasa adı/toplam, Gelir/Gider
+   dökümü ve alt özet için her biri farklı boyut/renkte ama aynı paletten
+   (yeşil=gelir, turuncu/kırmızı=gider, teal=kasa geneli) bir hiyerarşi. */
+.kasaReportModal {
+  width: min(640px, 100%);
+}
+.kasaReportHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #176b87, #1f4652);
+  color: white;
+}
+.kasaReportHead > span {
+  font-size: 17px;
+  font-weight: 800;
+}
+.kasaReportHead > div {
+  text-align: right;
+}
+.kasaReportHead small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #cfe4ea;
+}
+.kasaReportHead strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  margin-top: 2px;
+}
+.kasaReportSection {
+  border: 1px solid #e0e9eb;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.kasaReportSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.kasaReportSectionHead strong {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.kasaReportIncome .kasaReportSectionHead { background: #dff5ed; color: #118164; }
+.kasaReportExpense .kasaReportSectionHead { background: #fff0df; color: #d06f22; }
+.kasaReportList { max-height: 190px; overflow: auto; }
+.kasaReportRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 14px;
+  border-top: 1px solid #f0f3f4;
+  font-size: 11px;
+}
+.kasaReportRow:first-child { border-top: 0; }
+.kasaReportRowDate { flex: 0 0 auto; color: var(--muted); font-size: 9px; }
+.kasaReportRowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #314750;
+}
+.kasaReportRowAmount { flex: 0 0 auto; font-weight: 700; color: #263c46; }
+.kasaReportEmpty {
+  margin: 0;
+  padding: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: #9aa7ab;
+}
+.kasaReportSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+.kasaReportSummaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border-left: 4px solid transparent;
+}
+.kasaReportSummaryRow small {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.kasaReportSummaryMain {
+  background: #eaf4f7;
+  border-left-color: #176b87;
+  padding: 12px 14px;
+}
+.kasaReportSummaryMain small { color: #176b87; }
+.kasaReportSummaryMain strong { font-size: 19px; font-weight: 900; color: #12414f; }
+.kasaReportSummaryIncome { background: #f2f9f6; border-left-color: #14795e; }
+.kasaReportSummaryIncome strong { font-size: 14px; font-weight: 800; color: #14795e; }
+.kasaReportSummaryExpense { background: #fdf3ec; border-left-color: #b33d3d; }
+.kasaReportSummaryExpense strong { font-size: 14px; font-weight: 800; color: #b33d3d; }
+.kasaReportSummaryDate { background: #f5f7f8; border-left-color: #9fb0b6; }
+.kasaReportSummaryDate strong { font-size: 12px; font-weight: 700; color: #5b6f77; }
 @media (max-width: 1180px) {
   .recordsGrid { grid-template-columns: 1fr; }
   .latestRecords { min-height: auto; }
