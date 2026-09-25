@@ -675,12 +675,10 @@ export function Records({
       }),
     [records, allRecords, kind],
   );
-  const visibleGroups = groups.slice(0, 4);
-  const overflowGroups = groups.slice(4);
-  // Shared between the always-visible group cards and the "Diğer
-  // Kasalar/Başlıklar" overflow selector below — both need the same
-  // hover tooltip (Toplam Kasa / Gider / Sonuç) so a kasa's expense total
-  // is visible whether or not it made the top-4 cut.
+  // Kart satırı flex-wrap olduğu için genişlik yeterliyse zaten hepsi
+  // görünür — önceden ilk 4'ten sonrasını "Diğer Kasalar" açılır menüsünde
+  // gizliyorduk, ekran dar olmasa bile. Artık tüm kartlar render ediliyor;
+  // dar ekranda tarayıcı bunları kendiliğinden alt satıra sarar.
   const renderGroupTooltip = (g: (typeof groups)[number], matchingAccount: CashAccountSummary | undefined) => (
     <div className="groupCardTooltip">
       {g.kind === "cash" ? (
@@ -769,8 +767,6 @@ export function Records({
       ),
     [records, allRecords, kind],
   );
-  const visibleListGroups = listGroups.slice(0, 4);
-  const overflowListGroups = listGroups.slice(4);
   const overallListByCurrency = useMemo(
     () =>
       combineByCurrency([
@@ -1253,7 +1249,7 @@ export function Records({
             {moneyBreakdown(overallByCurrency)}
           </strong>
         </button>
-        {visibleGroups.map((g) => {
+        {groups.map((g) => {
           const matchingAccount = g.kind === "cash" ? cashAccounts.find((a) => a.name === g.name) : undefined;
           return (
           <div className="groupCard" key={g.name}>
@@ -1308,37 +1304,6 @@ export function Records({
           </div>
           );
         })}
-        {overflowGroups.length > 0 && (
-          <div className="groupCard groupCardOverflow">
-            <select
-              value={overflowGroups.some((g) => g.name === source) ? source : ""}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setSource(e.target.value);
-                  setShowAllLists(false);
-                }
-              }}
-            >
-              <option value="">
-                {kind === "cash"
-                  ? tx(language, "Diğer Kasalar", "Other Cash Accounts", "Qasên Din")
-                  : tx(language, "Diğer Başlıklar", "Other Categories", "Sernavên Din")}{" "}
-                ({overflowGroups.length})
-              </option>
-              {overflowGroups.map((g) => (
-                <option key={g.name} value={g.name}>
-                  {localizeData(g.name, language)} · {moneyBreakdown(g.totalByCurrency)}
-                </option>
-              ))}
-            </select>
-            {(() => {
-              const selected = overflowGroups.find((g) => g.name === source);
-              if (!selected) return null;
-              const matchingAccount = selected.kind === "cash" ? cashAccounts.find((a) => a.name === selected.name) : undefined;
-              return renderGroupTooltip(selected, matchingAccount);
-            })()}
-          </div>
-        )}
       </div>
       {listGroups.length > 0 && (
         <div className="groups listGroups">
@@ -1365,7 +1330,7 @@ export function Records({
               {moneyBreakdown(overallListByCurrency)}
             </strong>
           </button>
-          {visibleListGroups.map((g) => (
+          {listGroups.map((g) => (
             <div className="groupCard" key={g.name}>
               <button
                 className={activeList === g.name ? "selected" : ""}
@@ -1405,24 +1370,6 @@ export function Records({
               )}
             </div>
           ))}
-          {overflowListGroups.length > 0 && (
-            <div className="groupCard groupCardOverflow">
-              <select
-                value={overflowListGroups.some((g) => g.name === activeList) ? activeList : ""}
-                onChange={(e) => e.target.value && openList(e.target.value)}
-              >
-                <option value="">
-                  {tx(language, "Diğer Listeler", "Other Lists", "Lîsteyên Din")}{" "}
-                  ({overflowListGroups.length})
-                </option>
-                {overflowListGroups.map((g) => (
-                  <option key={g.name} value={g.name}>
-                    {localizeData(g.name, language)} · {moneyBreakdown(g.totalByCurrency)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
       )}
       <div className="search">
@@ -2110,6 +2057,20 @@ export function RecordModal({
         .filter(Boolean),
     ),
   ];
+  // Excel/Office/PDF eki — avatar/logo ile aynı desen: dosya base64 data
+  // URL'e çevrilip form state'te tutulur, kayıtla birlikte gönderilir.
+  // Sunucudaki ~6MB sınırıyla aynı seviyede burada da erken uyarı verilir.
+  const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+  function pickAttachment(file?: File) {
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      alert(tx(language, "Dosya çok büyük (en fazla 6MB).", "The file is too large (max 6MB).", "Pel pir mezin e (herî zêde 6MB)."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setForm({ ...form, attachmentData: String(reader.result), attachmentName: file.name });
+    reader.readAsDataURL(file);
+  }
   function commitSave() {
     if (financeNote.trim()) {
       onCreateNote({
@@ -2292,6 +2253,40 @@ export function RecordModal({
                 })
               }
             />
+          </label>
+          <label className="wide">
+            {tx(language, "Ek Dosya (Excel/Office/PDF)", "Attachment (Excel/Office/PDF)", "Peldanka Pêvekirî (Excel/Office/PDF)")}
+            <div className="attachmentField">
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx,.pdf"
+                onChange={(e) => {
+                  pickAttachment(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              {form.attachmentData && (
+                <>
+                  <a
+                    className="light compact"
+                    href={form.attachmentData}
+                    download={form.attachmentName || "dosya"}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    👁 {tx(language, "Görüntüle", "View", "Nîşan Bide")}
+                  </a>
+                  <button
+                    type="button"
+                    className="light compact"
+                    onClick={() => setForm({ ...form, attachmentData: "", attachmentName: "" })}
+                  >
+                    {tx(language, "Kaldır", "Remove", "Rake")}
+                  </button>
+                  <small className="attachmentFieldName">{form.attachmentName}</small>
+                </>
+              )}
+            </div>
           </label>
           <div className="wide notesRow">
             <label>

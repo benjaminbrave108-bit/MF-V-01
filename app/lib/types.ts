@@ -22,6 +22,11 @@ export type RecordItem = {
   tags: string[];
   cashAccount: string;
   listName: string;
+  // Kayda eklenen Excel/Office/PDF dosyası — avatar/logo ile aynı desen,
+  // base64 data URL. attachmentName orijinal dosya adı (indirme/görüntüleme
+  // bağlantısında gösterilir). İkisi de boşsa dosya eklenmemiş demektir.
+  attachmentData?: string;
+  attachmentName?: string;
   // The kasa this record is actually linked to (FK) — null for legacy/orphan
   // rows. Used client-side to scope a record to a "workspace" (own vs a
   // shared user's) by matching against CashAccountSummary.id; cashAccount

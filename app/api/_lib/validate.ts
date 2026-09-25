@@ -36,6 +36,17 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format 
 const amountSchema = z.number().finite().min(0).max(999_999_999_999.99);
 const shortText = (max: number) => z.string().max(max).optional().default("");
 const tagsSchema = z.array(z.string().max(64)).max(20).optional().default([]);
+// Ekli dosya bir base64 data URL olarak saklanıyor (bkz. db/schema.ts
+// attachmentData) — base64, ham baytların ~4/3'ü kadar yer kapladığı için
+// bu sınır kabaca 6MB'lık bir dosyaya karşılık gelir.
+const MAX_ATTACHMENT_BASE64_LENGTH = 8_500_000;
+const attachmentDataSchema = z
+  .string()
+  .max(MAX_ATTACHMENT_BASE64_LENGTH, "Dosya çok büyük (en fazla ~6MB)")
+  .refine((v) => v === "" || v.startsWith("data:"), "Geçersiz dosya verisi")
+  .optional()
+  .default("");
+const attachmentNameSchema = z.string().max(255).optional().default("");
 
 export const recordInputSchema = z.object({
   kind: kindSchema,
@@ -50,6 +61,8 @@ export const recordInputSchema = z.object({
   tags: tagsSchema,
   cashAccount: shortText(200),
   listName: shortText(200),
+  attachmentData: attachmentDataSchema,
+  attachmentName: attachmentNameSchema,
 });
 
 // PUT allows partial updates: unlike recordInputSchema's fields (which
@@ -70,6 +83,12 @@ export const recordUpdateSchema = z.object({
   tags: z.array(z.string().max(64)).max(20).optional(),
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
+  attachmentData: z
+    .string()
+    .max(MAX_ATTACHMENT_BASE64_LENGTH, "Dosya çok büyük (en fazla ~6MB)")
+    .refine((v) => v === "" || v.startsWith("data:"), "Geçersiz dosya verisi")
+    .optional(),
+  attachmentName: z.string().max(255).optional(),
   // Optimistic-locking token: the updatedAt the client last saw. If it
   // doesn't match the row's current value, someone else changed it first.
   updatedAt: z.string().optional(),

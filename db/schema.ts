@@ -107,6 +107,12 @@ export const records = pgTable("records", {
   // backfill but is not worth a hard constraint over) don't block writes.
   cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "set null" }),
   listName: text("list_name").notNull().default(""),
+  // Bir kayda eklenen Excel/Office/PDF dosyası — avatar/logo ile aynı
+  // desen: base64 data URL olarak doğrudan saklanır (ayrı bir dosya
+  // depolama/S3 entegrasyonu yok). attachmentName indirme/görüntüleme
+  // bağlantısında orijinal dosya adını göstermek için.
+  attachmentData: text("attachment_data").notNull().default(""),
+  attachmentName: text("attachment_name").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
