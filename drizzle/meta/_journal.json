@@ -148,6 +148,20 @@
       "when": 1790357388014,
       "tag": "0020_known_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790358158106,
+      "tag": "0021_harsh_human_torch",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790358174495,
+      "tag": "0022_pretty_captain_britain",
+      "breakpoints": true
     }
   ]
 }

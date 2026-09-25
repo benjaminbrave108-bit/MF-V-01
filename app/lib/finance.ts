@@ -69,5 +69,6 @@ export function normalizeRecord(x: RecordItem): RecordItem {
     tags: Array.isArray(x.tags) ? x.tags : [],
     cashAccount: x.cashAccount || "",
     listName: x.listName || "",
+    attachments: Array.isArray(x.attachments) ? x.attachments : [],
   };
 }

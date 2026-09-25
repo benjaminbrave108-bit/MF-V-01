@@ -8,6 +8,7 @@ export type Page =
   | "archive"
   | "users"
   | "settings";
+export type RecordAttachment = { name: string; data: string };
 export type RecordItem = {
   id: number;
   kind: Kind;
@@ -22,11 +23,10 @@ export type RecordItem = {
   tags: string[];
   cashAccount: string;
   listName: string;
-  // Kayda eklenen Excel/Office/PDF dosyası — avatar/logo ile aynı desen,
-  // base64 data URL. attachmentName orijinal dosya adı (indirme/görüntüleme
-  // bağlantısında gösterilir). İkisi de boşsa dosya eklenmemiş demektir.
-  attachmentData?: string;
-  attachmentName?: string;
+  // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
+  // avatar/logo ile aynı desen, her biri base64 data URL. Boş dizi = dosya
+  // eklenmemiş.
+  attachments?: RecordAttachment[];
   // The kasa this record is actually linked to (FK) — null for legacy/orphan
   // rows. Used client-side to scope a record to a "workspace" (own vs a
   // shared user's) by matching against CashAccountSummary.id; cashAccount

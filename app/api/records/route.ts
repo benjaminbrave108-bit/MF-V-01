@@ -79,8 +79,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         cashAccount: payload.kind === "cash" ? payload.source : (payload.cashAccount || fallbackKasaNameFor(payload.kind)),
         cashAccountId: link.cashAccountId,
         listName: payload.listName,
-        attachmentData: payload.attachmentData,
-        attachmentName: payload.attachmentName,
+        attachments: payload.attachments,
       })
       .returning();
 

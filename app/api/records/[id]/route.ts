@@ -76,8 +76,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
         cashAccount,
         cashAccountId: link.cashAccountId,
         listName: payload.listName ?? old.listName,
-        attachmentData: payload.attachmentData ?? old.attachmentData,
-        attachmentName: payload.attachmentName ?? old.attachmentName,
+        attachments: payload.attachments ?? old.attachments,
         updatedAt: new Date(),
       })
       .where(eq(records.id, id))

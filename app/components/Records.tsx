@@ -2117,6 +2117,7 @@ export function RecordModal({
         tags: [],
         cashAccount: "",
         listName: "",
+        attachments: [],
       };
   // Always seed the form with the raw stored values, never the display-only
   // Kurdish demo translations — otherwise saving without touching a field
@@ -2133,19 +2134,89 @@ export function RecordModal({
     ),
   ];
   const previousTags = [...new Set(records.flatMap((x) => x.tags))];
-  // Excel/Office/PDF eki — avatar/logo ile aynı desen: dosya base64 data
-  // URL'e çevrilip form state'te tutulur, kayıtla birlikte gönderilir.
-  // Sunucudaki ~6MB sınırıyla aynı seviyede burada da erken uyarı verilir.
+  // Excel/Office/PDF ekleri (birden fazla olabilir) — avatar/logo ile aynı
+  // desen: her dosya base64 data URL'e çevrilip form state'teki diziye
+  // eklenir, kayıtla birlikte gönderilir. Sunucudaki sınırlarla aynı
+  // seviyede burada da erken uyarı verilir.
   const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
-  function pickAttachment(file?: File) {
-    if (!file) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      alert(tx(language, "Dosya çok büyük (en fazla 6MB).", "The file is too large (max 6MB).", "Pel pir mezin e (herî zêde 6MB)."));
+  const MAX_ATTACHMENTS = 5;
+  function pickAttachments(files: FileList | null) {
+    if (!files || !files.length) return;
+    const room = MAX_ATTACHMENTS - (form.attachments?.length ?? 0);
+    if (room <= 0) {
+      alert(
+        tx(
+          language,
+          `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir.`,
+          `You can attach at most ${MAX_ATTACHMENTS} files.`,
+          `Herî zêde ${MAX_ATTACHMENTS} pel dikarin werin pêvekirin.`,
+        ),
+      );
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setForm({ ...form, attachmentData: String(reader.result), attachmentName: file.name });
-    reader.readAsDataURL(file);
+    const selected = Array.from(files).slice(0, room);
+    for (const file of selected) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        alert(
+          tx(
+            language,
+            `"${file.name}" çok büyük (en fazla 6MB).`,
+            `"${file.name}" is too large (max 6MB).`,
+            `"${file.name}" pir mezin e (herî zêde 6MB).`,
+          ),
+        );
+        continue;
+      }
+      const reader = new FileReader();
+      // Functional update — birden çok dosya aynı anda seçildiğinde her
+      // FileReader kendi temposunda tamamlanır; kapalı (closure) bir
+      // `form` üzerinden yazmak eş zamanlı okumalardan birini kaybettirir.
+      reader.onload = () =>
+        setForm((f) => ({
+          ...f,
+          attachments: [...(f.attachments ?? []), { name: file.name, data: String(reader.result) }],
+        }));
+      reader.readAsDataURL(file);
+    }
+  }
+  function removeAttachment(index: number) {
+    setForm({ ...form, attachments: (form.attachments ?? []).filter((_, i) => i !== index) });
+  }
+  // "Görüntüle" — dev bir base64 data URL'i doğrudan <a href> yapmak
+  // yerine (bazı tarayıcılarda güvenilir açılmıyor/indirme diyaloğuna
+  // takılıyordu), tıklamada senkron olarak bir Blob URL'e çevirip
+  // window.open ile açıyoruz; bu hem daha güvenilir hem de dosya doğru
+  // MIME tipiyle (mümkünse tarayıcı içinde) açılıyor.
+  function viewAttachment(attachment: { name: string; data: string }) {
+    // window.open() bazı tarayıcılarda tek başına açılır pencere olarak
+    // engellenebiliyor; bunun yerine bu uygulamadaki "Excel'e Çıkar"
+    // indirmesiyle aynı, kanıtlanmış yöntem kullanılıyor — geçici bir <a>
+    // elementi oluşturup gerçek bir tıklama tetikliyoruz, bu tarayıcıların
+    // engelleme kurallarına takılmıyor.
+    try {
+      const [header, base64] = attachment.data.split(",");
+      const mime = /data:(.*?);base64/.exec(header)?.[1] || "application/octet-stream";
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      const link = document.createElement("a");
+      link.href = attachment.data;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
   }
   function commitSave() {
     if (financeNote.trim()) {
@@ -2324,38 +2395,42 @@ export function RecordModal({
             />
           </label>
           <label className="wide">
-            {tx(language, "Ek Dosya (Excel/Office/PDF)", "Attachment (Excel/Office/PDF)", "Peldanka Pêvekirî (Excel/Office/PDF)")}
+            {tx(language, "Ek Dosyalar (Excel/Office/PDF)", "Attachments (Excel/Office/PDF)", "Peldankên Pêvekirî (Excel/Office/PDF)")}
             <div className="attachmentField">
               <input
                 type="file"
+                multiple
                 accept=".xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx,.pdf"
+                disabled={(form.attachments?.length ?? 0) >= MAX_ATTACHMENTS}
                 onChange={(e) => {
-                  pickAttachment(e.target.files?.[0]);
+                  pickAttachments(e.target.files);
                   e.target.value = "";
                 }}
               />
-              {form.attachmentData && (
-                <>
-                  <a
-                    className="light compact"
-                    href={form.attachmentData}
-                    download={form.attachmentName || "dosya"}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    👁 {tx(language, "Görüntüle", "View", "Nîşan Bide")}
-                  </a>
-                  <button
-                    type="button"
-                    className="light compact"
-                    onClick={() => setForm({ ...form, attachmentData: "", attachmentName: "" })}
-                  >
-                    {tx(language, "Kaldır", "Remove", "Rake")}
-                  </button>
-                  <small className="attachmentFieldName">{form.attachmentName}</small>
-                </>
-              )}
             </div>
+            {(form.attachments?.length ?? 0) > 0 && (
+              <ul className="attachmentList">
+                {form.attachments!.map((att, index) => (
+                  <li key={`${att.name}-${index}`}>
+                    <small className="attachmentFieldName">{att.name}</small>
+                    <button
+                      type="button"
+                      className="light compact"
+                      onClick={() => viewAttachment(att)}
+                    >
+                      👁 {tx(language, "Görüntüle", "View", "Nîşan Bide")}
+                    </button>
+                    <button
+                      type="button"
+                      className="light compact"
+                      onClick={() => removeAttachment(index)}
+                    >
+                      {tx(language, "Kaldır", "Remove", "Rake")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </label>
           <div className="wide notesRow">
             <label>
