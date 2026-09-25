@@ -2028,7 +2028,9 @@ header h1 {
    renkte ama aynı paletten (yeşil=gelir, turuncu/kırmızı=gider, teal=kasa
    geneli) bir hiyerarşi; ölçekler sayfanın geri kalanıyla (11px gövde,
    9-10px küçük metin) tutarlı kalsın diye kompakt tutuldu. Birden çok kasa
-   eklendiğinde her biri kendi .kasaReportBlock kartında art arda sıralanır. */
+   eklendiğinde ayrı ayrı değil, tek bir Gelir/Gider/Sonuç'a BİRLEŞTİRİLİR
+   (bkz. Records.tsx mergeCurrencyMaps) — seçili kasalar üstte .kasaReportChip
+   rozetleriyle listelenir, her biri kaldırılabilir. */
 .kasaReportModal {
   width: min(920px, 96vw);
 }
@@ -2052,14 +2054,35 @@ header h1 {
   background: white;
   color: #344b54;
 }
-.kasaReportBlock {
-  border: 1px solid #e6edf0;
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 16px;
-  background: #fff;
+.kasaReportChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
 }
-.kasaReportBlock:last-of-type { margin-bottom: 0; }
+.kasaReportChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: #eaf4f7;
+  color: #176b87;
+  font-size: 10px;
+  font-weight: 700;
+}
+.kasaReportChip button {
+  border: 0;
+  background: rgba(23, 107, 135, 0.14);
+  color: #176b87;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.kasaReportChip button:hover { background: rgba(23, 107, 135, 0.26); }
 .kasaReportHead {
   display: flex;
   align-items: center;
@@ -2092,19 +2115,6 @@ header h1 {
   font-weight: 900;
   margin-top: 1px;
 }
-.kasaReportRemove {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 0;
-  background: rgba(255, 255, 255, 0.18);
-  color: white;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-.kasaReportRemove:hover { background: rgba(255, 255, 255, 0.32); }
 .kasaReportBars { padding: 8px 4px 2px; }
 .kasaReportBars > div { margin-bottom: 10px; }
 .kasaReportBars > div:last-child { margin-bottom: 4px; }
@@ -2152,6 +2162,12 @@ header h1 {
   color: #314750;
 }
 .kasaReportRowAmount { flex: 0 0 auto; font-weight: 700; color: #263c46; }
+.kasaReportRowKasa {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+}
 .kasaReportEmpty {
   margin: 0;
   padding: 12px;

@@ -1690,6 +1690,20 @@ function KasaReportBar({ label, value, max, expense }: { label: string; value: n
 // kasanın Gelir/Gider dökümünü, mini bir analiz çizelgesini ve toplam
 // sonucunu tek pencerede gösterir, Excel'e aktarılabilir. Sayfadaki
 // Gelir/Gider kutularıyla aynı renk dilini kullanır (yeşil/turuncu/teal).
+function mergeCurrencyMaps(maps: Record<string, number>[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of maps) for (const [c, v] of Object.entries(m)) out[c] = (out[c] ?? 0) + v;
+  return out;
+}
+
+// Sonuç Oluştur penceresine 2., 3. kasa eklendiğinde ayrı ayrı değil,
+// seçilmiş ilk kasanın sonucuyla BİRLEŞTİRİLEREK tek bir Gelir/Gider/Sonuç
+// hâline getirilir — ayrı ayrı görmek isteyen kullanıcı zaten pencereyi
+// her kasa için tek tek açabilir. Birden çok kasa satırları karışınca
+// hangi kayıt hangi kasaya ait olduğu görünsün diye satıra kasa adı
+// etiketlenir (bkz. TaggedRow / kasaReportRowKasa).
+type TaggedRow = { row: RecordItem; kasaName: string };
+
 function KasaResultModal({
   language,
   initialKasaName,
@@ -1710,6 +1724,20 @@ function KasaResultModal({
   const reportDate = date(new Date().toISOString().slice(0, 10), language);
   const availableToAdd = kasaOptions.filter((n) => !selectedKasas.includes(n));
   const kasaBlocks = selectedKasas.map((name) => computeKasaReportData(name, records, allRecords));
+  const isMulti = kasaBlocks.length > 1;
+
+  const mergedIncome: TaggedRow[] = kasaBlocks
+    .flatMap((d) => d.incomeRows.map((row) => ({ row, kasaName: d.name })))
+    .sort((a, b) => b.row.date.localeCompare(a.row.date) || b.row.id - a.row.id);
+  const mergedExpense: TaggedRow[] = kasaBlocks
+    .flatMap((d) => d.expenseRows.map((row) => ({ row, kasaName: d.name })))
+    .sort((a, b) => b.row.date.localeCompare(a.row.date) || b.row.id - a.row.id);
+  const mergedTotalInByCurrency = mergeCurrencyMaps(kasaBlocks.map((d) => d.totalInByCurrency));
+  const mergedTotalOutByCurrency = mergeCurrencyMaps(kasaBlocks.map((d) => d.totalOutByCurrency));
+  const mergedTotalByCurrency = mergeCurrencyMaps(kasaBlocks.map((d) => d.totalByCurrency));
+  const mergedTotalInAmount = kasaBlocks.reduce((s, d) => s + d.totalInAmount, 0);
+  const mergedTotalOutAmount = kasaBlocks.reduce((s, d) => s + d.totalOutAmount, 0);
+  const combinedTitle = kasaBlocks.map((d) => localizeData(d.name, language)).join(" + ");
 
   function addKasa() {
     if (!pendingAdd) return;
@@ -1724,126 +1752,136 @@ function KasaResultModal({
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Maliye-Finans Online";
     workbook.created = new Date();
-    const headers = [
-      tx(language, "Tarih", "Date", "Tarîx"),
-      tx(language, "Başlık", "Title", "Sernav"),
-      tx(language, "Kişi", "Person", "Kes"),
-      tx(language, "Tutar", "Amount", "Meblağ"),
-    ];
+    const headers = isMulti
+      ? [
+          tx(language, "Tarih", "Date", "Tarîx"),
+          tx(language, "Kasa", "Kasa", "Qase"),
+          tx(language, "Başlık", "Title", "Sernav"),
+          tx(language, "Kişi", "Person", "Kes"),
+          tx(language, "Tutar", "Amount", "Meblağ"),
+        ]
+      : [
+          tx(language, "Tarih", "Date", "Tarîx"),
+          tx(language, "Başlık", "Title", "Sernav"),
+          tx(language, "Kişi", "Person", "Kes"),
+          tx(language, "Tutar", "Amount", "Meblağ"),
+        ];
+    const colCount = headers.length;
     const thin = { style: "thin" as const, color: { argb: "FFD3DDDD" } };
     const border = { top: thin, left: thin, bottom: thin, right: thin };
     const moneyFormat = "#,##0.00;[Red]-#,##0.00";
-    const usedSheetNames = new Set<string>();
 
-    for (const data of kasaBlocks) {
-      // Excel sekme adları 31 karakterle sınırlı ve aynı isim iki kez
-      // kullanılamaz — aynı ada sahip kasalar için sayaç eklenir.
-      let sheetName = localizeData(data.name, language).replace(/[\\/:*?[\]]/g, "-").slice(0, 28) || "Kasa";
-      let suffix = 2;
-      while (usedSheetNames.has(sheetName)) {
-        sheetName = `${sheetName.slice(0, 26)} (${suffix++})`;
-      }
-      usedSheetNames.add(sheetName);
-      const sheet = workbook.addWorksheet(sheetName, {
+    const sheet = workbook.addWorksheet(
+      tx(language, "Kasa Sonucu", "Cash Result", "Encama Qaseyê").slice(0, 31),
+      {
         pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
         views: [{ showGridLines: false }],
+      },
+    );
+    sheet.columns = isMulti
+      ? [{ width: 14 }, { width: 20 }, { width: 30 }, { width: 20 }, { width: 18 }]
+      : [{ width: 14 }, { width: 34 }, { width: 22 }, { width: 18 }];
+
+    const titleRow = sheet.addRow([combinedTitle]);
+    sheet.mergeCells(titleRow.number, 1, titleRow.number, colCount);
+    titleRow.height = 28;
+    titleRow.getCell(1).font = { name: "Arial", bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+    titleRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF176B87" } };
+    titleRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+
+    const subRow = sheet.addRow([
+      `${tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}: ${moneyBreakdown(mergedTotalByCurrency)}`,
+    ]);
+    sheet.mergeCells(subRow.number, 1, subRow.number, colCount);
+    subRow.height = 22;
+    subRow.getCell(1).font = { name: "Arial", bold: true, size: 12, color: { argb: "FF17384A" } };
+    subRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    subRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEEF3" } };
+    subRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+    sheet.addRow([]);
+
+    function addSection(
+      sectionTitle: string,
+      rows: TaggedRow[],
+      sectionTotal: Record<string, number>,
+      headFill: string,
+      headColor: string,
+      totalFill: string,
+    ) {
+      const sectionHead = sheet.addRow([sectionTitle]);
+      sheet.mergeCells(sectionHead.number, 1, sectionHead.number, colCount);
+      sectionHead.height = 22;
+      sectionHead.getCell(1).font = { name: "Arial", bold: true, size: 12, color: { argb: headColor } };
+      sectionHead.getCell(1).alignment = { horizontal: "left", vertical: "middle", indent: 1 };
+      sectionHead.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: headFill } };
+      sectionHead.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+
+      const headerRow = sheet.addRow(headers);
+      headerRow.height = 18;
+      headerRow.eachCell((cell) => {
+        cell.font = { name: "Arial", bold: true, size: 9, color: { argb: "FF5B6F77" } };
+        cell.alignment = { vertical: "middle", horizontal: "left" };
+        cell.border = border;
       });
-      sheet.columns = [{ width: 14 }, { width: 34 }, { width: 22 }, { width: 18 }];
 
-      const titleRow = sheet.addRow([localizeData(data.name, language)]);
-      sheet.mergeCells(titleRow.number, 1, titleRow.number, 4);
-      titleRow.height = 28;
-      titleRow.getCell(1).font = { name: "Arial", bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      titleRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
-      titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF176B87" } };
-      titleRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
-
-      const subRow = sheet.addRow([
-        `${tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}: ${moneyBreakdown(data.totalByCurrency)}`,
+      for (const { row: r, kasaName } of rows) {
+        const values = isMulti
+          ? [date(r.date, language), localizeData(kasaName, language), localizeData(r.source, language), localizeData(r.person, language), r.amount]
+          : [date(r.date, language), localizeData(r.source, language), localizeData(r.person, language), r.amount];
+        const row = sheet.addRow(values);
+        row.height = 18;
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.font = { name: "Arial", size: 9, color: { argb: "FF314750" } };
+          cell.alignment = { vertical: "middle", horizontal: colNumber === colCount ? "right" : "left" };
+          cell.border = border;
+        });
+        row.getCell(colCount).numFmt = moneyFormat;
+      }
+      if (!rows.length) {
+        const emptyRow = sheet.addRow([tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")]);
+        sheet.mergeCells(emptyRow.number, 1, emptyRow.number, colCount);
+        emptyRow.getCell(1).font = { name: "Arial", italic: true, size: 9, color: { argb: "FF9AA7AB" } };
+        emptyRow.getCell(1).alignment = { horizontal: "center" };
+      }
+      const totalRow = sheet.addRow([
+        tx(language, "Sonuç", "Result", "Encam"),
+        ...Array(colCount - 2).fill(""),
+        moneyBreakdown(sectionTotal),
       ]);
-      sheet.mergeCells(subRow.number, 1, subRow.number, 4);
-      subRow.height = 22;
-      subRow.getCell(1).font = { name: "Arial", bold: true, size: 12, color: { argb: "FF17384A" } };
-      subRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
-      subRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEEF3" } };
-      subRow.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+      sheet.mergeCells(totalRow.number, 1, totalRow.number, colCount - 1);
+      totalRow.height = 20;
+      totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.font = { name: "Arial", bold: true, size: 10, color: { argb: "FF17384A" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: totalFill } };
+        cell.alignment = { vertical: "middle", horizontal: colNumber === 1 ? "left" : "right" };
+        cell.border = border;
+      });
       sheet.addRow([]);
+    }
 
-      function addSection(
-        sectionTitle: string,
-        rows: RecordItem[],
-        sectionTotal: Record<string, number>,
-        headFill: string,
-        headColor: string,
-        totalFill: string,
-      ) {
-        const sectionHead = sheet.addRow([sectionTitle]);
-        sheet.mergeCells(sectionHead.number, 1, sectionHead.number, 4);
-        sectionHead.height = 22;
-        sectionHead.getCell(1).font = { name: "Arial", bold: true, size: 12, color: { argb: headColor } };
-        sectionHead.getCell(1).alignment = { horizontal: "left", vertical: "middle", indent: 1 };
-        sectionHead.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: headFill } };
-        sectionHead.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+    addSection(tx(language, "GELİR", "INCOME", "DAHAT"), mergedIncome, mergedTotalInByCurrency, "FFDFF5ED", "FF118164", "FFE7F4EF");
+    addSection(tx(language, "GİDER", "EXPENSE", "MESREF"), mergedExpense, mergedTotalOutByCurrency, "FFFFF0DF", "FFD06F22", "FFFDF1E7");
 
-        const headerRow = sheet.addRow(headers);
-        headerRow.height = 18;
-        headerRow.eachCell((cell) => {
-          cell.font = { name: "Arial", bold: true, size: 9, color: { argb: "FF5B6F77" } };
-          cell.alignment = { vertical: "middle", horizontal: "left" };
-          cell.border = border;
-        });
-
-        for (const r of rows) {
-          const row = sheet.addRow([date(r.date, language), localizeData(r.source, language), localizeData(r.person, language), r.amount]);
-          row.height = 18;
-          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            cell.font = { name: "Arial", size: 9, color: { argb: "FF314750" } };
-            cell.alignment = { vertical: "middle", horizontal: colNumber === 4 ? "right" : "left" };
-            cell.border = border;
-          });
-          row.getCell(4).numFmt = moneyFormat;
-        }
-        if (!rows.length) {
-          const emptyRow = sheet.addRow([tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")]);
-          sheet.mergeCells(emptyRow.number, 1, emptyRow.number, 4);
-          emptyRow.getCell(1).font = { name: "Arial", italic: true, size: 9, color: { argb: "FF9AA7AB" } };
-          emptyRow.getCell(1).alignment = { horizontal: "center" };
-        }
-        const totalRow = sheet.addRow([tx(language, "Sonuç", "Result", "Encam"), "", "", moneyBreakdown(sectionTotal)]);
-        sheet.mergeCells(totalRow.number, 1, totalRow.number, 3);
-        totalRow.height = 20;
-        totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          cell.font = { name: "Arial", bold: true, size: 10, color: { argb: "FF17384A" } };
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: totalFill } };
-          cell.alignment = { vertical: "middle", horizontal: colNumber === 1 ? "left" : "right" };
-          cell.border = border;
-        });
-        sheet.addRow([]);
-      }
-
-      addSection(tx(language, "GELİR", "INCOME", "DAHAT"), data.incomeRows, data.totalInByCurrency, "FFDFF5ED", "FF118164", "FFE7F4EF");
-      addSection(tx(language, "GİDER", "EXPENSE", "MESREF"), data.expenseRows, data.totalOutByCurrency, "FFFFF0DF", "FFD06F22", "FFFDF1E7");
-
-      // Sonuç satırları — her biri ekrandaki renk bloğuyla eşleşen bir dolgu
-      // rengi alır, sadece metin rengiyle sınırlı kalmaz.
-      const summaryLines: [string, string, string, string][] = [
-        [tx(language, "KASA SONUÇ", "CASH RESULT", "ENCAMA QASEYÊ"), moneyBreakdown(data.totalByCurrency), "FFEAF4F7", "FF12414F"],
-        [tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ"), moneyBreakdown(data.totalInByCurrency), "FFE7F4EF", "FF14795E"],
-        [tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ"), moneyBreakdown(data.totalOutByCurrency), "FFFDF1E7", "FFB33D3D"],
-        [tx(language, "TARİH", "DATE", "TARÎX"), reportDate, "FFF5F7F8", "FF5B6F77"],
-      ];
-      for (const [label, value, fill, color] of summaryLines) {
-        const row = sheet.addRow([label, "", "", value]);
-        sheet.mergeCells(row.number, 1, row.number, 2);
-        row.height = 20;
-        row.getCell(1).font = { name: "Arial", bold: true, size: 10, color: { argb: color } };
-        row.getCell(4).font = { name: "Arial", bold: true, size: 11, color: { argb: color } };
-        row.getCell(4).alignment = { horizontal: "right" };
-        row.eachCell({ includeEmpty: true }, (cell) => {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
-          cell.border = border;
-        });
-      }
+    // Sonuç satırları — her biri ekrandaki renk bloğuyla eşleşen bir dolgu
+    // rengi alır, sadece metin rengiyle sınırlı kalmaz.
+    const summaryLines: [string, string, string, string][] = [
+      [tx(language, "KASA SONUÇ", "CASH RESULT", "ENCAMA QASEYÊ"), moneyBreakdown(mergedTotalByCurrency), "FFEAF4F7", "FF12414F"],
+      [tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ"), moneyBreakdown(mergedTotalInByCurrency), "FFE7F4EF", "FF14795E"],
+      [tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ"), moneyBreakdown(mergedTotalOutByCurrency), "FFFDF1E7", "FFB33D3D"],
+      [tx(language, "TARİH", "DATE", "TARÎX"), reportDate, "FFF5F7F8", "FF5B6F77"],
+    ];
+    for (const [label, value, fill, color] of summaryLines) {
+      const row = sheet.addRow([label, ...Array(colCount - 2).fill(""), value]);
+      sheet.mergeCells(row.number, 1, row.number, colCount - 1);
+      row.height = 20;
+      row.getCell(1).font = { name: "Arial", bold: true, size: 10, color: { argb: color } };
+      row.getCell(colCount).font = { name: "Arial", bold: true, size: 11, color: { argb: color } };
+      row.getCell(colCount).alignment = { horizontal: "right" };
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+        cell.border = border;
+      });
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -1863,9 +1901,7 @@ function KasaResultModal({
         <div className="modalHead">
           <div>
             <h2>{tx(language, "Kasa Sonuç Raporu", "Cash Result Report", "Rapora Encama Qaseyê")}</h2>
-            <p>
-              {kasaBlocks.map((d) => localizeData(d.name, language)).join(" · ")}
-            </p>
+            <p>{combinedTitle}</p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
@@ -1884,96 +1920,104 @@ function KasaResultModal({
             </button>
           </div>
         )}
-        {kasaBlocks.map((data) => (
-          <div className="kasaReportBlock" key={data.name}>
-            <div className="kasaReportHead">
-              <span>{localizeData(data.name, language)}</span>
-              <div>
-                <small>{tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}</small>
-                <strong>{moneyBreakdown(data.totalByCurrency)}</strong>
-              </div>
-              {selectedKasas.length > 1 && (
+        {isMulti && (
+          <div className="kasaReportChips">
+            {selectedKasas.map((name) => (
+              <span className="kasaReportChip" key={name}>
+                {localizeData(name, language)}
                 <button
                   type="button"
-                  className="kasaReportRemove"
-                  onClick={() => removeKasa(data.name)}
+                  onClick={() => removeKasa(name)}
                   title={tx(language, "Bu kasayı kaldır", "Remove this kasa", "Vê qaseyê rake")}
                 >
                   ×
                 </button>
-              )}
-            </div>
-            <div className="bars kasaReportBars">
-              <KasaReportBar
-                label={tx(language, "Gelir", "Income", "Dahat")}
-                value={data.totalInAmount}
-                max={Math.max(data.totalInAmount, data.totalOutAmount, 1)}
-              />
-              <KasaReportBar
-                label={tx(language, "Gider", "Expense", "Mesref")}
-                value={data.totalOutAmount}
-                max={Math.max(data.totalInAmount, data.totalOutAmount, 1)}
-                expense
-              />
-            </div>
-            <div className="kasaReportSection kasaReportIncome">
-              <div className="kasaReportSectionHead">
-                <span>{tx(language, "Gelir", "Income", "Dahat")}</span>
-                <strong>{moneyBreakdown(data.totalInByCurrency)}</strong>
-              </div>
-              <div className="kasaReportList">
-                {data.incomeRows.length === 0 ? (
-                  <p className="kasaReportEmpty">{tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")}</p>
-                ) : (
-                  data.incomeRows.map((r) => (
-                    <div className="kasaReportRow" key={r.id}>
-                      <span className="kasaReportRowDate">{date(r.date, language)}</span>
-                      <span className="kasaReportRowTitle">{localizeData(r.source, language)}</span>
-                      <span className="kasaReportRowAmount">{money(r.amount, r.currency)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="kasaReportSection kasaReportExpense">
-              <div className="kasaReportSectionHead">
-                <span>{tx(language, "Gider", "Expense", "Mesref")}</span>
-                <strong>{moneyBreakdown(data.totalOutByCurrency)}</strong>
-              </div>
-              <div className="kasaReportList">
-                {data.expenseRows.length === 0 ? (
-                  <p className="kasaReportEmpty">{tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")}</p>
-                ) : (
-                  data.expenseRows.map((r) => (
-                    <div className="kasaReportRow" key={r.id}>
-                      <span className="kasaReportRowDate">{date(r.date, language)}</span>
-                      <span className="kasaReportRowTitle">{localizeData(r.source, language)}</span>
-                      <span className="kasaReportRowAmount">{money(r.amount, r.currency)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="kasaReportSummary">
-              <div className="kasaReportSummaryRow kasaReportSummaryMain">
-                <small>{tx(language, "KASA SONUÇ", "CASH RESULT", "ENCAMA QASEYÊ")}</small>
-                <strong>{moneyBreakdown(data.totalByCurrency)}</strong>
-              </div>
-              <div className="kasaReportSummaryRow kasaReportSummaryIncome">
-                <small>{tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ")}</small>
-                <strong>{moneyBreakdown(data.totalInByCurrency)}</strong>
-              </div>
-              <div className="kasaReportSummaryRow kasaReportSummaryExpense">
-                <small>{tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ")}</small>
-                <strong>{moneyBreakdown(data.totalOutByCurrency)}</strong>
-              </div>
-              <div className="kasaReportSummaryRow kasaReportSummaryDate">
-                <small>{tx(language, "TARİH", "DATE", "TARÎX")}</small>
-                <strong>{reportDate}</strong>
-              </div>
-            </div>
+              </span>
+            ))}
           </div>
-        ))}
+        )}
+        <div className="kasaReportHead">
+          <span>{combinedTitle}</span>
+          <div>
+            <small>{tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}</small>
+            <strong>{moneyBreakdown(mergedTotalByCurrency)}</strong>
+          </div>
+        </div>
+        <div className="bars kasaReportBars">
+          <KasaReportBar
+            label={tx(language, "Gelir", "Income", "Dahat")}
+            value={mergedTotalInAmount}
+            max={Math.max(mergedTotalInAmount, mergedTotalOutAmount, 1)}
+          />
+          <KasaReportBar
+            label={tx(language, "Gider", "Expense", "Mesref")}
+            value={mergedTotalOutAmount}
+            max={Math.max(mergedTotalInAmount, mergedTotalOutAmount, 1)}
+            expense
+          />
+        </div>
+        <div className="kasaReportSection kasaReportIncome">
+          <div className="kasaReportSectionHead">
+            <span>{tx(language, "Gelir", "Income", "Dahat")}</span>
+            <strong>{moneyBreakdown(mergedTotalInByCurrency)}</strong>
+          </div>
+          <div className="kasaReportList">
+            {mergedIncome.length === 0 ? (
+              <p className="kasaReportEmpty">{tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")}</p>
+            ) : (
+              mergedIncome.map(({ row: r, kasaName }) => (
+                <div className="kasaReportRow" key={r.id}>
+                  <span className="kasaReportRowDate">{date(r.date, language)}</span>
+                  <span className="kasaReportRowTitle">
+                    {localizeData(r.source, language)}
+                    {isMulti && <small className="kasaReportRowKasa">▣ {localizeData(kasaName, language)}</small>}
+                  </span>
+                  <span className="kasaReportRowAmount">{money(r.amount, r.currency)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="kasaReportSection kasaReportExpense">
+          <div className="kasaReportSectionHead">
+            <span>{tx(language, "Gider", "Expense", "Mesref")}</span>
+            <strong>{moneyBreakdown(mergedTotalOutByCurrency)}</strong>
+          </div>
+          <div className="kasaReportList">
+            {mergedExpense.length === 0 ? (
+              <p className="kasaReportEmpty">{tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")}</p>
+            ) : (
+              mergedExpense.map(({ row: r, kasaName }) => (
+                <div className="kasaReportRow" key={r.id}>
+                  <span className="kasaReportRowDate">{date(r.date, language)}</span>
+                  <span className="kasaReportRowTitle">
+                    {localizeData(r.source, language)}
+                    {isMulti && <small className="kasaReportRowKasa">▣ {localizeData(kasaName, language)}</small>}
+                  </span>
+                  <span className="kasaReportRowAmount">{money(r.amount, r.currency)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="kasaReportSummary">
+          <div className="kasaReportSummaryRow kasaReportSummaryMain">
+            <small>{tx(language, "KASA SONUÇ", "CASH RESULT", "ENCAMA QASEYÊ")}</small>
+            <strong>{moneyBreakdown(mergedTotalByCurrency)}</strong>
+          </div>
+          <div className="kasaReportSummaryRow kasaReportSummaryIncome">
+            <small>{tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ")}</small>
+            <strong>{moneyBreakdown(mergedTotalInByCurrency)}</strong>
+          </div>
+          <div className="kasaReportSummaryRow kasaReportSummaryExpense">
+            <small>{tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ")}</small>
+            <strong>{moneyBreakdown(mergedTotalOutByCurrency)}</strong>
+          </div>
+          <div className="kasaReportSummaryRow kasaReportSummaryDate">
+            <small>{tx(language, "TARİH", "DATE", "TARÎX")}</small>
+            <strong>{reportDate}</strong>
+          </div>
+        </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Kapat", "Close", "Bigire")}
