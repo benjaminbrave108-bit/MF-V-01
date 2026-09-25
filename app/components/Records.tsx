@@ -141,6 +141,81 @@ function SuggestInput({
   );
 }
 
+// Virgülle ayrılmış çoklu etiket girişi — SuggestInput'tan farklı olarak
+// önerileri tüm metne değil, en son (henüz yazılmakta olan) etikete göre
+// filtreler, böylece "sa" yazınca daha önce girilmiş "sabit" gibi bir
+// etiket baş harfleri eşleşir eşleşmez seçenek olarak çıkar. Yerel metin
+// tamponu (text state) tutuyor ki kullanıcı virgül yazıp yeni bir etikete
+// geçerken input değeri elindeki yazının altından kaymasın.
+function TagsInput({
+  tags,
+  onChange,
+  options,
+  placeholder,
+}: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(tags.join(", "));
+  const [open, setOpen] = useState(false);
+  const segments = text.split(",");
+  const draft = (segments[segments.length - 1] ?? "").trim();
+  const confirmed = segments.slice(0, -1).map((s) => s.trim()).filter(Boolean);
+  const confirmedLower = new Set(confirmed.map((t) => t.toLowerCase()));
+  const filtered = options
+    .filter((o) => !confirmedLower.has(o.toLowerCase()))
+    .filter((o) => (draft ? o.toLowerCase().startsWith(draft.toLowerCase()) : true))
+    .filter((o) => o.toLowerCase() !== draft.toLowerCase())
+    .slice(0, 8);
+
+  function commitText(next: string) {
+    setText(next);
+    onChange(
+      next
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean),
+    );
+  }
+  function pick(tag: string) {
+    commitText([...confirmed, tag].join(", ") + ", ");
+  }
+
+  return (
+    <div className="suggestField">
+      <input
+        autoComplete="off"
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => {
+          commitText(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="suggestList">
+          {filtered.map((o) => (
+            <button
+              type="button"
+              key={o}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(o);
+              }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Kasalar/Gelir/Gider tablosunun sütunları — kullanıcı bunları sürükleyerek
 // sırasını değiştirebilir ve kenarından tutup genişliğini ayarlayabilir
 // (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
@@ -2057,6 +2132,7 @@ export function RecordModal({
         .filter(Boolean),
     ),
   ];
+  const previousTags = [...new Set(records.flatMap((x) => x.tags))];
   // Excel/Office/PDF eki — avatar/logo ile aynı desen: dosya base64 data
   // URL'e çevrilip form state'te tutulur, kayıtla birlikte gönderilir.
   // Sunucudaki ~6MB sınırıyla aynı seviyede burada da erken uyarı verilir.
@@ -2235,23 +2311,16 @@ export function RecordModal({
           </label>
           <label>
             {tx(language, "Etiketler", "Tags", "Etîket")}
-            <input
+            <TagsInput
+              tags={form.tags}
+              onChange={(tags) => setForm({ ...form, tags })}
+              options={previousTags}
               placeholder={tx(
                 language,
                 "Örn: maaş, sabit, solar",
                 "E.g. salary, fixed, solar",
                 "Mînak: mûçe, sabît, solar",
               )}
-              value={form.tags.join(", ")}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  tags: e.target.value
-                    .split(",")
-                    .map((x) => x.trim())
-                    .filter(Boolean),
-                })
-              }
             />
           </label>
           <label className="wide">
