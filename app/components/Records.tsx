@@ -265,6 +265,7 @@ export function Records({
   onTransfersChanged,
   onCommentsRead,
   readOnly,
+  notes,
 }: {
   language: Language;
   kind: Kind;
@@ -284,6 +285,7 @@ export function Records({
   onTransfersChanged: () => void;
   onCommentsRead?: () => void;
   readOnly: boolean;
+  notes: FinanceNote[];
 }) {
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
   const [commentTarget, setCommentTarget] = useState<RecordItem | null>(null);
@@ -940,7 +942,14 @@ export function Records({
   }
   const latestRows = [...records]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
-    .slice(0, 5);
+    .slice(0, 3);
+  // "En Son Gelirler/Giderler" panosunun altındaki "Mali Özel Notlar"
+  // bölümü — bu sayfanın türüyle (income/expense) ilişkilendirilmiş en
+  // son 3 özel not (bkz. RecordModal'daki "Mali Özel Not" alanı).
+  const latestNotes = [...notes]
+    .filter((n) => n.relation === kind)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 3);
   const rowIdsKey = rows.map((x) => x.id).join(",");
   async function refreshCommentSummaries() {
     if (!rowIdsKey) {
@@ -1586,7 +1595,7 @@ export function Records({
                       : tx(language, "En Son Giderler", "Latest Expenses", "Mesrefên Dawî")}
                 </h3>
                 <small>
-                  {tx(language, "Son eklenen 5 kayıt", "5 most recent records", "5 qeydên herî dawî")}
+                  {tx(language, "Son eklenen 3 kayıt", "3 most recent records", "3 qeydên herî dawî")}
                 </small>
               </div>
             </div>
@@ -1602,6 +1611,36 @@ export function Records({
                 </article>
               ))}
             </div>
+            {!kasaSplitActive && (
+              <>
+                <div className="latestHead latestNotesHead">
+                  <span>📝</span>
+                  <div>
+                    <h3>{tx(language, "Mali Özel Notlar", "Private Finance Notes", "Nîşeyên Taybet ên Darayî")}</h3>
+                    <small>
+                      {tx(language, "Son eklenen 3 not", "3 most recent notes", "3 nîşeyên herî dawî")}
+                    </small>
+                  </div>
+                </div>
+                <div className="latestList">
+                  {latestNotes.length === 0 ? (
+                    <p className="latestNotesEmpty">
+                      {tx(language, "Henüz özel not eklenmemiş.", "No private notes yet.", "Hê nîşeya taybet nehatiye zêdekirin.")}
+                    </p>
+                  ) : (
+                    latestNotes.map((n) => (
+                      <article key={n.id}>
+                        <i />
+                        <span>
+                          <b>{localizeData(n.title, language)}</b>
+                          <small>{localizeData(n.content, language)}</small>
+                        </span>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </aside>
         )}
       </div>
@@ -2125,6 +2164,11 @@ export function RecordModal({
   // translated string back to the database, breaking cashAccount name
   // matching and silently corrupting data across languages.
   const [form, setForm] = useState<Omit<RecordItem, "id">>(base);
+  // "Liste Adı" alanı sadece kayıt bir listeyi ilgilendiriyorsa anlamlı —
+  // her zaman görünen boş bir kutu yerine, bir onay kutusuyla açılıp
+  // kapanıyor. Düzenlenen bir kayıtta zaten bir liste adı varsa, kutu
+  // başta işaretli açılır.
+  const [hasListRecord, setHasListRecord] = useState(!!base.listName);
   const previous = (field: "source" | "person" | "project" | "listName") => [
     ...new Set(
       records
@@ -2224,7 +2268,7 @@ export function RecordModal({
   return (
     <div className="overlay overlayScrollThrough">
       <form
-        className="modal"
+        className="modal recordModal"
         onSubmit={(e) => {
           e.preventDefault();
           const duplicate = records.find((x) => x.id !== initial?.id && x.kind === kind && x.date === form.date && x.amount === form.amount && x.currency === form.currency && (x.cashAccount || "") === (form.cashAccount || "") && x.source === form.source);
@@ -2268,15 +2312,7 @@ export function RecordModal({
           </button>
         </div>
         <div className="formGrid">
-          <label>
-            {tx(language, "Tarih", "Date", "Tarîx")}
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-            />
-          </label>
-          <label>
+          <label className="wide">
             {kind === "cash"
               ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
               : kind === "income"
@@ -2300,48 +2336,20 @@ export function RecordModal({
             />
           </label>
           <label>
+            {tx(language, "Tarih", "Date", "Tarîx")}
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+          </label>
+          <label>
             {tx(language, "Kişi", "Person", "Kes")}
             <SuggestInput
               value={form.person}
               onChange={(v) => setForm({ ...form, person: v })}
               options={previous("person")}
             />
-          </label>
-          <label>
-            {tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}
-            <SuggestInput
-              value={form.listName}
-              onChange={(v) => setForm({ ...form, listName: v })}
-              options={previous("listName")}
-              placeholder={tx(
-                language,
-                "Örn. V Listesi",
-                "E.g. List V",
-                "Mînak: Lîsteya V",
-              )}
-            />
-          </label>
-          <label>
-            {tx(language, "Miktar / Para Birimi", "Amount / Currency", "Meblağ / Yekeya Pere")}
-            <div className="amountCurrency">
-              <input
-                type="number"
-                min="0"
-                value={form.amount}
-                onChange={(e) =>
-                  setForm({ ...form, amount: Number(e.target.value) })
-                }
-              />
-              <select
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value })}
-              >
-                <option>USD</option>
-                <option>IQD</option>
-                <option>TRY</option>
-                <option>EUR</option>
-              </select>
-            </div>
           </label>
           <label>
             {tx(language, "Birim Adı", "Unit Name", "Navê Yekîneyê")}
@@ -2351,10 +2359,36 @@ export function RecordModal({
               options={previous("project")}
             />
           </label>
+          <label>
+            {tx(language, "Miktar", "Amount", "Meblağ")}
+            <input
+              type="number"
+              min="0"
+              value={form.amount}
+              onChange={(e) =>
+                setForm({ ...form, amount: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label>
+            {tx(language, "Para Birimi", "Currency", "Yekeya Pere")}
+            <select
+              value={form.currency}
+              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+            >
+              <option>USD</option>
+              <option>IQD</option>
+              <option>TRY</option>
+              <option>EUR</option>
+            </select>
+          </label>
           {kind !== "cash" && (
             <label>
               {tx(language, "Kasa Seç", "Select Cash Account", "Qase Hilbijêre")}
-              <select value={form.cashAccount || ""} onChange={(e) => setForm({ ...form, cashAccount: e.target.value })}>
+              <select
+                value={form.cashAccount || ""}
+                onChange={(e) => setForm({ ...form, cashAccount: e.target.value })}
+              >
                 <option value="">
                   {kind === "expense"
                     ? tx(language, "Seçilmezse: Diğer Giderler", "If unset: Other Expenses", "Heke neyê hilbijartin: Mesrefên Din")
@@ -2385,7 +2419,41 @@ export function RecordModal({
               )}
             />
           </label>
-          <label>
+          <fieldset className="wide listFieldset">
+            <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
+            <label>
+              {tx(language, "Bu Kayıt Bir Listeyi İlgilendiriyor mu?", "Is this record related to a list?", "Ev qeyd bi lîsteyekê ve girêdayî ye?")}
+              <span className="checkField">
+                <input
+                  type="checkbox"
+                  checked={hasListRecord}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setHasListRecord(checked);
+                    if (!checked) setForm((f) => ({ ...f, listName: "" }));
+                  }}
+                />
+                {tx(language, "Evet, bir listeyle ilişkilendir", "Yes, link it to a list", "Erê, bi lîsteyekê ve girê bide")}
+              </span>
+            </label>
+            {hasListRecord && (
+              <label>
+                {tx(language, "Liste Adı", "List Name", "Navê Lîsteyê")}
+                <SuggestInput
+                  value={form.listName}
+                  onChange={(v) => setForm({ ...form, listName: v })}
+                  options={previous("listName")}
+                  placeholder={tx(
+                    language,
+                    "Örn. V Listesi",
+                    "E.g. List V",
+                    "Mînak: Lîsteya V",
+                  )}
+                />
+              </label>
+            )}
+          </fieldset>
+          <label className="wide">
             {tx(language, "Ek Dosyalar (Excel/Office/PDF)", "Attachments (Excel/Office/PDF)", "Peldankên Pêvekirî (Excel/Office/PDF)")}
             <div className="attachmentField">
               <input

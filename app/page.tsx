@@ -863,6 +863,7 @@ export default function Home() {
               onTransfersChanged={refreshAfterCashTransfer}
               onCommentsRead={refreshUnreadCommentsCount}
               readOnly={viewingUserId !== null}
+              notes={notes}
             />
           )}
           {page === "reportBuilder" && (

@@ -1958,6 +1958,23 @@ header h1 {
   white-space: nowrap;
 }
 .latestList article.expense strong { color: #c76b25; }
+/* "En Son Gelirler/Giderler" panosunun altındaki ikinci bölüm — bu
+   sayfanın türüyle ilişkilendirilmiş son 3 "Mali Özel Not". */
+.latestNotesHead {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e7edef;
+}
+.latestNotesHead > span {
+  background: #fdeee0;
+  color: #b5651d;
+}
+.latestNotesEmpty {
+  margin: 0;
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
 /* Kasa detayında Gelir/Gider ayrımı — bir kasaya tıklandığında Gelirler ve
    Giderler artık aynı tabloda karışmıyor, alt alta iki ayrı, farklı renk
    tonlu kutuda gösteriliyor (bkz. Records.tsx kasaResultSplit). */
@@ -2407,8 +2424,8 @@ body.noSelectDragging { user-select: none; }
 }
 .formGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 18px 20px;
 }
 .formGrid label,
 .settingLabel {
@@ -2492,6 +2509,54 @@ body.noSelectDragging { user-select: none; }
 .amountCurrency {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+}
+.recordModal {
+  width: min(880px, 96vw);
+}
+/* Kaydı Düzenle formundaki "Liste Kaydı" bölümü — referans al fieldset/
+   legend deseniyle, ilişkili alanları (onay kutusu + Liste Adı) kendi
+   çerçeveli kutusunda ayırıp diğer alanlardan görsel olarak gruplar. */
+.listFieldset {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 18px 20px;
+  border: 1px solid #d8e2e5;
+  border-radius: 10px;
+  padding: 16px 18px 18px;
+  margin: 0;
+  min-width: 0;
+}
+.listFieldset legend {
+  padding: 0 8px;
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #586b72;
+}
+/* "Liste Kaydı" onay kutusu — komşu metin alanlarıyla aynı çerçeve/köşe
+   yuvarlaklığı/yüksekliğe sahip, ayrı bir kart gibi değil normal bir alan
+   gibi görünmesi için (bkz. .formGrid input üstündeki genel stil). */
+.checkField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8e2e5;
+  border-radius: 9px;
+  padding: 10px;
+  background: white;
+  font-size: 11px;
+  font-weight: 600;
+  color: #40545c;
+  cursor: pointer;
+}
+.checkField input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--blue, #1d7a8c);
 }
 .amountCurrency input {
   flex: 1 1 auto;
