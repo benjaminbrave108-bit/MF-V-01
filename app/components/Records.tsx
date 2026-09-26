@@ -2182,17 +2182,10 @@ export function RecordModal({
   function removeAttachment(index: number) {
     setForm({ ...form, attachments: (form.attachments ?? []).filter((_, i) => i !== index) });
   }
-  // "Görüntüle" — dev bir base64 data URL'i doğrudan <a href> yapmak
-  // yerine (bazı tarayıcılarda güvenilir açılmıyor/indirme diyaloğuna
-  // takılıyordu), tıklamada senkron olarak bir Blob URL'e çevirip
-  // window.open ile açıyoruz; bu hem daha güvenilir hem de dosya doğru
-  // MIME tipiyle (mümkünse tarayıcı içinde) açılıyor.
-  function viewAttachment(attachment: { name: string; data: string }) {
-    // window.open() bazı tarayıcılarda tek başına açılır pencere olarak
-    // engellenebiliyor; bunun yerine bu uygulamadaki "Excel'e Çıkar"
-    // indirmesiyle aynı, kanıtlanmış yöntem kullanılıyor — geçici bir <a>
-    // elementi oluşturup gerçek bir tıklama tetikliyoruz, bu tarayıcıların
-    // engelleme kurallarına takılmıyor.
+  // "İndir" — her dosya türü için, bu uygulamadaki "Excel'e Çıkar" ile aynı,
+  // kanıtlanmış yöntem: download özellikli gizli bir <a>. target="_blank"
+  // kullanılmıyor; bu yüzden hiçbir popup/engelleme sorunu yaşanmıyor.
+  function downloadAttachment(attachment: { name: string; data: string }) {
     try {
       const [header, base64] = attachment.data.split(",");
       const mime = /data:(.*?);base64/.exec(header)?.[1] || "application/octet-stream";
@@ -2202,8 +2195,7 @@ export function RecordModal({
       const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
       const link = document.createElement("a");
       link.href = url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
+      link.download = attachment.name;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -2211,8 +2203,7 @@ export function RecordModal({
     } catch {
       const link = document.createElement("a");
       link.href = attachment.data;
-      link.target = "_blank";
-      link.rel = "noreferrer";
+      link.download = attachment.name;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -2394,7 +2385,7 @@ export function RecordModal({
               )}
             />
           </label>
-          <label className="wide">
+          <label>
             {tx(language, "Ek Dosyalar (Excel/Office/PDF)", "Attachments (Excel/Office/PDF)", "Peldankên Pêvekirî (Excel/Office/PDF)")}
             <div className="attachmentField">
               <input
@@ -2416,9 +2407,9 @@ export function RecordModal({
                     <button
                       type="button"
                       className="light compact"
-                      onClick={() => viewAttachment(att)}
+                      onClick={() => downloadAttachment(att)}
                     >
-                      👁 {tx(language, "Görüntüle", "View", "Nîşan Bide")}
+                      ⇩ {tx(language, "İndir", "Download", "Daxîne")}
                     </button>
                     <button
                       type="button"
