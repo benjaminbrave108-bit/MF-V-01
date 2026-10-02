@@ -35,9 +35,12 @@ SEED_USER_PASSWORD=User-Dev-12345
 }
 
 npm ci
+if ($LASTEXITCODE -ne 0) { throw "npm ci basarisiz oldu." }
 $env:DATABASE_URL = "postgres://postgres:$pgPass@localhost:5432/mfv01"
-npm run db:migrate
-npm run db:seed
+npx drizzle-kit migrate
+if ($LASTEXITCODE -ne 0) { throw "Migration basarisiz oldu (yukaridaki hataya bakin)." }
+node --env-file=.env.local scripts/seed-users.mjs
+if ($LASTEXITCODE -ne 0) { throw "Seed basarisiz oldu (yukaridaki hataya bakin)." }
 
 Write-Host "`nHazir. Tarayicida (Edge/Chrome) http://localhost:5173 adresini ac. Giris: admin / Admin-Dev-12345`n"
 Start-Process "http://localhost:5173"
