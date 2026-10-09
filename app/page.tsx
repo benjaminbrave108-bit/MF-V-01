@@ -12,6 +12,7 @@ import { Notes } from "./components/Notes";
 import { Comments } from "./components/Comments";
 import { Users } from "./components/Users";
 import { Settings } from "./components/Settings";
+import { Guide } from "./components/Guide";
 import { tx, localizedProfileName, localizedRole, kbGroupLogo, nav } from "./lib/i18n";
 import { normalizeRecord } from "./lib/finance";
 import { defaultTypography, typographyVariables } from "./lib/typography";
@@ -84,6 +85,24 @@ export default function Home() {
     if (!signedIn) return;
     refreshUnreadCommentsCount();
     const interval = setInterval(refreshUnreadCommentsCount, 45000);
+    return () => clearInterval(interval);
+  }, [signedIn]);
+  // Badge next to "Mali Özel Notlar" — same idea as unreadCommentsCount, but
+  // per-note (bkz. app/api/notes/unread-count, app/api/_lib/notes.ts).
+  const [unreadNotesCount, setUnreadNotesCount] = useState(0);
+  async function refreshUnreadNotesCount() {
+    try {
+      const response = await fetch("/api/notes/unread-count");
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setUnreadNotesCount(data.count ?? 0);
+    } catch {
+      // Leave the last known count in place.
+    }
+  }
+  useEffect(() => {
+    if (!signedIn) return;
+    refreshUnreadNotesCount();
+    const interval = setInterval(refreshUnreadNotesCount, 45000);
     return () => clearInterval(interval);
   }, [signedIn]);
   // Kullanıcılar sayfasındaki çevrimiçi noktası — admin için tüm o an aktif
@@ -268,13 +287,14 @@ export default function Home() {
         );
         setNotes((data.notes ?? []).map((note: FinanceNote | string, index: number) =>
           typeof note === "string"
-            ? { id: Date.now() + index, title: "Mali Not", content: note, status: "important" as NoteStatus, relation: "none" as NoteRelation, relationDetail: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-            : { ...note, relation: note.relation ?? "none", relationDetail: note.relationDetail ?? "" },
+            ? { id: Date.now() + index, title: "Mali Not", content: note, status: "important" as NoteStatus, relation: "none" as NoteRelation, relationDetail: "", assignedUserIds: [], isArchived: false, archivedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+            : { ...note, relation: note.relation ?? "none", relationDetail: note.relationDetail ?? "", assignedUserIds: note.assignedUserIds ?? [], isArchived: note.isArchived ?? false, archivedAt: note.archivedAt ?? null },
         ));
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
         if (Array.isArray(data.users)) setUsers(data.users);
         refreshCashAccounts();
         refreshCashTransfers();
+        refreshNotes();
         if (data.settings) {
           setCompany(data.settings.company ?? "Maliye-Finans");
           setLogo(data.settings.logo ?? "");
@@ -339,6 +359,9 @@ export default function Home() {
     // Every signed-in user may open Kullanıcılar to view/edit their own
     // account — Users.tsx itself limits a non-admin to just that.
     if (pageId === "users") return true;
+    // Kullanım Kılavuzu is pure static help content, no real data — every
+    // signed-in user can open it regardless of their page permissions.
+    if (pageId === "guide") return true;
     if (adminOnlyPages.includes(pageId)) return false;
     return profile.permissions.includes(pageId);
   }
@@ -400,6 +423,41 @@ export default function Home() {
   async function refreshAfterCashTransfer() {
     await Promise.all([refreshRecords(), refreshCashAccounts(), refreshCashTransfers()]);
   }
+  async function refreshNotes() {
+    try {
+      const response = await fetch("/api/notes");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.notes)) setNotes(data.notes);
+    } catch {}
+  }
+  async function refreshArchive() {
+    try {
+      const response = await fetch("/api/archive");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.archive)) {
+        setArchive(data.archive.map((x: ArchiveItem) => ({ ...x, old: normalizeRecord(x.old) })));
+      }
+    } catch {}
+  }
+  // Başka bir kullanıcının yaptığı değişikliklerin manuel "yenile" olmadan
+  // kendiliğinden görünmesi için: oturum açıkken ana veriler düzenli
+  // aralıklarla arka planda yeniden çekilir. Zaten mevcut olan
+  // refreshX() yardımcıları burada yeniden kullanılıyor — hepsi tam bir
+  // state değişimi yapar, sayfa hiçbir zaman elle yenilenmek zorunda kalmaz.
+  useEffect(() => {
+    if (!signedIn) return;
+    const interval = setInterval(() => {
+      refreshRecords();
+      refreshCashAccounts();
+      refreshCashTransfers();
+      refreshNotes();
+      refreshArchive();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [signedIn]);
   async function updateDashboardScope(includedUserIds: number[]) {
     const previous = profile.dashboardIncludedUserIds;
     setProfile((p) => ({ ...p, dashboardIncludedUserIds: includedUserIds }));
@@ -476,7 +534,7 @@ export default function Home() {
   }
 
   const noteSaveError = tx(language, "Not kaydedilemedi.", "The note could not be saved.", "Nîşe nehat tomarkirin.");
-  async function createNote(input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt">) {
+  async function createNote(input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt" | "isArchived" | "archivedAt">) {
     try {
       const response = await fetch("/api/notes", {
         method: "POST",
@@ -512,6 +570,25 @@ export default function Home() {
     } catch {
       alert(noteSaveError);
     }
+  }
+  // "Arşivle" (Notes.tsx) / "Geri Al" (Archive.tsx) — aynı not, sadece
+  // isArchived bayrağı değişiyor; updateNote'un mevcut PUT+state güncelleme
+  // mantığını yeniden kullanıyor.
+  async function archiveNote(id: number, archived: boolean) {
+    const note = notes.find((x) => x.id === id);
+    if (!note) return;
+    await updateNote({ ...note, isArchived: archived });
+  }
+  // Notlar sayfası açılınca çağrılır — tüm (arşivlenmemiş) notları bu
+  // kullanıcı için okundu işaretler ve rozeti günceller.
+  async function markNotesRead() {
+    try {
+      const response = await fetch("/api/notes/read-all", { method: "POST" });
+      if (response.ok) {
+        setNotes((n) => n.map((x) => ({ ...x, isUnread: false })));
+        refreshUnreadNotesCount();
+      }
+    } catch {}
   }
 
   const reportSaveError = tx(language, "Rapor kaydedilemedi.", "The report could not be saved.", "Rapor nehat tomarkirin.");
@@ -643,6 +720,9 @@ export default function Home() {
                 <span>{n.label[language]}</span>
                 {n.id === "comments" && unreadCommentsCount > 0 && (
                   <b className="navBadge">{unreadCommentsCount}</b>
+                )}
+                {n.id === "notes" && unreadNotesCount > 0 && (
+                  <b className="navBadge">{unreadNotesCount}</b>
                 )}
               </button>
               {n.id === "dashboard" && sharedOwners.length > 0 && (
@@ -879,10 +959,21 @@ export default function Home() {
             />
           )}
           {page === "notes" && (
-            <Notes language={language} notes={notes} onCreateNote={createNote} onUpdateNote={updateNote} onDeleteNote={deleteNote} />
+            <Notes
+              language={language}
+              notes={notes}
+              users={users}
+              onCreateNote={createNote}
+              onUpdateNote={updateNote}
+              onDeleteNote={deleteNote}
+              onArchiveNote={archiveNote}
+              onMarkAllRead={markNotesRead}
+            />
           )}
           {page === "comments" && <Comments language={language} onRead={refreshUnreadCommentsCount} />}
-          {page === "archive" && <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} />}
+          {page === "archive" && (
+            <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} onUnarchiveNote={(id) => archiveNote(id, false)} />
+          )}
           {page === "users" && (
             <Users
               language={language}
@@ -912,6 +1003,7 @@ export default function Home() {
               onDashboardIncludedUserIdsChange={updateDashboardScope}
             />
           )}
+          {page === "guide" && <Guide language={language} />}
         </section>
       </main>
       {modal && (

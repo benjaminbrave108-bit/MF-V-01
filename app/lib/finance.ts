@@ -70,5 +70,13 @@ export function normalizeRecord(x: RecordItem): RecordItem {
     cashAccount: x.cashAccount || "",
     listName: x.listName || "",
     attachments: Array.isArray(x.attachments) ? x.attachments : [],
+    detailTable: Array.isArray(x.detailTable) ? x.detailTable : [],
+    detailTableLayout: {
+      cols: Array.isArray(x.detailTableLayout?.cols) ? x.detailTableLayout!.cols : [],
+      rows: Array.isArray(x.detailTableLayout?.rows) ? x.detailTableLayout!.rows : [],
+      colAlign: Array.isArray(x.detailTableLayout?.colAlign) ? x.detailTableLayout!.colAlign : [],
+      cellAlign:
+        x.detailTableLayout?.cellAlign && typeof x.detailTableLayout.cellAlign === "object" ? x.detailTableLayout.cellAlign : {},
+    },
   };
 }

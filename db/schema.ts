@@ -112,6 +112,13 @@ export const records = pgTable("records", {
   // saklanır (ayrı bir dosya depolama/S3 entegrasyonu yok). Dizi elemanı:
   // { name: string; data: string }.
   attachments: jsonb("attachments").notNull().default([]),
+  // Gider formundaki "Gider Detaylarını Görüntüle" bölümü: Excel/Google
+  // Sheets'ten kopyalanıp yapıştırılan tablo — satırlar × hücreler (metin).
+  // İlk satır başlık olarak gösterilir.
+  detailTable: jsonb("detail_table").notNull().default([]),
+  // Detay tablosunun görünümü: kullanıcının sürükleyerek ayarladığı sütun
+  // genişlikleri ve satır yükseklikleri (px). { cols: number[]; rows: number[] }
+  detailTableLayout: jsonb("detail_table_layout").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -175,6 +182,17 @@ export const recordComments = pgTable("record_comments", {
   index("record_comments_record_id_idx").on(table.recordId),
 ]);
 
+// A whole comment THREAD (every comment on one record) archived out of the
+// main Yorumlar list at once — presence of a row = that record's thread is
+// archived. Kept separate from record_comments itself since archiving is a
+// per-thread action, not a per-comment one (see Comments.tsx "Arşivle").
+export const commentThreadArchives = pgTable("comment_thread_archives", {
+  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }).primaryKey(),
+  archivedByUserId: integer("archived_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  archivedByName: text("archived_by_name").notNull().default(""),
+  archivedAt: timestamp("archived_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // One user's emoji reaction on one comment — presence of a row = reacted,
 // same "presence-as-state" pattern as cashAccountAccess. The composite key
 // lets the same user drop several different emoji on one comment, but never
@@ -220,10 +238,37 @@ export const financeNotes = pgTable("finance_notes", {
   status: text("status").notNull(),
   relation: text("relation").notNull().default("none"),
   relationDetail: text("relation_detail").notNull().default(""),
+  // Bu notla ilgilenmesi/görmesi gereken kullanıcılar (birden fazla olabilir)
+  // — Notlar panosunda ve kartlarda gösterilir, bildirim/rozet mantığıyla
+  // doğrudan bağlantılı değil (herkes tüm notların okunmamış sayısını
+  // görür). users.dashboardIncludedUserIds ile aynı desen: FK bütünlüğü
+  // yerine basit bir id dizisi — bir kullanıcı silinirse dizide kalan id
+  // sessizce göz ardı edilir (bkz. app/api/notes/route.ts'teki isim eşleme).
+  assignedUserIds: jsonb("assigned_user_ids").notNull().default([]),
+  // "Arşivle" — elle tetiklenen bir eylem; arşivlenen not Notlar panosundan
+  // kaybolup Arşiv > Notlar Arşivi bölümünde kalıcı olarak görünür kalır.
+  // Bu, panonun zamanla birikip kalabalıklaşmasını (kullanıcının bahsettiği
+  // "birikme") önlemek için var.
+  isArchived: boolean("is_archived").notNull().default(false),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check("finance_notes_status_check", sql`${table.status} IN ('important', 'urgent', 'pending', 'completed')`),
+]);
+
+// Per-user "read up to" marker for one finance note — aynı commentReads
+// deseni, "Mali Özel Notlar" rozetini (sidebar'daki okunmamış say) besler.
+// Notu görüntülemek (Notlar sayfasını açmak) bu satırı şimdiye günceller;
+// not.updatedAt bundan daha yeniyse (yeniden düzenlendiyse) hâlâ okunmamış
+// sayılır.
+export const noteReads = pgTable("note_reads", {
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  noteId: integer("note_id").notNull().references(() => financeNotes.id, { onDelete: "cascade" }),
+  lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.noteId] }),
+  index("note_reads_user_id_idx").on(table.userId),
 ]);
 
 export const preparedReports = pgTable("prepared_reports", {

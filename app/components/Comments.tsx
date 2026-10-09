@@ -319,6 +319,24 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
     }
   }
 
+  // "Arşivle" — bu kaydın tüm yorum dizisini ana listeden kaldırır, Arşiv >
+  // Yorumlar Arşivi'nde özet olarak kalır (silinmez). Bkz. Archive.tsx.
+  async function archiveThread(recordId: number) {
+    setBusyRecordId(recordId);
+    try {
+      const response = await fetch(`/api/records/${recordId}/comments/archive`, { method: "POST" });
+      if (!response.ok) {
+        alert(tx(language, "Arşivlenemedi.", "Could not archive.", "Nehat arşîvkirin."));
+        return;
+      }
+      setThreads((current) => (current ?? []).filter((t) => t.record.id !== recordId));
+    } catch {
+      alert(tx(language, "Arşivlenemedi.", "Could not archive.", "Nehat arşîvkirin."));
+    } finally {
+      setBusyRecordId(null);
+    }
+  }
+
   async function toggleReaction(recordId: number, commentId: number, emoji: string) {
     const reactions = await postReactionToggle(commentId, emoji);
     if (reactions === null) return;
@@ -433,6 +451,14 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
                       {date(selected.record.date, language)} · {nav.find((n) => n.id === selected.record.kind)?.label[language] ?? selected.record.kind}
                     </small>
                   </div>
+                  <button
+                    type="button"
+                    className="light compact"
+                    disabled={busyRecordId === selected.record.id}
+                    onClick={() => archiveThread(selected.record.id)}
+                  >
+                    🗄 {tx(language, "Arşivle", "Archive", "Arşîv Bike")}
+                  </button>
                 </header>
                 {selected.record.tags?.length ? (
                   <div className="tagRow">

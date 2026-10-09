@@ -80,6 +80,8 @@ export const POST = withErrorHandling(async (request: Request) => {
         cashAccountId: link.cashAccountId,
         listName: payload.listName,
         attachments: payload.attachments,
+        detailTable: payload.detailTable,
+        detailTableLayout: payload.detailTableLayout,
       })
       .returning();
 

@@ -67,6 +67,11 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
     label: { tr: "Ayarlar", en: "Settings", ku: "Mîheng" },
     icon: "⚙",
   },
+  {
+    id: "guide",
+    label: { tr: "Kullanım Kılavuzu", en: "User Guide", ku: "Rêbera Bikaranînê" },
+    icon: "❔",
+  },
 ];
 
 export function kindName(k: Kind, language: Language = "tr") {

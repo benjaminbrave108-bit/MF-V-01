@@ -2746,24 +2746,31 @@ body.noSelectDragging { user-select: none; }
 .noteColumnActions b { min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 12px; background: #edf2f3; color: #64767d; font-size: 9px; }
 .noteColumnBody { min-height: 360px; padding: 9px; display: flex; flex-direction: column; gap: 9px; }
 .noteColumnEmpty { min-height: 90px; display: grid; place-items: center; color: #8b9aa0; font-size: 10px; }
-.noteCard { position: relative; height: 154px; min-height: 154px; display: flex; flex-direction: column; border: 1px solid #dce5e8; border-left: 3px solid #d6a52b; border-radius: 10px; background: #fff; padding: 11px 12px 10px; box-shadow: 0 4px 12px #173b470b; cursor: grab; overflow: hidden; }
+.noteCard { position: relative; height: 172px; min-height: 172px; display: flex; flex-direction: column; border: 1px solid #dce5e8; border-left: 3px solid #d6a52b; border-radius: 10px; background: #fff; padding: 11px 12px 10px; box-shadow: 0 4px 12px #173b470b; cursor: grab; overflow: hidden; }
 .noteCard:active { cursor: grabbing; opacity: .72; }
 .noteColumn-urgent .noteCard { border-left-color: #df5b5b; }
 .noteColumn-pending .noteCard { border-left-color: #398db1; }
 .noteColumn-completed .noteCard { border-left-color: #38a477; }
-.noteMeta { min-height: 15px; display: flex; align-items: center; gap: 5px; padding-right: 42px; overflow: hidden; }
+/* Okunmamış not — kart üstünde küçük bir nokta rozeti (bkz. sidebar'daki
+   .navBadge sayacıyla aynı "okunmadı" fikrinin kart düzeyindeki hali). */
+.noteCardUnread { border-color: #1d7a8c; box-shadow: 0 4px 12px #1d7a8c22; }
+.noteUnreadDot { position: absolute; top: 9px; left: 9px; width: 7px; height: 7px; border-radius: 50%; background: #1d7a8c; }
+.noteMeta { min-height: 15px; display: flex; align-items: center; gap: 5px; padding-right: 63px; overflow: hidden; }
 .noteCard small { flex: 0 0 auto; color: #829298; font-size: 8px; font-weight: 700; }
 .noteRelation { min-width: 0; padding: 2px 5px; border-radius: 8px; background: #eaf4f7; color: #287a92; font-size: 7px; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-.noteCard h3 { min-height: 15px; margin: 4px 42px 4px 0; color: #263c46; font-size: 12px; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-.noteCard p { height: 47px; min-height: 47px; margin: 0 0 7px; padding-right: 4px; color: #5c6f76; font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c6d5da transparent; }
+.noteCard h3 { min-height: 15px; margin: 4px 63px 4px 0; color: #263c46; font-size: 12px; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.noteCard p { height: 47px; min-height: 47px; margin: 0 0 4px; padding-right: 4px; color: #5c6f76; font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c6d5da transparent; }
 .noteCard p::-webkit-scrollbar { width: 4px; }
 .noteCard p::-webkit-scrollbar-thumb { border-radius: 4px; background: #c6d5da; }
+.noteAssigned { display: block; margin: 0 0 6px; color: #7c8b93; font-size: 8px; font-weight: 700; }
 .noteCard label { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #edf1f2; padding-top: 6px; color: #829298; font-size: 8px; font-weight: 700; }
 .noteCard select { min-width: 0; max-width: 135px; border: 1px solid #d7e2e4; border-radius: 7px; padding: 5px 6px; background: #f8fafb; color: #40565f; font-size: 8px; }
-.noteEdit, .noteDelete { position: absolute; top: 7px; width: 19px; height: 19px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
-.noteEdit { right: 27px; color: #43859a; font-size: 13px; }
+.noteEdit, .noteArchive, .noteDelete { position: absolute; top: 7px; width: 19px; height: 19px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
+.noteEdit { right: 48px; color: #43859a; font-size: 13px; }
+.noteArchive { right: 27px; color: #7c8b93; font-size: 12px; }
 .noteDelete { right: 6px; color: #9aabad; font-size: 16px; }
 .noteEdit:hover { background: #eaf4f7; color: #216c84; }
+.noteArchive:hover { background: #f3f1e8; color: #8a6d1d; }
 .noteDelete:hover { color: #c24c4c; }
 .noteModal { width: min(560px, 100%); }
 .noteModal textarea { resize: vertical; line-height: 1.6; }
@@ -2804,6 +2811,15 @@ body.noSelectDragging { user-select: none; }
 .archivedNoteGrid h3 { margin: 7px 0; font-size: 11px; color: #354b54; }
 .archivedNoteGrid p { margin: 0; color: #66787f; font-size: 10px; line-height: 1.5; }
 .noteArchiveEmpty { grid-column: 1 / -1; padding: 34px; border: 1px dashed #d7e2e4; border-radius: 11px; color: #8b9aa0; text-align: center; font-size: 10px; }
+.archivedNoteGrid article > button { margin-top: 8px; }
+.archivedThreadMeta { display: block; margin-top: 6px; }
+/* Ayarlar > Kullanım Kılavuzu — Yorumlar'ın master/detay düzenini
+   (commentSplitView) yeniden kullanır, sadece kendi metin akışı için
+   paragraf aralığı ekler. */
+.guideSplitView { margin-top: 16px; }
+.guideBody p { margin: 0 0 12px; color: #4a5c63; font-size: 12px; line-height: 1.7; }
+.guideBody p:last-child { margin-bottom: 0; }
+.guideTopicList { max-height: 480px; }
 .users {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3647,3 +3663,173 @@ main { min-width: 0; overflow-x: hidden; }
   .language select { max-width: 75px; }
   .modal { width: 100%; border-radius: 12px; }
 }
+
+/* Gider formu: "Gider Detaylarını Görüntüle" — Excel/Sheets'ten yapıştırılan
+   tablo için açılır/kapanır kutu. */
+.detailTableBox {
+  border: 1px solid #d8e2e5;
+  border-radius: 10px;
+  background: #f8fafb;
+}
+.detailTableBox > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #40545c;
+  cursor: pointer;
+  list-style: none;
+}
+.detailTableBox > summary::-webkit-details-marker { display: none; }
+.detailTableBox > summary::after { content: "▾"; margin-left: auto; color: #829298; }
+.detailTableBox[open] > summary::after { content: "▴"; }
+.detailTableBox > summary em { font-style: normal; font-size: 10px; font-weight: 600; color: #7c8b93; }
+.detailTableBody { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+.detailTableScroll { overflow: auto; max-height: 260px; border: 1px solid #d8e2e5; border-radius: 8px; background: #fff; }
+.detailTable { border-collapse: collapse; font-size: 11px; white-space: nowrap; width: 100%; }
+.detailTable td { border: 1px solid #e3eaec; padding: 5px 10px; color: #3d5059; }
+.detailTable tr.detailTableHead td { background: #fdeebb; font-weight: 700; color: #263c46; }
+.detailActions { display: flex; align-items: center; gap: 8px; }
+.detailTableBody:focus { outline: 0; }
+
+/* Gider detayı: formdaki bölüm daha belirgin, satırda "Detay" göstergesi ve
+   ayrı görüntüleme penceresi. */
+.detailTableBox { border-color: #c9a227; background: #fffaf0; }
+.detailTableBox > summary { font-size: 12px; color: #6b5200; }
+.detailTableBox > summary::before { content: "▦"; margin-right: 6px; color: #b8860b; }
+.detailTrimNote { color: #b5651d; font-size: 10px; font-weight: 600; }
+.detailChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid #e0c46a;
+  border-radius: 999px;
+  background: #fdeebb;
+  color: #6b5200;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.detailChip:hover { background: #f9e08a; }
+.detailViewModal { width: min(980px, 96vw); }
+.detailViewActions { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.detailViewActions span { margin-right: auto; color: #7c8b93; font-size: 11px; font-weight: 600; }
+.detailViewScroll { max-height: 60vh; }
+.detailTable td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Gider detay tablosu editörü */
+.detailEditor { display: flex; flex-direction: column; gap: 8px; }
+.detailEditorBar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.detailEditorBar small { color: #7c8b93; font-size: 10px; }
+.detailTableEdit { table-layout: fixed; }
+.detailTableEdit td { max-width: none; padding: 0; overflow: visible; background: #fff; }
+.detailTableEdit td.detailEditHead { background: #fdeebb; }
+.detailTableEdit td.detailEditHead textarea { font-weight: 700; }
+.detailTableEdit textarea {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 5px 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.35;
+  resize: none;
+  outline: 0;
+  box-sizing: border-box;
+}
+.detailTableEdit textarea:focus { background: #eef7fa; box-shadow: inset 0 0 0 2px #2387a1; }
+.detailTableEdit th { position: relative; background: #eef2f3; color: #586b72; font-size: 10px; font-weight: 700; border: 1px solid #e3eaec; padding: 2px 4px; user-select: none; }
+.detailColHead { text-align: center; }
+.detailRowHead { text-align: center; }
+.detailCorner { width: 40px; }
+.detailResizer { position: absolute; background: transparent; z-index: 2; }
+.detailResizer:hover { background: #2387a1; }
+.detailColResizer { top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; }
+.detailRowResizer { left: 0; bottom: -3px; width: 100%; height: 6px; cursor: row-resize; }
+
+/* Detay tablosu: tamamı görünsün — dikey kaydırma/kırpma yok, uzun hücre
+   metni kırpılmadan sarılır; yalnızca tablo kapsayıcıdan genişse yatay
+   kaydırma. */
+.detailEditScroll, .detailViewScroll { max-height: none; overflow-y: visible; overflow-x: auto; }
+.detailViewModal .detailTable { width: 100%; }
+.detailViewModal .detailTable td { max-width: none; white-space: pre-wrap; word-break: break-word; overflow: visible; text-overflow: clip; vertical-align: top; }
+.detailAddCell { background: transparent !important; border: 0 !important; text-align: center; }
+.detailAddSpacer { border: 0 !important; background: transparent !important; }
+.detailAddButton {
+  width: 24px;
+  height: 24px;
+  border: 1px dashed #b8c7cc;
+  border-radius: 6px;
+  background: #fff;
+  color: #2387a1;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.detailAddButton:hover:not(:disabled) { background: #eef7fa; border-color: #2387a1; }
+.detailAddButton:disabled { opacity: .4; cursor: not-allowed; }
+.detailViewModal .detailTable td { min-width: 90px; word-break: normal; overflow-wrap: break-word; }
+
+/* Gider detay tablosu: başlığa sağ tıklayınca açılan bağlam menüsü */
+.detailContextMenu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 170px;
+  padding: 4px;
+  border: 1px solid #d8e2e5;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+}
+.detailContextMenu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #40545c;
+  cursor: pointer;
+}
+.detailContextMenu button:hover { background: #eef7fa; }
+.detailContextMenu button.danger { color: #c24c4c; border-top: 1px solid #edf1f2; margin-top: 3px; border-radius: 0 0 6px 6px; }
+.detailContextMenu button.danger:hover { background: #fdeeee; }
+.detailColHead, .detailRowHead { cursor: context-menu; }
+.detailContextMenu button.detailAlignItem.active { background: #eef7fa; color: #1d7a8c; }
+.detailContextMenu button.detailAlignItem.active::after { content: " ✓"; }
+
+/* Gider detayı: hücre hizalama araç çubuğu ve genişletilebilir görüntüleme penceresi */
+.detailAlignBar { display: flex; align-items: center; gap: 4px; }
+.detailAlignButton {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #d8e2e5;
+  border-radius: 6px;
+  background: #fff;
+  color: #35525c;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.detailAlignButton:hover:not(:disabled) { background: #eef6f8; }
+.detailAlignButton.active { background: #dff0f4; border-color: #7fb3c0; }
+.detailAlignButton:disabled { opacity: 0.45; cursor: default; }
+.detailViewHeadActions { display: flex; align-items: center; gap: 6px; }
+.detailViewModal { resize: both; overflow: auto; min-width: min(560px, 96vw); max-width: 98vw; max-height: 94vh; }
+.detailViewModal.detailViewExpanded { width: 96vw; height: 92vh; }
+.detailViewModal .detailViewScroll { max-height: none; }
+.detailViewModal.detailViewExpanded .detailViewScroll { max-height: calc(92vh - 150px); }
+
+/* Kayıt penceresi: sağ-alt köşeden sürüklenerek genişletilip daraltılabilir */
+.recordModal { resize: both; overflow: auto; min-width: min(560px, 96vw); max-width: 98vw; }

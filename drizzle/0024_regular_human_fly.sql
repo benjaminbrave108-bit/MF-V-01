@@ -1,0 +1,1 @@
+ALTER TABLE "finance_notes" ADD COLUMN "assigned_user_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

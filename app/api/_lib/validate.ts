@@ -51,6 +51,27 @@ const attachmentSchema = z.object({
 });
 const attachmentsSchema = z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional().default([]);
 
+// Gider detay tablosu (Excel/Sheets'ten yapıştırılan) — satır/hücre sayısı
+// ve hücre uzunluğu makul sınırlarla kısıtlı.
+const detailTableSchema = z.array(z.array(z.string().max(500)).max(50)).max(500);
+const detailTableLayoutSchema = z.object({
+  cols: z.array(z.number().min(20).max(1000)).max(50).default([]),
+  rows: z.array(z.number().min(16).max(600)).max(500).default([]),
+  // Sütun bazında yatay hizalama (cols ile aynı sıra; eksikse "left").
+  colAlign: z.array(z.enum(["left", "center", "right"])).max(50).default([]),
+  // Tek hücreye özel hizalama: "satır:sütun" -> { h?, v? }.
+  cellAlign: z
+    .record(
+      z.string().regex(/^\d{1,3}:\d{1,2}$/),
+      z.object({
+        h: z.enum(["left", "center", "right"]).optional(),
+        v: z.enum(["top", "middle", "bottom"]).optional(),
+      }),
+    )
+    .refine((o) => Object.keys(o).length <= 25_000, "Too many cell alignments")
+    .default({}),
+});
+
 export const recordInputSchema = z.object({
   kind: kindSchema,
   date: dateSchema,
@@ -65,6 +86,8 @@ export const recordInputSchema = z.object({
   cashAccount: shortText(200),
   listName: shortText(200),
   attachments: attachmentsSchema,
+  detailTable: detailTableSchema.optional().default([]),
+  detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),
 });
 
 // PUT allows partial updates: unlike recordInputSchema's fields (which
@@ -86,6 +109,8 @@ export const recordUpdateSchema = z.object({
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
   attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional(),
+  detailTable: detailTableSchema.optional(),
+  detailTableLayout: detailTableLayoutSchema.optional(),
   // Optimistic-locking token: the updatedAt the client last saw. If it
   // doesn't match the row's current value, someone else changed it first.
   updatedAt: z.string().optional(),
@@ -123,6 +148,8 @@ export const noteInputSchema = z.object({
   status: noteStatusSchema.optional().default("important"),
   relation: noteRelationSchema.optional().default("none"),
   relationDetail: shortText(300),
+  assignedUserIds: z.array(z.number().int().positive()).max(50).optional().default([]),
+  isArchived: z.boolean().optional().default(false),
 });
 
 export const commentInputSchema = z.object({

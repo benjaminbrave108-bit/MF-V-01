@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Title } from "./shared";
 import { tx, localizeData, kindName } from "../lib/i18n";
 import { date, money } from "../lib/finance";
-import type { ArchiveItem, FinanceNote, Language, PreparedReport } from "../lib/types";
+import type { ArchivedCommentThread, ArchiveItem, FinanceNote, Language, PreparedReport } from "../lib/types";
 
 // Silinenler/Düzenlenenler alt-başlıklarının ikisi de aynı kolonları
 // kullanıyor — tek yerden render edip iki kez çağırıyoruz.
@@ -100,12 +100,26 @@ export function Archive({
   rows,
   notes,
   preparedReports,
+  onUnarchiveNote,
 }: {
   language: Language;
   rows: ArchiveItem[];
   notes: FinanceNote[];
   preparedReports: PreparedReport[];
+  onUnarchiveNote?: (id: number) => void;
 }) {
+  const [archivedThreads, setArchivedThreads] = useState<ArchivedCommentThread[] | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch("/api/comments/archived");
+        const data = await response.json().catch(() => ({}));
+        setArchivedThreads(response.ok ? (data.threads ?? []) : []);
+      } catch {
+        setArchivedThreads([]);
+      }
+    })();
+  }, []);
   const [year, setYear] = useState("Tümü"),
     [unit, setUnit] = useState("Tümü"),
     [cash, setCash] = useState("Tümü"),
@@ -129,10 +143,12 @@ export function Archive({
   // yerini alıyor.
   const deletedRows = filtered.filter((x) => x.action === "Silindi");
   const editedRows = filtered.filter((x) => x.action === "Düzenlendi");
-  const archivedNotes = notes
-    .filter((note) => note.status === "completed")
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(4);
+  // "Arşivle" ile elle arşivlenmiş notlar (bkz. Notes.tsx) — artık dört
+  // fazlası otomatik değil, kullanıcı ne zaman arşivlemek istediğine kendi
+  // karar veriyor.
+  const archivedNotes = [...notes]
+    .filter((note) => note.isArchived)
+    .sort((a, b) => (b.archivedAt ?? b.updatedAt).localeCompare(a.archivedAt ?? a.updatedAt));
   const sortedReports = [...preparedReports].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
@@ -254,11 +270,49 @@ export function Archive({
           <em>{archivedNotes.length} {tx(language, "not", "notes", "nîşe")}</em>
         </summary>
         <div className="archiveAccordionBody">
-          <p className="archiveDescription">{tx(language, "Tamamlanmış son dört nottan daha eski kayıtlar", "Completed notes older than the latest four", "Nîşeyên qediyayî yên ji çar qeydên dawî kevintir")}</p>
+          <p className="archiveDescription">{tx(language, "\"Arşivle\" ile Mali Özel Notlar panosundan elle çıkarılan notlar", "Notes manually removed from the Private Finance Notes board via \"Archive\"", "Nîşeyên bi \"Arşîv Bike\" ji panoya Nîşeyên Taybet ên Darayî bi destan hatine derxistin")}</p>
         <div className="archivedNoteGrid">
-          {archivedNotes.map((note) => <article key={note.id}><small>{new Date(note.updatedAt).toLocaleDateString(language === "en" ? "en-GB" : "tr-TR")}</small><h3>{note.title}</h3><p>{note.content}</p></article>)}
+          {archivedNotes.map((note) => (
+            <article key={note.id}>
+              <small>{new Date(note.archivedAt ?? note.updatedAt).toLocaleDateString(language === "en" ? "en-GB" : "tr-TR")}</small>
+              <h3>{note.title}</h3>
+              <p>{note.content}</p>
+              {onUnarchiveNote && (
+                <button type="button" className="light compact" onClick={() => onUnarchiveNote(note.id)}>
+                  {tx(language, "Geri Al", "Restore", "Vegerîne")}
+                </button>
+              )}
+            </article>
+          ))}
           {!archivedNotes.length && <div className="noteArchiveEmpty">{tx(language, "Arşivlenmiş özel not bulunmuyor.", "There are no archived private notes.", "Nîşeya taybet a arşîvkirî tune.")}</div>}
         </div>
+        </div>
+      </details>
+
+      <details className="archiveAccordion">
+        <summary>
+          <span><b>💬</b><strong>{tx(language, "Yorumlar Arşivi", "Comments Archive", "Arşîva Şîroveyan")}</strong></span>
+          <em>{(archivedThreads ?? []).length} {tx(language, "konu", "threads", "mijar")}</em>
+        </summary>
+        <div className="archiveAccordionBody">
+          <p className="archiveDescription">{tx(language, "Yorumlar sayfasında \"Arşivle\" ile ana listeden kaldırılan yorum konuları", "Comment threads removed from the main Yorumlar list via \"Archive\"", "Mijarên şîroveyê yên bi \"Arşîv Bike\" ji lîsteya sereke ya Şîroveyan hatine derxistin")}</p>
+          <div className="archivedNoteGrid">
+            {(archivedThreads ?? []).map((thread) => (
+              <article key={thread.recordId}>
+                <small>
+                  {new Date(thread.archivedAt).toLocaleDateString(language === "en" ? "en-GB" : "tr-TR")} · {kindName(thread.recordKind, language)}
+                </small>
+                <h3>{localizeData(thread.recordSource, language)}</h3>
+                <p>{thread.lastUserName ? `${thread.lastUserName}: ${thread.lastText}` : ""}</p>
+                <small className="archivedThreadMeta">
+                  {thread.commentCount} {tx(language, "yorum", "comments", "şîrove")} · {tx(language, "Arşivleyen", "Archived by", "Arşîvker")}: {localizeData(thread.archivedByName, language)}
+                </small>
+              </article>
+            ))}
+            {archivedThreads !== null && !archivedThreads.length && (
+              <div className="noteArchiveEmpty">{tx(language, "Arşivlenmiş yorum konusu bulunmuyor.", "There are no archived comment threads.", "Mijara şîroveyê ya arşîvkirî tune.")}</div>
+            )}
+          </div>
         </div>
       </details>
     </div>

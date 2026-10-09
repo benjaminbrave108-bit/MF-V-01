@@ -1,6 +1,6 @@
 import { asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { recordComments, records } from "../../../db/schema";
+import { commentThreadArchives, recordComments, records } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
 import { accessibleCashAccountIds } from "../_lib/cash-access";
 import { reactionsByCommentId, unreadRecordIds } from "../_lib/comments";
@@ -28,13 +28,16 @@ export const GET = withErrorHandling(async (request: Request) => {
   const db = getDb();
   const accessibleIds = await accessibleCashAccountIds(session.user, db);
 
-  const [recordRows, commentRows] = await Promise.all([
+  const [recordRows, commentRows, archivedRows] = await Promise.all([
     db.select().from(records).where(inArray(records.kind, allowed)).orderBy(desc(records.date), desc(records.id)),
     db.select().from(recordComments).orderBy(asc(recordComments.createdAt), asc(recordComments.id)),
+    db.select({ recordId: commentThreadArchives.recordId }).from(commentThreadArchives),
   ]);
+  const archivedRecordIds = new Set(archivedRows.map((r) => r.recordId));
 
   const allowedRecordIds = new Set(
     recordRows
+      .filter((r) => !archivedRecordIds.has(r.id))
       .filter((r) => accessibleIds === null || r.cashAccountId === null || accessibleIds.includes(r.cashAccountId))
       .map((r) => r.id),
   );

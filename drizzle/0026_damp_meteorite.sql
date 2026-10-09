@@ -1,0 +1,1 @@
+ALTER TABLE "records" ADD COLUMN "detail_table" jsonb DEFAULT '[]'::jsonb NOT NULL;

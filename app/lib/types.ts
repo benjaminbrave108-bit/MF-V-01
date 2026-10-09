@@ -7,7 +7,8 @@ export type Page =
   | "comments"
   | "archive"
   | "users"
-  | "settings";
+  | "settings"
+  | "guide";
 export type RecordAttachment = { name: string; data: string };
 export type RecordItem = {
   id: number;
@@ -27,6 +28,13 @@ export type RecordItem = {
   // avatar/logo ile aynı desen, her biri base64 data URL. Boş dizi = dosya
   // eklenmemiş.
   attachments?: RecordAttachment[];
+  // Gider detay tablosu — Excel/Sheets'ten yapıştırılan satırlar (ilk satır
+  // başlık). Boş dizi = detay eklenmemiş.
+  detailTable?: string[][];
+  // Detay tablosunun sütun genişlikleri / satır yükseklikleri (px).
+  detailTableLayout?: { cols: number[]; rows: number[]; colAlign?: ("left" | "center" | "right")[];
+    cellAlign?: Record<string, { h?: "left" | "center" | "right"; v?: "top" | "middle" | "bottom" }>;
+  };
   // The kasa this record is actually linked to (FK) — null for legacy/orphan
   // rows. Used client-side to scope a record to a "workspace" (own vs a
   // shared user's) by matching against CashAccountSummary.id; cashAccount
@@ -52,8 +60,31 @@ export type FinanceNote = {
   status: NoteStatus;
   relation: NoteRelation;
   relationDetail: string;
+  // Bu notla ilgilenmesi gereken kullanıcılar (birden fazla olabilir) —
+  // atanmamışsa boş dizi.
+  assignedUserIds: number[];
+  assignedUserNames?: string[];
+  isArchived: boolean;
+  archivedAt: string | null;
+  // Oturum açan kullanıcı için bu not okunmamış mı — sunucu hesaplar,
+  // bootstrap/notes listesiyle birlikte gelir (bkz. "Mali Özel Notlar"
+  // rozeti).
+  isUnread?: boolean;
   createdAt: string;
   updatedAt: string;
+};
+// Yorumlar > "Arşivle" ile bir kaydın tüm yorum dizisi tek seferde
+// arşivlenir — Arşiv > Yorumlar Arşivi bölümünde özet olarak listelenir.
+export type ArchivedCommentThread = {
+  recordId: number;
+  recordSource: string;
+  recordKind: Kind;
+  commentCount: number;
+  lastText: string;
+  lastUserName: string;
+  lastCreatedAt: string;
+  archivedByName: string;
+  archivedAt: string;
 };
 export type Language = "tr" | "en" | "ku";
 export type Profile = {
