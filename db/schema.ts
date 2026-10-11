@@ -104,6 +104,10 @@ export const lists = pgTable("lists", {
   cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "cascade" }),
   // open | closed — kapalı listeye ürün eklenemez, sonuç sabitlenir.
   status: text("status").notNull().default("open"),
+  // Listenin gider tutarı (çalışma alanı para biriminde) ve notu; alıcılara
+  // dağılımı list_allocations'ta tutulur. Ürün satırları isteğe bağlı detaydır.
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  note: text("note").notNull().default(""),
   currency: text("currency").notNull().default("USD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -133,6 +137,16 @@ export const workspaceDistributions = pgTable("workspace_distributions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("workspace_distributions_cash_account_id_idx").on(table.cashAccountId),
+]);
+
+// Bir liste giderinin alıcılara dağılımı (liste başına alıcı başına tek satır).
+export const listAllocations = pgTable("list_allocations", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
+  recipientId: integer("recipient_id").notNull().references(() => workspaceRecipients.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+}, (table) => [
+  uniqueIndex("list_allocations_list_recipient_idx").on(table.listId, table.recipientId),
 ]);
 
 // Listenin ürün satırları; tutar = adet × birim fiyat, her ürünün bir alıcısı.

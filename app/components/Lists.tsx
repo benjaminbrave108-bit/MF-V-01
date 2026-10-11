@@ -19,7 +19,9 @@ type ListSummary = {
   name: string;
   date: string;
   status: "open" | "closed";
+  note: string;
   itemCount: number;
+  itemsTotal: number;
   total: number;
   byRecipient: Record<string, number>;
   unassigned: number;
@@ -181,6 +183,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onAddRecipient={(name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients`, "POST", { name })}
           onRenameRecipient={(id, name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "PUT", { name })}
           onDeleteRecipient={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "DELETE")}
+          onSaveAllocations={(id, allocations) => mutate(`/api/lists/${id}/allocations`, "PUT", { allocations })}
           onAddDistribution={(body) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions`, "POST", body)}
           onDeleteDistribution={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions/${id}`, "DELETE")}
         />
@@ -202,6 +205,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
             if (await mutate(`/api/lists/${list.id}`, "DELETE")) setListId(null);
           }}
           onSaveItems={(items) => mutate(`/api/lists/${list.id}/items`, "PUT", { items })}
+          onApplyItems={(amount, allocations) => mutate(`/api/lists/${list.id}`, "PUT", { amount, allocations })}
           onDirty={setEditingItems}
         />
       )}
@@ -210,6 +214,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           language={language}
           kasas={kasas}
           fixedKasaId={newListFor === "pick" ? null : newListFor}
+          workspace={newListFor === "pick" ? null : workspaces?.find((w) => w.cashAccountId === newListFor) ?? null}
           list={null}
           onClose={() => setNewListFor(null)}
           onSaved={(ws, id) => {
@@ -225,6 +230,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           language={language}
           kasas={kasas}
           fixedKasaId={workspace.cashAccountId}
+          workspace={workspace}
           list={editingList}
           onClose={() => setEditingList(null)}
           onSaved={(ws) => {
@@ -249,11 +255,13 @@ function WorkspaceView({
   onDeleteRecipient,
   onAddDistribution,
   onDeleteDistribution,
+  onSaveAllocations,
 }: {
   language: Language;
   ws: Workspace;
   busy: boolean;
   onBack: () => void;
+  onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onOpenList: (id: number) => void;
   onNewList: () => void;
   onAddRecipient: (name: string) => Promise<boolean>;
@@ -274,14 +282,14 @@ function WorkspaceView({
 
   return (
     <div className="listDetail">
-      <div className="listDetailHead">
+      <div className="listWsBar">
         <button className="light compact" onClick={onBack}>← {tx(language, "Listeler", "Lists", "Lîste")}</button>
-        <div className="listDetailTitle">
-          <span className="listCardCode">{tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}</span>
-          <h3>{ws.name}</h3>
-          <small>{ws.ownerName || "—"} · {c}</small>
-        </div>
-        {ws.canWrite && <button className="primary compact" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>}
+        {ws.canWrite && (
+          <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>
+        )}
+        <span className="listWsLabel">{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</span>
+        <span className="listWsName">{ws.name}</span>
+        <small className="listMuted">{ws.ownerName || "—"} · {c}</small>
       </div>
 
       <div className="listMetrics">
@@ -299,28 +307,7 @@ function WorkspaceView({
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (
-        <table className="listTable">
-          <thead><tr><th>{tx(language, "Kod", "Code", "Kod")}</th><th>{tx(language, "Liste", "List", "Lîste")}</th><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Durum", "Status", "Rewş")}</th><th className="r">{tx(language, "Ürün", "Items", "Berhem")}</th><th className="r">{tx(language, "Liste toplamı", "List total", "Giştiya lîsteyê")}</th><th>{tx(language, "Alıcılara dağılım", "Split by recipient", "Dabeşkirin li gorî wergiran")}</th></tr></thead>
-          <tbody>
-            {ws.lists.map((l) => (
-              <tr key={l.id} className="listRowLink" onClick={() => onOpenList(l.id)}>
-                <td><span className="listCardCode">{l.code}</span></td>
-                <td>{l.name}</td>
-                <td>{formatDate(l.date, language)}</td>
-                <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
-                <td className="r">{l.itemCount}</td>
-                <td className="r">{money(l.total, c)}</td>
-                <td className="listSplitCell">
-                  {ws.recipients
-                    .filter((r) => l.byRecipient[r.id])
-                    .map((r) => `${r.name} ${money(l.byRecipient[r.id], c)}`)
-                    .concat(l.unassigned > 0.005 ? [`${tx(language, "Alıcısız", "No recipient", "Bê wergir")} ${money(l.unassigned, c)}`] : [])
-                    .join(" · ") || "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} />
       )}
 
       <h4>{tx(language, "2) Alıcılar", "2) Recipients", "2) Wergir")}</h4>
@@ -455,6 +442,114 @@ function WorkspaceView({
   );
 }
 
+const RECIPIENT_COLORS = ["#cfe1f4", "#d5ecd4", "#fbdcc4", "#e6d9f3", "#f8d3de", "#d3ecec"];
+
+// Çalışma alanındaki listeler: tablo gibi bir ızgara — her liste bir satır, liste gideri
+// ve her alıcı için ayrı bir sütun (hücreye o alıcıya dağıtılan tutar yazılır).
+function ListsGrid({
+  language,
+  ws,
+  onOpenList,
+  onSaveAllocations,
+}: {
+  language: Language;
+  ws: Workspace;
+  onOpenList: (id: number) => void;
+  onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
+}) {
+  const c = ws.currency;
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const key = (listId: number, recipientId: number) => `${listId}:${recipientId}`;
+
+  async function commit(list: ListSummary, recipientId: number) {
+    const k = key(list.id, recipientId);
+    const raw = edits[k];
+    if (raw === undefined) return;
+    const value = r2(parseNumber(raw));
+    const current = list.byRecipient[recipientId] ?? 0;
+    setEdits((prev) => {
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
+    if (value === current) return;
+    const allocations = ws.recipients
+      .map((r) => ({ recipientId: r.id, amount: r.id === recipientId ? value : list.byRecipient[r.id] ?? 0 }))
+      .filter((a) => a.amount > 0);
+    await onSaveAllocations(list.id, allocations);
+  }
+
+  const sumRecipient = (id: number) => r2(ws.lists.reduce((a, l) => a + (l.byRecipient[id] ?? 0), 0));
+  return (
+    <div className="listMatrixScroll">
+      <table className="listTable listsGrid">
+        <thead>
+          <tr>
+            <th>{tx(language, "Kod", "Code", "Kod")}</th>
+            <th>{tx(language, "Liste", "List", "Lîste")}</th>
+            <th>{tx(language, "Tarih", "Date", "Dîrok")}</th>
+            <th>{tx(language, "Durum", "Status", "Rewş")}</th>
+            <th>{tx(language, "Not", "Note", "Nîşe")}</th>
+            <th className="listsGridAmountHead r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
+            {ws.recipients.map((r, i) => (
+              <th key={r.id} className="listsGridRecipientHead">
+                <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+              </th>
+            ))}
+            <th className="r">{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ws.lists.map((l) => {
+            const editable = ws.canWrite && l.status === "open";
+            return (
+              <tr key={l.id}>
+                <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
+                <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
+                <td>{formatDate(l.date, language)}</td>
+                <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
+                <td className="listGridNote" title={l.note}>{l.note}</td>
+                <td className="listsGridAmount r">{money(l.total, c)}</td>
+                {ws.recipients.map((r) => {
+                  const k = key(l.id, r.id);
+                  const value = l.byRecipient[r.id] ?? 0;
+                  return (
+                    <td key={r.id} className="listsGridCell r">
+                      {editable ? (
+                        <input
+                          className="r"
+                          inputMode="decimal"
+                          placeholder="—"
+                          value={edits[k] ?? (value ? String(value) : "")}
+                          onChange={(e) => setEdits((prev) => ({ ...prev, [k]: e.target.value }))}
+                          onBlur={() => commit(l, r.id)}
+                          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                        />
+                      ) : value ? (
+                        money(value, c)
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  );
+                })}
+                <td className={`r ${l.unassigned < -0.005 ? "negative" : ""}`}>{l.unassigned > 0.005 || l.unassigned < -0.005 ? money(l.unassigned, c) : "—"}</td>
+              </tr>
+            );
+          })}
+          <tr className="listTotalRow">
+            <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
+            <td className="r">{money(ws.totals.expense, c)}</td>
+            {ws.recipients.map((r) => (<td key={r.id} className="r">{money(sumRecipient(r.id), c)}</td>))}
+            <td className="r">{money(ws.totals.unassigned, c)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="listsHint">{tx(language, "Alıcı sütunlarındaki tutarları doğrudan hücreye yazarak dağıtın; Enter ile kaydedilir.", "Type amounts straight into a recipient cell to allocate; Enter saves.", "Mîqdaran rasterast di şaneya wergir de binivîse; Enter tomar dike.")}</p>
+    </div>
+  );
+}
+
 type Draft = { key: number; name: string; quantity: string; unitPrice: string; recipientId: number | null; note: string };
 let draftKey = 1;
 const toDraft = (i: Item): Draft => ({ key: draftKey++, name: i.name, quantity: String(i.quantity), unitPrice: String(i.unitPrice), recipientId: i.recipientId, note: i.note });
@@ -470,6 +565,7 @@ function ListView({
   onToggleStatus,
   onDelete,
   onSaveItems,
+  onApplyItems,
   onDirty,
 }: {
   language: Language;
@@ -481,6 +577,7 @@ function ListView({
   onToggleStatus: () => void;
   onDelete: () => void;
   onSaveItems: (items: unknown[]) => Promise<boolean>;
+  onApplyItems: (amount: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onDirty: (dirty: boolean) => void;
 }) {
   const c = ws.currency;
@@ -505,23 +602,13 @@ function ListView({
   const lineAmount = (d: Draft) => r2(parseNumber(d.quantity) * parseNumber(d.unitPrice));
   const draftTotal = r2(drafts.reduce((a, d) => a + lineAmount(d), 0));
   const rName = (id: number) => ws.recipients.find((r) => r.id === id)?.name ?? "—";
-  // Liste toplamının alıcılara dağılımı (düzenleme sırasında taslaktan canlı hesaplanır).
-  const splitRows = (() => {
-    const totals = new Map<number | null, number>();
-    for (const d of drafts) {
-      const amount = r2(parseNumber(d.quantity) * parseNumber(d.unitPrice));
-      if (amount > 0) totals.set(d.recipientId, r2((totals.get(d.recipientId) ?? 0) + amount));
-    }
-    const sum = [...totals.values()].reduce((a, v) => a + v, 0);
-    return [...totals.entries()]
-      .sort((x, y) => y[1] - x[1])
-      .map(([id, amount]) => ({
-        name: id == null ? tx(language, "Alıcısız", "No recipient", "Bê wergir") : rName(id),
-        amount,
-        pct: sum ? Math.round((amount / sum) * 1000) / 10 : 0,
-        none: id == null,
-      }));
-  })();
+  // Liste giderinin alıcılara dağılımı (kayıtlı dağılımdan).
+  const splitRows = [
+    ...ws.recipients
+      .filter((r) => list.byRecipient[r.id])
+      .map((r) => ({ name: r.name, amount: list.byRecipient[r.id], none: false })),
+    ...(list.unassigned > 0.005 ? [{ name: tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin"), amount: list.unassigned, none: true }] : []),
+  ].map((row) => ({ ...row, pct: list.total ? Math.round((row.amount / list.total) * 1000) / 10 : 0 }));
 
   // Excel/Sheets'ten yapıştırma: Ürün | Adet | Birim fiyat | Alıcı | Not (başlık satırı otomatik atlanır).
   function pasteRows(text: string) {
@@ -601,13 +688,13 @@ function ListView({
 
       <div className="listMetrics">
         <div><small>{tx(language, "Kasa geliri (çalışma alanı)", "Cash income (workspace)", "Dahata qasayê (qada xebatê)")}</small><b>{money(ws.totals.income, c)}</b></div>
-        <div><small>{tx(language, "Liste toplamı", "List total", "Giştiya lîsteyê")}</small><b>{money(dirty ? draftTotal : list.total, c)}</b></div>
-        <div><small>{tx(language, "Ürün sayısı", "Items", "Hejmara berheman")}</small><b>{dirty ? drafts.filter((d) => d.name.trim()).length : list.itemCount}</b></div>
+        <div><small>{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</small><b>{money(list.total, c)}</b></div>
+        <div><small>{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</small><b className={list.unassigned < -0.005 ? "negative" : undefined}>{money(list.unassigned, c)}</b></div>
       </div>
       <div className="listSplit">
-        <small>{tx(language, "Liste toplamının alıcılara dağılımı", "Split of the list total by recipient", "Dabeşkirina giştiya lîsteyê li gorî wergiran")}</small>
+        <small>{tx(language, "Liste giderinin alıcılara dağılımı", "Split of the list expense by recipient", "Dabeşkirina mesrefa lîsteyê li gorî wergiran")}</small>
         {splitRows.length === 0 ? (
-          <span className="listMuted">{tx(language, "Henüz ürün/alıcı yok.", "No products or recipients yet.", "Hê berhem/wergir tune.")}</span>
+          <span className="listMuted">{tx(language, "Henüz dağıtım yok. Düzenle ile veya çalışma alanı tablosundan alıcılara dağıtın.", "No allocation yet. Allocate with Edit or from the workspace table.", "Hê dabeşkirin tune. Bi Biguherîne an ji tabloya qada xebatê dabeş bike.")}</span>
         ) : (
           <div className="listSplitRows">
             {splitRows.map((row) => (
@@ -619,7 +706,26 @@ function ListView({
         )}
       </div>
 
-      <h4>{tx(language, "Ürünler", "Products", "Berhem")}</h4>
+      <h4>
+        {tx(language, "Ürün detayı (isteğe bağlı)", "Product detail (optional)", "Hûrguliyên berheman (bijarte)")}{" "}
+        <span className="listMuted">· {tx(language, "ürün toplamı", "products total", "giştiya berheman")} {money(dirty ? draftTotal : list.itemsTotal, c)}</span>
+        {editable && (
+          <button
+            type="button"
+            className="light compact listH4Button"
+            disabled={dirty || list.itemCount === 0 || busy}
+            title={tx(language, "Liste giderini ve alıcı dağılımını ürünlerden hesaplar", "Sets the list expense and recipient split from the products", "Mesref û dabeşkirinê ji berheman hesab dike")}
+            onClick={async () => {
+              const by = new Map<number, number>();
+              for (const i of list.items) if (i.recipientId) by.set(i.recipientId, r2((by.get(i.recipientId) ?? 0) + i.amount));
+              if (!confirm(tx(language, `Liste gideri ${money(list.itemsTotal, c)} olarak ayarlanacak ve alıcı dağılımı ürünlerden yazılacak. Devam edilsin mi?`, `The list expense will be set to ${money(list.itemsTotal, c)} and the split rewritten from products. Continue?`, `Mesref dê bibe ${money(list.itemsTotal, c)}. Berdewam?`))) return;
+              await onApplyItems(list.itemsTotal, [...by.entries()].map(([recipientId, amount]) => ({ recipientId, amount })));
+            }}
+          >
+            {tx(language, "Ürünlerden hesapla", "Calculate from products", "Ji berheman hesab bike")}
+          </button>
+        )}
+      </h4>
       {ws.recipients.length === 0 && ws.canWrite && (
         <p className="listsHint">{tx(language, "Ürünleri alıcılara yazabilmek için önce çalışma alanı sayfasından alıcı ekleyin.", "Add recipients on the workspace page first so you can assign products.", "Ji bo girêdana berheman bi wergiran re pêşî wergiran li rûpela qada xebatê zêde bike.")}</p>
       )}
@@ -687,7 +793,7 @@ function ListView({
               </tr>
             ))}
             <tr className="listTotalRow">
-              <td colSpan={4}>{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</td>
+              <td colSpan={4}>{tx(language, "Ürün toplamı", "Products total", "Giştiya berheman")}</td>
               <td className="r">{money(draftTotal, c)}</td>
               <td colSpan={editable ? 3 : 2} />
             </tr>
@@ -714,6 +820,7 @@ function ListFormModal({
   language,
   kasas,
   fixedKasaId,
+  workspace,
   list,
   onClose,
   onSaved,
@@ -721,6 +828,7 @@ function ListFormModal({
   language: Language;
   kasas: Kasa[];
   fixedKasaId: number | null;
+  workspace: Workspace | null;
   list: ListSummary | null;
   onClose: () => void;
   onSaved: (ws: Workspace, listId: number) => void;
@@ -729,15 +837,36 @@ function ListFormModal({
   const [code, setCode] = useState(list?.code ?? "");
   const [name, setName] = useState(list?.name ?? "");
   const [dateValue, setDateValue] = useState(list?.date ?? today());
+  const [amount, setAmount] = useState(list && list.total ? String(list.total) : "");
+  const [note, setNote] = useState(list?.note ?? "");
+  const recipients = workspace?.recipients ?? [];
+  const [alloc, setAlloc] = useState<Record<number, string>>(() =>
+    Object.fromEntries(recipients.map((r) => [r.id, list?.byRecipient[r.id] ? String(list.byRecipient[r.id]) : ""])),
+  );
   const [saving, setSaving] = useState(false);
-  const kasaName = kasas.find((k) => k.id === kasaId)?.name ?? "";
+  const kasaName = kasas.find((k) => k.id === kasaId)?.name ?? workspace?.name ?? "";
+  const currency = workspace?.currency ?? "USD";
+  const total = r2(parseNumber(amount));
+  const allocated = r2(recipients.reduce((a, r) => a + parseNumber(alloc[r.id] ?? ""), 0));
+  const over = allocated > total + 0.005;
+  const closed = list?.status === "closed";
 
   async function save() {
     if (kasaId === "") return;
     setSaving(true);
+    const allocations = recipients.map((r) => ({ recipientId: r.id, amount: r2(parseNumber(alloc[r.id] ?? "")) })).filter((a) => a.amount > 0);
+    const money = closed ? {} : { amount: total, ...(recipients.length ? { allocations } : {}) };
     const result = list
-      ? await api<{ workspace: Workspace; listId?: number }>(`/api/lists/${list.id}`, "PUT", { code, name, date: dateValue })
-      : await api<{ workspace: Workspace; listId?: number }>("/api/lists", "POST", { cashAccountId: kasaId, code, name, date: dateValue });
+      ? await api<{ workspace: Workspace; listId?: number }>(`/api/lists/${list.id}`, "PUT", { code, name, date: dateValue, note: note.trim(), ...money })
+      : await api<{ workspace: Workspace; listId?: number }>("/api/lists", "POST", {
+          cashAccountId: kasaId,
+          code,
+          name,
+          date: dateValue,
+          note: note.trim(),
+          amount: total,
+          ...(recipients.length ? { allocations } : {}),
+        });
     setSaving(false);
     if (!result.ok) return alert(result.error);
     onSaved(result.data.workspace, list ? list.id : result.data.listId ?? 0);
@@ -749,13 +878,13 @@ function ListFormModal({
         className="modal listFormModal"
         onSubmit={(e) => {
           e.preventDefault();
-          if (code.trim() && name.trim() && kasaId !== "") save();
+          if (code.trim() && name.trim() && kasaId !== "" && !over) save();
         }}
       >
         <div className="modalHead">
           <div>
             <h2>{list ? tx(language, "Listeyi Düzenle", "Edit List", "Lîsteyê Biguherîne") : tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</h2>
-            <p>{tx(language, "Çalışma alanı (kasa), tarih, liste adı ve kodunu belirleyin.", "Set the workspace (cash account), date, list name and code.", "Qada xebatê (qase), dîrok, navê lîsteyê û kodê diyar bikin.")}</p>
+            <p>{tx(language, "Çalışma alanı (kasa), tarih, liste adı, kodu, gider tutarı ve notu girin.", "Enter the workspace (cash account), date, list name, code, expense amount and note.", "Qada xebatê (qase), dîrok, navê lîsteyê, kod, mîqdara mesrefê û nîşeyê têkevin.")}</p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
@@ -767,7 +896,7 @@ function ListFormModal({
           <label>
             {tx(language, "Çalışma Alanı (Kasa)", "Workspace (Cash account)", "Qada Xebatê (Qase)")}
             {fixedKasaId !== null ? (
-              <input value={kasas.find((k) => k.id === fixedKasaId)?.name ?? kasaName} disabled />
+              <input value={kasaName} disabled />
             ) : (
               <select required value={kasaId} onChange={(e) => setKasaId(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">{tx(language, "Kasa seçin", "Select a cash account", "Qaseyekê hilbijêre")}</option>
@@ -781,12 +910,38 @@ function ListFormModal({
           </label>
           <label>
             {tx(language, "Kodu", "Code", "Kod")}
-            <input required value={code} maxLength={40} placeholder="V-001" onChange={(e) => setCode(e.target.value)} />
+            <input required value={code} maxLength={40} placeholder="260201" onChange={(e) => setCode(e.target.value)} />
           </label>
+          <label>
+            {tx(language, `Tutar (Liste Gideri, ${currency})`, `Amount (List expense, ${currency})`, `Mîqdar (Mesrefa lîsteyê, ${currency})`)}
+            <input inputMode="decimal" value={amount} disabled={closed} placeholder="0" onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <label className="wide">
+            {tx(language, "Not", "Note", "Nîşe")}
+            <textarea rows={2} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          {recipients.length > 0 && (
+            <div className="wide listMembersEditor">
+              <small>{tx(language, "Alıcılara dağıt", "Allocate to recipients", "Ji wergiran re dabeş bike")}</small>
+              <div className="listAllocGrid">
+                {recipients.map((r, i) => (
+                  <label key={r.id}>
+                    <span className="listAllocName" style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+                    <input inputMode="decimal" value={alloc[r.id] ?? ""} disabled={closed} placeholder="0" onChange={(e) => setAlloc((prev) => ({ ...prev, [r.id]: e.target.value }))} />
+                  </label>
+                ))}
+              </div>
+              <small className={over ? "negative" : "listMuted"}>
+                {tx(language, "Dağıtılan", "Allocated", "Hatiye dabeşkirin")} {money(allocated, currency)} / {money(total, currency)}
+                {!over && total - allocated > 0.005 && ` · ${tx(language, "dağıtılmamış", "unallocated", "nehatiye dabeşkirin")} ${money(r2(total - allocated), currency)}`}
+                {over && ` · ${tx(language, "liste giderini aşıyor", "exceeds the list expense", "ji mesrefa lîsteyê zêdetir e")}`}
+              </small>
+            </div>
+          )}
         </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-          <button className="primary" disabled={saving || !code.trim() || !name.trim() || kasaId === ""}>
+          <button className="primary" disabled={saving || over || !code.trim() || !name.trim() || kasaId === ""}>
             {list ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Listeyi Kaydet", "Save List", "Lîsteyê Tomar Bike")}
           </button>
         </div>

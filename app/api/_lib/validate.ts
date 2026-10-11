@@ -160,18 +160,31 @@ const listCodeSchema = z.string().trim().min(1, "Kod gerekli").max(40);
 const listNameSchema = z.string().trim().min(1, "Liste adı gerekli").max(200);
 const moneyAmount = z.number().finite().min(0).max(999_999_999_999.99);
 
+const allocationsSchema = z
+  .array(z.object({ recipientId: z.number().int().positive(), amount: moneyAmount }))
+  .max(200);
+
 export const listInputSchema = z.object({
   cashAccountId: z.number().int().positive(),
   code: listCodeSchema,
   name: listNameSchema,
   date: dateSchema,
+  // Liste gideri tutarı, not ve alıcılara dağılımı.
+  amount: moneyAmount.optional().default(0),
+  note: shortText(2000),
+  allocations: allocationsSchema.optional(),
 });
+
+export const listAllocationsInputSchema = z.object({ allocations: allocationsSchema });
 
 export const listUpdateSchema = z.object({
   code: listCodeSchema.optional(),
   name: listNameSchema.optional(),
   date: dateSchema.optional(),
   status: z.enum(["open", "closed"]).optional(),
+  amount: moneyAmount.optional(),
+  note: z.string().max(2000).optional(),
+  allocations: allocationsSchema.optional(),
 });
 
 export const listItemsInputSchema = z.object({

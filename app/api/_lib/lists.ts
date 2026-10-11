@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
-import { cashAccounts, listItems, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
+import { cashAccounts, listAllocations, listItems, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
 import type { SessionUser } from "./auth";
 import { accessibleCashAccountIds, canWriteCashAccount } from "./cash-access";
 
@@ -65,6 +65,7 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
   ]);
   const listIds = listRows.map((l) => l.id);
   const itemRows = listIds.length ? await db.select().from(listItems).where(inArray(listItems.listId, listIds)).orderBy(listItems.position, listItems.id) : [];
+  const allocRows = listIds.length ? await db.select().from(listAllocations).where(inArray(listAllocations.listId, listIds)) : [];
 
   const workspaces = await Promise.all(
     kasaRows.map(async (kasa) => {
@@ -75,21 +76,21 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
         .map((l) => {
           const items = itemRows.filter((i) => i.listId === l.id);
           const byRecipient: Record<number, number> = {};
-          let unassigned = 0;
-          for (const i of items) {
-            if (i.recipientId == null) unassigned += i.amount;
-            else byRecipient[i.recipientId] = (byRecipient[i.recipientId] ?? 0) + i.amount;
-          }
+          for (const al of allocRows.filter((x) => x.listId === l.id)) if (al.amount > 0) byRecipient[al.recipientId] = round2(al.amount);
+          const allocated = round2(Object.values(byRecipient).reduce((x, y) => x + y, 0));
           return {
             id: l.id,
             code: l.code,
             name: l.name,
             date: l.date,
             status: l.status as "open" | "closed",
+            note: l.note,
             itemCount: items.length,
-            total: round2(items.reduce((a, i) => a + i.amount, 0)),
-            byRecipient: Object.fromEntries(Object.entries(byRecipient).map(([k, v]) => [k, round2(v)])),
-            unassigned: round2(unassigned),
+            itemsTotal: round2(items.reduce((x, i) => x + i.amount, 0)),
+            total: round2(l.amount),
+            byRecipient,
+            // Alıcılara dağıtılmamış kısım (liste gideri − dağıtılan).
+            unassigned: round2(l.amount - allocated),
             items: items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, amount: i.amount, recipientId: i.recipientId, note: i.note })),
           };
         });
@@ -148,4 +149,28 @@ export async function resolveRecordList(
     return { listId: list.id, listName: list.name };
   }
   return { listId: undefined, listName: input.listName };
+}
+
+// Bir listenin alıcı dağılımını (tamamını) yazar; toplam liste gider tutarını aşamaz.
+// Hata mesajı döndürürse hiçbir şey yazılmamıştır.
+export async function writeAllocations(
+  tx: DbClient,
+  list: { id: number; cashAccountId: number | null },
+  amount: number,
+  allocations: { recipientId: number; amount: number }[],
+): Promise<string | null> {
+  const rows = allocations.filter((a) => a.amount > 0);
+  if (new Set(rows.map((r) => r.recipientId)).size !== rows.length) return "Aynı alıcı birden çok kez girilemez";
+  const sum = round2(rows.reduce((a, r) => a + r.amount, 0));
+  if (sum > amount + 0.005) return "Alıcılara dağıtılan toplam, liste giderini aşamaz";
+  if (rows.length) {
+    const valid = await tx
+      .select({ id: workspaceRecipients.id, cashAccountId: workspaceRecipients.cashAccountId })
+      .from(workspaceRecipients)
+      .where(inArray(workspaceRecipients.id, rows.map((r) => r.recipientId)));
+    if (valid.length !== rows.length || valid.some((v) => v.cashAccountId !== list.cashAccountId)) return "Alıcı bu çalışma alanında yok";
+  }
+  await tx.delete(listAllocations).where(eq(listAllocations.listId, list.id));
+  if (rows.length) await tx.insert(listAllocations).values(rows.map((r) => ({ listId: list.id, recipientId: r.recipientId, amount: r.amount })));
+  return null;
 }

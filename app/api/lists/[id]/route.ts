@@ -3,7 +3,7 @@ import { getDb } from "../../../../db";
 import { lists, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
-import { buildWorkspaces, loadListForUser } from "../../_lib/lists";
+import { buildWorkspaces, loadListForUser, writeAllocations } from "../../_lib/lists";
 import { listUpdateSchema, parseBody } from "../../_lib/validate";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -28,17 +28,36 @@ export const PUT = withErrorHandling<Ctx>(async (request, { params }) => {
   if ("response" in parsed) return parsed.response;
   const payload = parsed.data;
 
+  const touchesMoney = payload.amount !== undefined || payload.allocations !== undefined;
+  if (touchesMoney && list.status === "closed" && payload.status !== "open") {
+    return json({ error: "Liste kapalı; tutar ve dağılım değiştirilemez. Önce listeyi yeniden açın." }, { status: 409 });
+  }
+  const newAmount = payload.amount ?? list.amount;
+  let allocationError: string | null = null;
   try {
     await db.transaction(async (tx) => {
       const name = payload.name ?? list.name;
       await tx
         .update(lists)
-        .set({ code: payload.code ?? list.code, name, date: payload.date ?? list.date, status: payload.status ?? list.status, updatedAt: new Date() })
+        .set({
+          code: payload.code ?? list.code,
+          name,
+          date: payload.date ?? list.date,
+          status: payload.status ?? list.status,
+          amount: newAmount,
+          note: payload.note ?? list.note,
+          updatedAt: new Date(),
+        })
         .where(eq(lists.id, id));
+      if (payload.allocations) {
+        allocationError = await writeAllocations(tx, list, newAmount, payload.allocations);
+        if (allocationError) tx.rollback();
+      }
       // Liste adı değiştiyse eski "Liste Kaydı" alanındaki ad kopyası da güncellenir.
       if (name !== list.name) await tx.update(records).set({ listName: name }).where(eq(records.listId, id));
     });
   } catch (error) {
+    if (allocationError) return json({ error: allocationError }, { status: 400 });
     if (isUniqueViolation(error)) return json({ error: "Bu çalışma alanında aynı kodlu bir liste zaten var" }, { status: 409 });
     throw error;
   }
