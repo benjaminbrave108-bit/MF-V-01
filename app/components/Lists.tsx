@@ -488,6 +488,21 @@ function ListsGrid({
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // Alıcı sütunları soldan sağa açılıp kapanır; tercih tarayıcıda hatırlanır.
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem("listsRecipientsOpen") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setOpen((prev) => {
+      try {
+        localStorage.setItem("listsRecipientsOpen", prev ? "0" : "1");
+      } catch {}
+      return !prev;
+    });
   const key = (listId: number, recipientId: number) => `${listId}:${recipientId}`;
 
   async function commit(list: ListSummary, recipientId: number) {
@@ -509,9 +524,23 @@ function ListsGrid({
   }
 
   const sumRecipient = (id: number) => r2(ws.lists.reduce((a, l) => a + (l.byRecipient[id] ?? 0), 0));
+  const allocatedTotal = (l: ListSummary) => r2(Object.values(l.byRecipient).reduce((a, v) => a + v, 0));
+  const recipientCols = open ? ws.recipients.length : 0;
+
   return (
     <div className="listMatrixScroll">
-      <table className="listTable listsGrid">
+      <table className="listTable listsGrid" style={{ minWidth: 104 + 170 + 96 + 84 + 170 + 126 + (open ? ws.recipients.length : 1) * 116 + 126 + (open && ws.canWrite ? 104 : 0) }}>
+        <colgroup>
+          <col style={{ width: 104 }} />
+          <col style={{ width: 170 }} />
+          <col style={{ width: 96 }} />
+          <col style={{ width: 84 }} />
+          <col style={{ width: 170 }} />
+          <col style={{ width: 126 }} />
+          {open ? ws.recipients.map((r) => <col key={r.id} style={{ width: 116 }} />) : <col style={{ width: 126 }} />}
+          <col style={{ width: 126 }} />
+          {open && ws.canWrite && <col style={{ width: 104 }} />}
+        </colgroup>
         <thead>
           <tr>
             <th>{tx(language, "Tarih", "Date", "Dîrok")}</th>
@@ -520,13 +549,26 @@ function ListsGrid({
             <th>{tx(language, "Durum", "Status", "Rewş")}</th>
             <th>{tx(language, "Not", "Note", "Nîşe")}</th>
             <th className="listsGridAmountHead r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
-            {ws.recipients.map((r, i) => (
-              <th key={r.id} className="listsGridRecipientHead">
-                <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+            {open ? (
+              ws.recipients.map((r, i) => (
+                <th key={r.id} className="listsGridRecipientHead">
+                  {i === 0 && (
+                    <button type="button" className="listsGridToggle" onClick={toggle} title={tx(language, "Alıcı sütunlarını kapat", "Collapse recipient columns", "Stûnên wergiran bigire")}>
+                      ◂
+                    </button>
+                  )}
+                  <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+                </th>
+              ))
+            ) : (
+              <th className="listsGridRecipientHead">
+                <button type="button" className="listsGridToggle wide" onClick={toggle} title={tx(language, "Alıcı sütunlarını aç", "Expand recipient columns", "Stûnên wergiran veke")}>
+                  ▸ {tx(language, "Alıcılar", "Recipients", "Wergir")} ({ws.recipients.length})
+                </button>
               </th>
-            ))}
+            )}
             <th className="r">{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</th>
-            {ws.canWrite && (
+            {open && ws.canWrite && (
               <th className="listsGridAddHead">
                 {adding ? (
                   <input
@@ -568,44 +610,53 @@ function ListsGrid({
                 <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
                 <td className="listGridNote" title={l.note}>{l.note}</td>
                 <td className="listsGridAmount r">{money(l.total, c)}</td>
-                {ws.recipients.map((r) => {
-                  const k = key(l.id, r.id);
-                  const value = l.byRecipient[r.id] ?? 0;
-                  return (
-                    <td key={r.id} className="listsGridCell r" style={{ background: RECIPIENT_TINTS[ws.recipients.indexOf(r) % RECIPIENT_TINTS.length] }}>
-                      {editable ? (
-                        <input
-                          className="r"
-                          inputMode="decimal"
-                          placeholder="—"
-                          value={edits[k] ?? (value ? String(value) : "")}
-                          onChange={(e) => setEdits((prev) => ({ ...prev, [k]: e.target.value }))}
-                          onBlur={() => commit(l, r.id)}
-                          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                        />
-                      ) : value ? (
-                        money(value, c)
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  );
-                })}
+                {open ? (
+                  ws.recipients.map((r, i) => {
+                    const k = key(l.id, r.id);
+                    const value = l.byRecipient[r.id] ?? 0;
+                    return (
+                      <td key={r.id} className="listsGridCell r" style={{ background: RECIPIENT_TINTS[i % RECIPIENT_TINTS.length] }}>
+                        {editable ? (
+                          <input
+                            className="r"
+                            inputMode="decimal"
+                            placeholder="—"
+                            value={edits[k] ?? (value ? money(value, c) : "")}
+                            onFocus={() => setEdits((prev) => (prev[k] === undefined ? { ...prev, [k]: value ? String(value) : "" } : prev))}
+                            onChange={(e) => setEdits((prev) => ({ ...prev, [k]: e.target.value }))}
+                            onBlur={() => commit(l, r.id)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : value ? (
+                          money(value, c)
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    );
+                  })
+                ) : (
+                  <td className="listsGridCell r">{allocatedTotal(l) ? money(allocatedTotal(l), c) : "—"}</td>
+                )}
                 <td className={`r ${l.unassigned < -0.005 ? "negative" : ""}`}>{l.unassigned > 0.005 || l.unassigned < -0.005 ? money(l.unassigned, c) : "—"}</td>
-                {ws.canWrite && <td />}
+                {open && ws.canWrite && <td />}
               </tr>
             );
           })}
           <tr className="listTotalRow">
             <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
             <td className="r">{money(ws.totals.expense, c)}</td>
-            {ws.recipients.map((r) => (<td key={r.id} className="r">{money(sumRecipient(r.id), c)}</td>))}
+            {open ? ws.recipients.map((r) => (<td key={r.id} className="r">{money(sumRecipient(r.id), c)}</td>)) : <td className="r">{money(r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0)), c)}</td>}
             <td className="r">{money(ws.totals.unassigned, c)}</td>
-            {ws.canWrite && <td />}
+            {open && ws.canWrite && <td />}
           </tr>
         </tbody>
       </table>
-      <p className="listsHint">{tx(language, "Alıcı sütunlarındaki tutarları doğrudan hücreye yazarak dağıtın; Enter ile kaydedilir.", "Type amounts straight into a recipient cell to allocate; Enter saves.", "Mîqdaran rasterast di şaneya wergir de binivîse; Enter tomar dike.")}</p>
+      <p className="listsHint">
+        {recipientCols
+          ? tx(language, "Tutarı doğrudan alıcı hücresine yazın; Enter ile kaydedilir.", "Type amounts straight into a recipient cell; Enter saves.", "Mîqdarê rasterast di şaneya wergir de binivîse; Enter tomar dike.")
+          : tx(language, "Alıcılara göre dağılımı görmek ve düzenlemek için “Alıcılar” düğmesiyle sütunları sağa doğru açın.", "Use the “Recipients” button to expand the per-recipient columns to the right.", "Ji bo dîtina dabeşkirina li gorî wergiran bi bişkoka “Wergir” stûnan ber bi rastê veke.")}
+      </p>
     </div>
   );
 }

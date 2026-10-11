@@ -3962,3 +3962,15 @@ main { min-width: 0; overflow-x: hidden; }
 .listReceivedChip { display: inline-flex; align-items: center; gap: 8px; padding: 3px 12px 3px 4px; border: 1px solid #e3e8ee; border-radius: 999px; background: #fafcfd; font-size: 12px; }
 .listReceivedChip span { padding: 2px 10px; border-radius: 999px; font-weight: 700; color: #1f3a44; }
 .listMatrixScroll table.listsGrid.listTable { width: max-content; min-width: 0; max-width: none; }
+
+/* Listeler ızgarası: panele uyumlu tam genişlik, sabit sütun düzeni; alıcı sütunları açılır-kapanır */
+.listMatrixScroll table.listsGrid.listTable { width: 100%; min-width: 0; table-layout: fixed; max-width: none; }
+.listsGrid th, .listsGrid td { padding: 8px 12px; overflow: hidden; text-overflow: ellipsis; }
+.listsGrid td:nth-child(-n+5), .listsGrid th:nth-child(-n+5) { padding-right: 12px; }
+.listsGridRecipientHead { width: auto; min-width: 0; max-width: none; text-align: right; white-space: nowrap; }
+.listsGridCell { width: auto; min-width: 0; max-width: none; }
+.listsGridToggle { border: 1px solid #c9d6db; background: #fff; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 700; color: #1f3a44; padding: 2px 8px; margin-right: 6px; }
+.listsGridToggle:hover { background: #eef6f8; }
+.listsGridToggle.wide { margin-right: 0; }
+.listsGridAddHead { text-align: left; min-width: 0; }
+.listsGridAddHead input { width: 100%; }
