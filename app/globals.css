@@ -3918,3 +3918,14 @@ main { min-width: 0; overflow-x: hidden; }
 .listAllocGrid label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
 .listAllocName { align-self: flex-start; padding: 2px 10px; border-radius: 999px; font-weight: 700; color: #1f3a44; }
 .listH4Button { margin-left: 8px; vertical-align: middle; }
+
+/* Listeler: özet kutuları (etiket küçük, değer büyük; mavi = seçili/ana, turuncu = dikkat) */
+.listMetrics { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.listMetrics div { background: #f6f8fa; border: 1px solid #e3e8ee; border-radius: 10px; padding: 12px 16px; gap: 6px; }
+.listMetrics small { font-size: 11px; color: #6b7a86; }
+.listMetrics b { font-size: 22px; font-weight: 700; color: #1b2733; line-height: 1.15; }
+.listMetrics .metricBlue { background: #eef3ff; border-color: #4f7bf0; }
+.listMetrics .metricAmber { background: #fff7e8; border-color: #f0c987; }
+.listMetrics .metricAmber b { color: #b26a00; }
+.listMetrics b.negative { color: #b3261e; }
+.listMetrics b.positive { color: #1b7f4b; }

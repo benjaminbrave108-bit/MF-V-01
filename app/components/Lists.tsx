@@ -293,11 +293,13 @@ function WorkspaceView({
       </div>
 
       <div className="listMetrics">
-        <div><small>{tx(language, "Kasa geliri", "Cash income", "Dahata qasayê")}</small><b>{money(ws.totals.income, c)}</b></div>
+        <div className="metricBlue"><small>{tx(language, "Kasa geliri", "Cash income", "Dahata qasayê")}</small><b>{money(ws.totals.income, c)}</b></div>
         <div><small>{tx(language, "Alıcılara dağıtılan", "Distributed", "Ji wergiran re hatiye dabeşkirin")}</small><b>{money(ws.totals.distributed, c)}</b></div>
         <div><small>{tx(language, "Toplam gider", "Total expense", "Mesrefa giştî")}</small><b>{money(ws.totals.expense, c)}</b></div>
         <div><small>{tx(language, "Kasada kalan", "Cash left", "Di qasayê de")}</small><b className={ws.totals.kasaRemaining < 0 ? "negative" : undefined}>{money(ws.totals.kasaRemaining, c)}</b></div>
-        <div><small>{tx(language, "Alıcılarda kalan", "Left with recipients", "Li cem wergiran")}</small><b className={ws.totals.recipientsNet < 0 ? "negative" : "positive"}>{money(ws.totals.recipientsNet, c)}</b></div>
+        <div className={ws.totals.recipientsNet < 0 ? "metricAmber" : undefined}><small>{tx(language, "Alıcılarda kalan", "Left with recipients", "Li cem wergiran")}</small><b className={ws.totals.recipientsNet < 0 ? "negative" : "positive"}>{money(ws.totals.recipientsNet, c)}</b></div>
+        <div><small>{tx(language, "Açık listeler", "Open lists", "Lîsteyên vekirî")}</small><b>{ws.lists.filter((l) => l.status === "open").length}</b></div>
+        <div><small>{tx(language, "Kapanan listeler", "Closed lists", "Lîsteyên girtî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
       </div>
       <p className="listsHint">
         {tx(language, "Kasa geliri, bu kasadaki kasa ve gelir kayıtlarının toplamıdır (Kasalar/Gelir sayfalarından girilir).", "Cash income is the total of this account's cash and income records (entered on the Cash/Income pages).", "Dahata qasayê, hejmara tomarên qase û dahatê yên vê qasayê ye.")}
@@ -687,9 +689,9 @@ function ListView({
       </div>
 
       <div className="listMetrics">
-        <div><small>{tx(language, "Kasa geliri (çalışma alanı)", "Cash income (workspace)", "Dahata qasayê (qada xebatê)")}</small><b>{money(ws.totals.income, c)}</b></div>
+        <div className="metricBlue"><small>{tx(language, "Kasa geliri (çalışma alanı)", "Cash income (workspace)", "Dahata qasayê (qada xebatê)")}</small><b>{money(ws.totals.income, c)}</b></div>
         <div><small>{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</small><b>{money(list.total, c)}</b></div>
-        <div><small>{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</small><b className={list.unassigned < -0.005 ? "negative" : undefined}>{money(list.unassigned, c)}</b></div>
+        <div className={list.unassigned > 0.005 ? "metricAmber" : undefined}><small>{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</small><b className={list.unassigned < -0.005 ? "negative" : undefined}>{money(list.unassigned, c)}</b></div>
       </div>
       <div className="listSplit">
         <small>{tx(language, "Liste giderinin alıcılara dağılımı", "Split of the list expense by recipient", "Dabeşkirina mesrefa lîsteyê li gorî wergiran")}</small>
