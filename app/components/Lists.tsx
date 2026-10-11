@@ -312,7 +312,10 @@ function WorkspaceView({
         <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} onAddRecipient={onAddRecipient} />
       )}
 
-      <h4>{tx(language, "2) Alıcılar", "2) Recipients", "2) Wergir")}</h4>
+      <details className="listFold">
+        <summary>
+          {tx(language, "Alıcıları yönet", "Manage recipients", "Wergiran birêve bibe")} <em>{ws.recipients.length}</em>
+        </summary>
       <div className="listRecipients">
         {ws.recipients.map((r) => (
           <span key={r.id} className="listRecipientChip">
@@ -350,7 +353,22 @@ function WorkspaceView({
         )}
       </div>
 
-      <h4>{tx(language, "3) Dağıtım (kasadan alıcılara)", "3) Distribution (cash to recipients)", "3) Dabeşkirin (ji qasayê ji wergiran re)")}</h4>
+      </details>
+
+      <details className="listFold">
+        <summary>
+          {tx(language, "Dağıtılan miktarı görüntüle", "View distributed amount", "Mîqdara hatiye dabeşkirin nîşan bide")} <em>{money(ws.totals.distributed, c)}</em>
+        </summary>
+        <p className="listsHint">{tx(language, "Kasadan alıcılara verilen paralar", "Money given from the cash account to recipients", "Pereyên ji qasayê ji wergiran re hatine dayîn")}</p>
+        <div className="listReceivedRow">
+          {ws.balances.length === 0 && <span className="listMuted">—</span>}
+          {ws.balances.map((b, i) => (
+            <span key={b.recipientId} className="listReceivedChip">
+              <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{b.name}</span>
+              <b>{money(b.received, c)}</b>
+            </span>
+          ))}
+        </div>
       {ws.distributions.length > 0 && (
         <table className="listTable">
           <thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Alıcı", "Recipient", "Wergir")}</th><th>{tx(language, "Not", "Note", "Nîşe")}</th><th className="r">{tx(language, "Tutar", "Amount", "Mîqdar")}</th>{ws.canWrite && <th className="listActionCol" />}</tr></thead>
@@ -397,7 +415,10 @@ function WorkspaceView({
         </form>
       )}
 
-      <h4>{tx(language, "4) Alıcı × liste harcaması", "4) Recipient × list spending", "4) Lêçûna wergir × lîste")}</h4>
+      </details>
+
+      <details className="listFold">
+        <summary>{tx(language, "Alıcı hesapları (alıcı × liste)", "Recipient accounts (recipient × list)", "Hesabên wergiran (wergir × lîste)")}</summary>
       {ws.balances.length === 0 ? (
         <p className="listsHint">{tx(language, "Henüz alıcı yok.", "No recipients yet.", "Hê wergir tune.")}</p>
       ) : (
@@ -435,6 +456,7 @@ function WorkspaceView({
           </table>
         </div>
       )}
+      </details>
       <p className="listsHint">
         {tx(language, "Kontrol", "Check", "Kontrol")}: {tx(language, "kasada kalan", "cash left", "di qasayê de")} {money(ws.totals.kasaRemaining, c)} + {tx(language, "alıcılarda kalan", "left with recipients", "li cem wergiran")} {money(ws.totals.recipientsNet, c)} = {money(check, c)}
         {check === r2(expected - ws.totals.unassigned) ? " ✓" : ""} ({tx(language, "gelir", "income", "dahat")} {money(ws.totals.income, c)} − {tx(language, "gider", "expense", "mesref")} {money(ws.totals.expense, c)} = {money(expected, c)})

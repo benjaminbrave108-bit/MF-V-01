@@ -3939,3 +3939,26 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid td:nth-child(-n+5), .listsGrid th:nth-child(-n+5) { padding-right: 22px; }
 .listsGridAddHead { text-align: left; min-width: 110px; }
 .listsGridAddHead input { width: 120px; padding: 3px 6px; font-size: 12px; }
+
+/* Listeler: dar alıcı sütunları + açılır/kapanır paneller */
+.listsGrid { width: auto; min-width: 0; }
+.listsGrid th, .listsGrid td { padding: 6px 10px; }
+.listsGrid td:nth-child(-n+5), .listsGrid th:nth-child(-n+5) { padding-right: 16px; }
+.listsGridRecipientHead { width: 104px; min-width: 104px; max-width: 104px; text-align: right; }
+.listsGridRecipientHead span { padding: 2px 10px; }
+.listsGridCell { width: 104px; min-width: 104px; max-width: 104px; }
+.listsGridCell input { min-width: 0; width: 100%; padding: 3px 4px; }
+.listsGrid th.listsGridAmountHead, .listsGrid td.listsGridAmount { min-width: 104px; width: 1%; white-space: nowrap; }
+.listsGrid th:last-child:not(.listsGridAddHead) { white-space: nowrap; }
+.listGridNote { max-width: 150px; }
+.listFold { border: 1px solid #d8e2e5; border-radius: 10px; background: #fff; padding: 0 14px; margin: 4px 0; }
+.listFold > summary { cursor: pointer; padding: 9px 0; font-size: 12px; font-weight: 700; color: #1f3a44; list-style: none; display: flex; align-items: center; gap: 8px; }
+.listFold > summary::-webkit-details-marker { display: none; }
+.listFold > summary::before { content: "▸"; color: #6b7a86; transition: transform 0.15s; }
+.listFold[open] > summary::before { transform: rotate(90deg); }
+.listFold > summary em { font-style: normal; font-weight: 600; font-size: 11px; color: #5d7580; background: #eef3f5; border-radius: 999px; padding: 1px 9px; }
+.listFold[open] { padding-bottom: 12px; }
+.listReceivedRow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.listReceivedChip { display: inline-flex; align-items: center; gap: 8px; padding: 3px 12px 3px 4px; border: 1px solid #e3e8ee; border-radius: 999px; background: #fafcfd; font-size: 12px; }
+.listReceivedChip span { padding: 2px 10px; border-radius: 999px; font-weight: 700; color: #1f3a44; }
+.listMatrixScroll table.listsGrid.listTable { width: max-content; min-width: 0; max-width: none; }
