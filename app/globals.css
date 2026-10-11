@@ -3889,3 +3889,10 @@ main { min-width: 0; overflow-x: hidden; }
 .listItemsWrap:focus { outline: 0; }
 .listItemsTable input, .listItemsTable select { width: 100%; min-width: 0; padding: 4px 6px; font-size: 12px; }
 .listItemsTable input.r { text-align: right; }
+.listSplit { display: flex; flex-direction: column; gap: 6px; background: #f3f7f8; border-radius: 8px; padding: 8px 12px; }
+.listSplit small { color: #7c8b93; font-size: 10px; }
+.listSplitRows { display: flex; flex-wrap: wrap; gap: 6px; }
+.listSplitChip { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border: 1px solid #d8e2e5; border-radius: 999px; background: #fff; font-size: 12px; }
+.listSplitChip em { font-style: normal; color: #7c8b93; font-size: 11px; }
+.listSplitChip.none { border-color: #e6b8b4; }
+.listSplitCell { font-size: 12px; color: #35525c; }

@@ -295,12 +295,12 @@ function WorkspaceView({
         {tx(language, "Kasa geliri, bu kasadaki kasa ve gelir kayıtlarının toplamıdır (Kasalar/Gelir sayfalarından girilir).", "Cash income is the total of this account's cash and income records (entered on the Cash/Income pages).", "Dahata qasayê, hejmara tomarên qase û dahatê yên vê qasayê ye.")}
       </p>
 
-      <h4>{tx(language, "1) Listeler", "1) Lists", "1) Lîste")}</h4>
+      <h4>{tx(language, "1) Listeler", "1) Lists", "1) Lîste")} <span className="listMuted">· {tx(language, "kasa geliri", "cash income", "dahata qasayê")} {money(ws.totals.income, c)}</span></h4>
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (
         <table className="listTable">
-          <thead><tr><th>{tx(language, "Kod", "Code", "Kod")}</th><th>{tx(language, "Liste", "List", "Lîste")}</th><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Durum", "Status", "Rewş")}</th><th className="r">{tx(language, "Ürün", "Items", "Berhem")}</th><th className="r">{tx(language, "Gider", "Expense", "Mesref")}</th></tr></thead>
+          <thead><tr><th>{tx(language, "Kod", "Code", "Kod")}</th><th>{tx(language, "Liste", "List", "Lîste")}</th><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Durum", "Status", "Rewş")}</th><th className="r">{tx(language, "Ürün", "Items", "Berhem")}</th><th className="r">{tx(language, "Liste toplamı", "List total", "Giştiya lîsteyê")}</th><th>{tx(language, "Alıcılara dağılım", "Split by recipient", "Dabeşkirin li gorî wergiran")}</th></tr></thead>
           <tbody>
             {ws.lists.map((l) => (
               <tr key={l.id} className="listRowLink" onClick={() => onOpenList(l.id)}>
@@ -310,6 +310,13 @@ function WorkspaceView({
                 <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
                 <td className="r">{l.itemCount}</td>
                 <td className="r">{money(l.total, c)}</td>
+                <td className="listSplitCell">
+                  {ws.recipients
+                    .filter((r) => l.byRecipient[r.id])
+                    .map((r) => `${r.name} ${money(l.byRecipient[r.id], c)}`)
+                    .concat(l.unassigned > 0.005 ? [`${tx(language, "Alıcısız", "No recipient", "Bê wergir")} ${money(l.unassigned, c)}`] : [])
+                    .join(" · ") || "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -498,6 +505,23 @@ function ListView({
   const lineAmount = (d: Draft) => r2(parseNumber(d.quantity) * parseNumber(d.unitPrice));
   const draftTotal = r2(drafts.reduce((a, d) => a + lineAmount(d), 0));
   const rName = (id: number) => ws.recipients.find((r) => r.id === id)?.name ?? "—";
+  // Liste toplamının alıcılara dağılımı (düzenleme sırasında taslaktan canlı hesaplanır).
+  const splitRows = (() => {
+    const totals = new Map<number | null, number>();
+    for (const d of drafts) {
+      const amount = r2(parseNumber(d.quantity) * parseNumber(d.unitPrice));
+      if (amount > 0) totals.set(d.recipientId, r2((totals.get(d.recipientId) ?? 0) + amount));
+    }
+    const sum = [...totals.values()].reduce((a, v) => a + v, 0);
+    return [...totals.entries()]
+      .sort((x, y) => y[1] - x[1])
+      .map(([id, amount]) => ({
+        name: id == null ? tx(language, "Alıcısız", "No recipient", "Bê wergir") : rName(id),
+        amount,
+        pct: sum ? Math.round((amount / sum) * 1000) / 10 : 0,
+        none: id == null,
+      }));
+  })();
 
   // Excel/Sheets'ten yapıştırma: Ürün | Adet | Birim fiyat | Alıcı | Not (başlık satırı otomatik atlanır).
   function pasteRows(text: string) {
@@ -576,14 +600,23 @@ function ListView({
       </div>
 
       <div className="listMetrics">
-        <div><small>{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</small><b>{money(dirty ? draftTotal : list.total, c)}</b></div>
+        <div><small>{tx(language, "Kasa geliri (çalışma alanı)", "Cash income (workspace)", "Dahata qasayê (qada xebatê)")}</small><b>{money(ws.totals.income, c)}</b></div>
+        <div><small>{tx(language, "Liste toplamı", "List total", "Giştiya lîsteyê")}</small><b>{money(dirty ? draftTotal : list.total, c)}</b></div>
         <div><small>{tx(language, "Ürün sayısı", "Items", "Hejmara berheman")}</small><b>{dirty ? drafts.filter((d) => d.name.trim()).length : list.itemCount}</b></div>
-        {ws.recipients
-          .filter((r) => list.byRecipient[r.id])
-          .map((r) => (
-            <div key={r.id}><small>{r.name}</small><b>{money(list.byRecipient[r.id], c)}</b></div>
-          ))}
-        {list.unassigned > 0.005 && <div><small>{tx(language, "Alıcısız", "No recipient", "Bê wergir")}</small><b className="negative">{money(list.unassigned, c)}</b></div>}
+      </div>
+      <div className="listSplit">
+        <small>{tx(language, "Liste toplamının alıcılara dağılımı", "Split of the list total by recipient", "Dabeşkirina giştiya lîsteyê li gorî wergiran")}</small>
+        {splitRows.length === 0 ? (
+          <span className="listMuted">{tx(language, "Henüz ürün/alıcı yok.", "No products or recipients yet.", "Hê berhem/wergir tune.")}</span>
+        ) : (
+          <div className="listSplitRows">
+            {splitRows.map((row) => (
+              <span key={row.name} className={`listSplitChip${row.none ? " none" : ""}`}>
+                <b>{row.name}</b> {money(row.amount, c)} <em>{row.pct}%</em>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <h4>{tx(language, "Ürünler", "Products", "Berhem")}</h4>
