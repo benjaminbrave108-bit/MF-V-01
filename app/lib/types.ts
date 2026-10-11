@@ -8,7 +8,8 @@ export type Page =
   | "archive"
   | "users"
   | "settings"
-  | "guide";
+  | "guide"
+  | "lists";
 export type RecordAttachment = { name: string; data: string };
 export type RecordItem = {
   id: number;
@@ -24,6 +25,8 @@ export type RecordItem = {
   tags: string[];
   cashAccount: string;
   listName: string;
+  // Proje Aşaması 2: bağlı liste (Listeler sayfası).
+  listId?: number | null;
   // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
   // avatar/logo ile aynı desen, her biri base64 data URL. Boş dizi = dosya
   // eklenmemiş.
@@ -156,7 +159,7 @@ export type CashTransfer = {
   toRecordId: number | null;
   createdAt: string;
 };
-export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "comments", "archive"];
+export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "comments", "archive", "lists"];
 // A comment thread on one records row — added from the "💬" action on its
 // Kasalar/Gelir/Gider row, or replied to from Mali Özel Notlar > Yorumlar
 // (see Comments.tsx), which lists every record that has at least one.

@@ -1,4 +1,4 @@
-import { boolean, check, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
@@ -89,6 +89,58 @@ export const cashAccountAccess = pgTable("cash_account_access", {
   index("cash_account_access_user_id_idx").on(table.userId),
 ]);
 
+// Proje Aşaması 2 — Liste defteri: bir liste (ör. "V listesi") bir çalışma
+// alanına (ownerUserId = verinin sahibi) bağlıdır; tarihi, adı ve kodu vardır.
+// Liste geliri/gideri `records` tablosunda gelir/gider kaydı olarak kalır
+// (records.listId) — böylece Gelir, Gider, Kasalar ve Ana Sayfa toplamları
+// kendiliğinden güncel kalır. Kişi (üye), dağıtım ve gider paylaşımı aşağıdaki
+// tablolardadır. Bir liste tek para birimiyle çalışır.
+export const lists = pgTable("lists", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  date: text("date").notNull(),
+  ownerUserId: integer("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  currency: text("currency").notNull().default("USD"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("lists_owner_code_idx").on(table.ownerUserId, table.code),
+]);
+
+export const listMembers = pgTable("list_members", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("list_members_list_id_idx").on(table.listId),
+]);
+
+// Liste gelirinden bir kişiye yapılan dağıtım.
+export const listDistributions = pgTable("list_distributions", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => listMembers.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  date: text("date").notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("list_distributions_list_id_idx").on(table.listId),
+]);
+
+// Bir liste giderinin (records satırı) kişilere paylaştırılan kısmı.
+export const listExpenseShares = pgTable("list_expense_shares", {
+  id: serial("id").primaryKey(),
+  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => listMembers.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+}, (table) => [
+  index("list_expense_shares_record_id_idx").on(table.recordId),
+  uniqueIndex("list_expense_shares_record_member_idx").on(table.recordId, table.memberId),
+]);
+
 export const records = pgTable("records", {
   id: serial("id").primaryKey(),
   kind: text("kind").notNull(),
@@ -107,6 +159,9 @@ export const records = pgTable("records", {
   // backfill but is not worth a hard constraint over) don't block writes.
   cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "set null" }),
   listName: text("list_name").notNull().default(""),
+  // Proje Aşaması 2: kaydın bağlı olduğu liste (listName, listenin adının
+  // kopyası olarak kalır — eski ekranlar ve raporlar onu kullanmaya devam eder).
+  listId: integer("list_id").references(() => lists.id, { onDelete: "set null" }),
   // Bir kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
   // avatar/logo ile aynı desen: her biri base64 data URL olarak doğrudan
   // saklanır (ayrı bir dosya depolama/S3 entegrasyonu yok). Dizi elemanı:

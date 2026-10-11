@@ -197,6 +197,13 @@
       "when": 1791502411664,
       "tag": "0027_safe_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791737253216,
+      "tag": "0028_tough_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

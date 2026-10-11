@@ -85,6 +85,8 @@ export const recordInputSchema = z.object({
   tags: tagsSchema,
   cashAccount: shortText(200),
   listName: shortText(200),
+  // Proje Aşaması 2: bağlı liste (varsa listName, listenin adından türetilir).
+  listId: z.number().int().positive().nullable().optional(),
   attachments: attachmentsSchema,
   detailTable: detailTableSchema.optional().default([]),
   detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),
@@ -108,6 +110,7 @@ export const recordUpdateSchema = z.object({
   tags: z.array(z.string().max(64)).max(20).optional(),
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
+  listId: z.number().int().positive().nullable().optional(),
   attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional(),
   detailTable: detailTableSchema.optional(),
   detailTableLayout: detailTableLayoutSchema.optional(),
@@ -150,6 +153,41 @@ export const noteInputSchema = z.object({
   relationDetail: shortText(300),
   assignedUserIds: z.array(z.number().int().positive()).max(50).optional().default([]),
   isArchived: z.boolean().optional().default(false),
+});
+
+// Proje Aşaması 2 — Liste defteri girdileri.
+const listCodeSchema = z.string().trim().min(1, "Kod gerekli").max(40);
+const listNameSchema = z.string().trim().min(1, "Liste adı gerekli").max(200);
+const listMemberNameSchema = z.string().trim().min(1).max(200);
+
+export const listInputSchema = z.object({
+  code: listCodeSchema,
+  name: listNameSchema,
+  date: dateSchema,
+  currency: currencySchema.optional().default("USD"),
+  // Çalışma alanı sahibi — yalnızca süper admin başka bir kullanıcınınkini seçebilir.
+  ownerUserId: z.number().int().positive().optional(),
+  members: z.array(listMemberNameSchema).max(100).optional().default([]),
+});
+
+export const listUpdateSchema = z.object({
+  code: listCodeSchema.optional(),
+  name: listNameSchema.optional(),
+  date: dateSchema.optional(),
+  members: z.array(z.object({ id: z.number().int().positive().optional(), name: listMemberNameSchema })).max(100).optional(),
+});
+
+export const distributionInputSchema = z.object({
+  memberId: z.number().int().positive(),
+  amount: z.number().finite().positive().max(999_999_999_999.99),
+  date: dateSchema,
+  note: shortText(500),
+});
+
+export const expenseSharesInputSchema = z.object({
+  shares: z
+    .array(z.object({ memberId: z.number().int().positive(), amount: z.number().finite().min(0).max(999_999_999_999.99) }))
+    .max(100),
 });
 
 export const commentInputSchema = z.object({

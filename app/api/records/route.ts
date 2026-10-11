@@ -5,6 +5,7 @@ import { requireSession } from "../_lib/auth";
 import { accessibleCashAccountIds } from "../_lib/cash-access";
 import { json, withErrorHandling } from "../_lib/http";
 import { ensureCashAccountLink, fallbackKasaNameFor } from "../_lib/records";
+import { resolveRecordList } from "../_lib/lists";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
 
@@ -58,6 +59,8 @@ export const POST = withErrorHandling(async (request: Request) => {
   }
 
   const db = getDb();
+  const listLink = await resolveRecordList(session.user, { listId: payload.listId, listName: payload.listName }, db);
+  if ("error" in listLink) return json({ error: listLink.error }, { status: 400 });
   const linkName = payload.kind === "cash" ? payload.source : payload.cashAccount;
   const result = await db.transaction(async (tx) => {
     const link = await ensureCashAccountLink({ name: linkName, kind: payload.kind, user: session.user }, tx);
@@ -78,7 +81,8 @@ export const POST = withErrorHandling(async (request: Request) => {
         tags: payload.tags,
         cashAccount: payload.kind === "cash" ? payload.source : (payload.cashAccount || fallbackKasaNameFor(payload.kind)),
         cashAccountId: link.cashAccountId,
-        listName: payload.listName,
+        listName: listLink.listName ?? "",
+        listId: listLink.listId ?? null,
         attachments: payload.attachments,
         detailTable: payload.detailTable,
         detailTableLayout: payload.detailTableLayout,

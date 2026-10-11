@@ -26,6 +26,11 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
     icon: "↘",
   },
   {
+    id: "lists",
+    label: { tr: "Listeler", en: "Lists", ku: "Lîste" },
+    icon: "☰",
+  },
+  {
     id: "reportBuilder",
     label: {
       tr: "Rapor Hazırla",

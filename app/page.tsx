@@ -13,6 +13,7 @@ import { Comments } from "./components/Comments";
 import { Users } from "./components/Users";
 import { Settings } from "./components/Settings";
 import { Guide } from "./components/Guide";
+import { Lists } from "./components/Lists";
 import { tx, localizedProfileName, localizedRole, kbGroupLogo, nav } from "./lib/i18n";
 import { normalizeRecord } from "./lib/finance";
 import { defaultTypography, typographyVariables } from "./lib/typography";
@@ -1004,6 +1005,7 @@ export default function Home() {
             />
           )}
           {page === "guide" && <Guide language={language} />}
+          {page === "lists" && <Lists language={language} users={users} isSuperAdmin={profile.isSuperAdmin} currentUserName={profile.name} />}
         </section>
       </main>
       {modal && (

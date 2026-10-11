@@ -3833,3 +3833,44 @@ main { min-width: 0; overflow-x: hidden; }
 
 /* Kayıt penceresi: sağ-alt köşeden sürüklenerek genişletilip daraltılabilir */
 .recordModal { resize: both; overflow: auto; min-width: min(560px, 96vw); max-width: 98vw; }
+
+/* Proje Aşaması 2 — Listeler sayfası (liste defteri) */
+.listsPage { display: flex; flex-direction: column; gap: 12px; }
+.listsToolbar { display: flex; gap: 8px; }
+.listsHint { color: #7c8b93; font-size: 11px; margin: 4px 0; }
+.listsError { color: #b3261e; font-size: 12px; }
+.negative { color: #b3261e; }
+.positive { color: #1b7f4b; }
+.listCards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.listCard { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 14px 16px; border: 1px solid #d8e2e5; border-radius: 12px; background: #fff; cursor: pointer; }
+.listCard:hover { border-color: #7fb3c0; background: #f6fbfc; }
+.listCard small { color: #7c8b93; }
+.listCard dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin: 8px 0 0; }
+.listCard dt { font-size: 10px; color: #7c8b93; }
+.listCard dd { margin: 0; font-size: 12px; font-weight: 700; }
+.listCardCode { display: inline-block; padding: 1px 8px; border-radius: 6px; background: #e8f3f6; color: #1d5666; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+.listDetail { display: flex; flex-direction: column; gap: 8px; background: #fff; border: 1px solid #d8e2e5; border-radius: 12px; padding: 16px 18px; }
+.listDetail h4 { margin: 14px 0 2px; font-size: 12px; }
+.listDetailHead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.listDetailTitle { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+.listDetailTitle h3 { margin: 0; }
+.listDetailTitle small { color: #7c8b93; }
+.listDetailActions { display: flex; gap: 8px; }
+.listMetrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.listMetrics div { background: #f3f7f8; border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.listMetrics small { color: #7c8b93; font-size: 10px; }
+.listMetrics b { font-size: 15px; }
+.listTable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.listTable th, .listTable td { padding: 6px 8px; border-bottom: 1px solid #e6edef; text-align: left; }
+.listTable .r { text-align: right; }
+.listTable .listActionCol { width: 1%; white-space: nowrap; text-align: right; }
+.listMuted { color: #7c8b93; }
+.listInlineForm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.listInlineForm input, .listInlineForm select { min-width: 120px; flex: 1 1 120px; }
+.listFormModal { width: min(640px, 96vw); }
+.listMembersEditor { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.listMemberRow { display: flex; gap: 8px; width: 100%; }
+.listMemberRow input { flex: 1; }
+.listShareModes { display: flex; gap: 6px; margin-bottom: 8px; }
+.listShareModes .active { background: #dff0f4; border-color: #7fb3c0; }
+.listShareInclude { display: flex; gap: 6px; align-items: center; }

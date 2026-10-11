@@ -5,6 +5,7 @@ import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { ensureCashAccountLink } from "../../_lib/records";
+import { resolveRecordList } from "../../_lib/lists";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
@@ -51,6 +52,9 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
     return json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const listLink = await resolveRecordList(session.user, { listId: payload.listId, listName: payload.listName }, db);
+  if ("error" in listLink) return json({ error: listLink.error }, { status: 400 });
+
   const source = payload.source ?? old.source;
   const cashAccountName = payload.cashAccount ?? old.cashAccount;
   const linkName = kind === "cash" ? source : cashAccountName;
@@ -75,7 +79,8 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
         tags: payload.tags ?? old.tags,
         cashAccount,
         cashAccountId: link.cashAccountId,
-        listName: payload.listName ?? old.listName,
+        listName: listLink.listName ?? old.listName,
+        listId: listLink.listId === undefined ? old.listId : listLink.listId,
         attachments: payload.attachments ?? old.attachments,
         detailTable: payload.detailTable ?? old.detailTable,
         detailTableLayout: payload.detailTableLayout ?? old.detailTableLayout,
