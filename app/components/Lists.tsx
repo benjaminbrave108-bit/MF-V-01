@@ -309,7 +309,7 @@ function WorkspaceView({
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (
-        <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} />
+        <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} onAddRecipient={onAddRecipient} />
       )}
 
       <h4>{tx(language, "2) Alıcılar", "2) Recipients", "2) Wergir")}</h4>
@@ -444,6 +444,7 @@ function WorkspaceView({
   );
 }
 
+const RECIPIENT_TINTS = ["#f1f6fc", "#f2f9f1", "#fef5ee", "#f7f2fb", "#fdf1f4", "#f1f9f9"];
 const RECIPIENT_COLORS = ["#cfe1f4", "#d5ecd4", "#fbdcc4", "#e6d9f3", "#f8d3de", "#d3ecec"];
 
 // Çalışma alanındaki listeler: tablo gibi bir ızgara — her liste bir satır, liste gideri
@@ -453,13 +454,17 @@ function ListsGrid({
   ws,
   onOpenList,
   onSaveAllocations,
+  onAddRecipient,
 }: {
   language: Language;
   ws: Workspace;
   onOpenList: (id: number) => void;
   onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
+  onAddRecipient: (name: string) => Promise<boolean>;
 }) {
   const c = ws.currency;
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const key = (listId: number, recipientId: number) => `${listId}:${recipientId}`;
 
@@ -487,9 +492,9 @@ function ListsGrid({
       <table className="listTable listsGrid">
         <thead>
           <tr>
-            <th>{tx(language, "Kod", "Code", "Kod")}</th>
-            <th>{tx(language, "Liste", "List", "Lîste")}</th>
             <th>{tx(language, "Tarih", "Date", "Dîrok")}</th>
+            <th>{tx(language, "Liste", "List", "Lîste")}</th>
+            <th>{tx(language, "Kod", "Code", "Kod")}</th>
             <th>{tx(language, "Durum", "Status", "Rewş")}</th>
             <th>{tx(language, "Not", "Note", "Nîşe")}</th>
             <th className="listsGridAmountHead r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
@@ -499,6 +504,35 @@ function ListsGrid({
               </th>
             ))}
             <th className="r">{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</th>
+            {ws.canWrite && (
+              <th className="listsGridAddHead">
+                {adding ? (
+                  <input
+                    autoFocus
+                    value={newName}
+                    maxLength={200}
+                    placeholder={tx(language, "Alıcı adı", "Recipient name", "Navê wergir")}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Escape") {
+                        setAdding(false);
+                        setNewName("");
+                      } else if (e.key === "Enter" && newName.trim()) {
+                        if (await onAddRecipient(newName.trim())) {
+                          setNewName("");
+                          setAdding(false);
+                        }
+                      }
+                    }}
+                    onBlur={() => !newName.trim() && setAdding(false)}
+                  />
+                ) : (
+                  <button type="button" className="light compact" onClick={() => setAdding(true)} title={tx(language, "Alıcı ekle", "Add recipient", "Wergir zêde bike")}>
+                    ＋ {tx(language, "Alıcı", "Recipient", "Wergir")}
+                  </button>
+                )}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -506,9 +540,9 @@ function ListsGrid({
             const editable = ws.canWrite && l.status === "open";
             return (
               <tr key={l.id}>
-                <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
-                <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
                 <td>{formatDate(l.date, language)}</td>
+                <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
+                <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
                 <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
                 <td className="listGridNote" title={l.note}>{l.note}</td>
                 <td className="listsGridAmount r">{money(l.total, c)}</td>
@@ -516,7 +550,7 @@ function ListsGrid({
                   const k = key(l.id, r.id);
                   const value = l.byRecipient[r.id] ?? 0;
                   return (
-                    <td key={r.id} className="listsGridCell r">
+                    <td key={r.id} className="listsGridCell r" style={{ background: RECIPIENT_TINTS[ws.recipients.indexOf(r) % RECIPIENT_TINTS.length] }}>
                       {editable ? (
                         <input
                           className="r"
@@ -536,6 +570,7 @@ function ListsGrid({
                   );
                 })}
                 <td className={`r ${l.unassigned < -0.005 ? "negative" : ""}`}>{l.unassigned > 0.005 || l.unassigned < -0.005 ? money(l.unassigned, c) : "—"}</td>
+                {ws.canWrite && <td />}
               </tr>
             );
           })}
@@ -544,6 +579,7 @@ function ListsGrid({
             <td className="r">{money(ws.totals.expense, c)}</td>
             {ws.recipients.map((r) => (<td key={r.id} className="r">{money(sumRecipient(r.id), c)}</td>))}
             <td className="r">{money(ws.totals.unassigned, c)}</td>
+            {ws.canWrite && <td />}
           </tr>
         </tbody>
       </table>

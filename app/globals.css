@@ -3929,3 +3929,13 @@ main { min-width: 0; overflow-x: hidden; }
 .listMetrics .metricAmber b { color: #b26a00; }
 .listMetrics b.negative { color: #b3261e; }
 .listMetrics b.positive { color: #1b7f4b; }
+
+/* Listeler: daha küçük özet kutuları ve ızgarada daha ferah sütun aralıkları */
+.listMetrics { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.listMetrics div { padding: 7px 11px; gap: 3px; border-radius: 8px; }
+.listMetrics small { font-size: 10px; }
+.listMetrics b { font-size: 15px; }
+.listsGrid th, .listsGrid td { padding: 7px 14px; }
+.listsGrid td:nth-child(-n+5), .listsGrid th:nth-child(-n+5) { padding-right: 22px; }
+.listsGridAddHead { text-align: left; min-width: 110px; }
+.listsGridAddHead input { width: 120px; padding: 3px 6px; font-size: 12px; }
