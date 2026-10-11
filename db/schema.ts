@@ -100,45 +100,54 @@ export const lists = pgTable("lists", {
   code: text("code").notNull(),
   name: text("name").notNull(),
   date: text("date").notNull(),
-  ownerUserId: integer("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Çalışma alanı = kasa: liste, bir kasanın (ör. "2026-V") altında yaşar.
+  cashAccountId: integer("cash_account_id").references(() => cashAccounts.id, { onDelete: "cascade" }),
+  // open | closed — kapalı listeye ürün eklenemez, sonuç sabitlenir.
+  status: text("status").notNull().default("open"),
   currency: text("currency").notNull().default("USD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  uniqueIndex("lists_owner_code_idx").on(table.ownerUserId, table.code),
+  uniqueIndex("lists_cash_account_code_idx").on(table.cashAccountId, table.code),
 ]);
 
-export const listMembers = pgTable("list_members", {
+// Çalışma alanındaki (kasa) liste alıcıları: kasadan para dağıtılan ve listelerdeki
+// ürünleri alan kişiler.
+export const workspaceRecipients = pgTable("workspace_recipients", {
   id: serial("id").primaryKey(),
-  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
+  cashAccountId: integer("cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  index("list_members_list_id_idx").on(table.listId),
+  index("workspace_recipients_cash_account_id_idx").on(table.cashAccountId),
 ]);
 
-// Liste gelirinden bir kişiye yapılan dağıtım.
-export const listDistributions = pgTable("list_distributions", {
+// Çalışma alanı kasasından bir alıcıya yapılan dağıtım.
+export const workspaceDistributions = pgTable("workspace_distributions", {
   id: serial("id").primaryKey(),
-  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
-  memberId: integer("member_id").notNull().references(() => listMembers.id, { onDelete: "cascade" }),
+  cashAccountId: integer("cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
+  recipientId: integer("recipient_id").notNull().references(() => workspaceRecipients.id, { onDelete: "cascade" }),
   amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
   date: text("date").notNull(),
   note: text("note").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  index("list_distributions_list_id_idx").on(table.listId),
+  index("workspace_distributions_cash_account_id_idx").on(table.cashAccountId),
 ]);
 
-// Bir liste giderinin (records satırı) kişilere paylaştırılan kısmı.
-export const listExpenseShares = pgTable("list_expense_shares", {
+// Listenin ürün satırları; tutar = adet × birim fiyat, her ürünün bir alıcısı.
+export const listItems = pgTable("list_items", {
   id: serial("id").primaryKey(),
-  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }),
-  memberId: integer("member_id").notNull().references(() => listMembers.id, { onDelete: "cascade" }),
-  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  listId: integer("list_id").notNull().references(() => lists.id, { onDelete: "cascade" }),
+  position: integer("position").notNull().default(0),
+  name: text("name").notNull().default(""),
+  quantity: numeric("quantity", { precision: 14, scale: 3, mode: "number" }).notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  recipientId: integer("recipient_id").references(() => workspaceRecipients.id, { onDelete: "set null" }),
+  note: text("note").notNull().default(""),
 }, (table) => [
-  index("list_expense_shares_record_id_idx").on(table.recordId),
-  uniqueIndex("list_expense_shares_record_member_idx").on(table.recordId, table.memberId),
+  index("list_items_list_id_idx").on(table.listId),
 ]);
 
 export const records = pgTable("records", {

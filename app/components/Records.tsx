@@ -2825,16 +2825,6 @@ export function RecordModal({
   // kapanıyor. Düzenlenen bir kayıtta zaten bir liste adı varsa, kutu
   // başta işaretli açılır.
   const [hasListRecord, setHasListRecord] = useState(!!base.listName);
-  // Proje Aşaması 2: Liste Kaydı artık Listeler sayfasındaki listelerden seçilir
-  // (null = liste verisine erişilemiyor → eski serbest metin alanı).
-  const [listOptions, setListOptions] = useState<{ id: number; code: string; name: string; ownerName: string; canWrite: boolean }[] | null>(null);
-  useEffect(() => {
-    if (!hasListRecord || listOptions) return;
-    fetch("/api/lists")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setListOptions(d.lists))
-      .catch(() => {});
-  }, [hasListRecord, listOptions]);
   // "Gider Detaylarını Görüntüle" bölümü kayıt penceresi her açıldığında
   // kapalı başlar (detay kayıtlıysa bile); açılınca tablonun tamamı görünür.
   const [detailTrimmed, setDetailTrimmed] = useState(false);
@@ -3136,37 +3126,13 @@ export function RecordModal({
                   onChange={(e) => {
                     const checked = e.target.checked;
                     setHasListRecord(checked);
-                    if (!checked) setForm((f) => ({ ...f, listName: "", listId: null }));
+                    if (!checked) setForm((f) => ({ ...f, listName: "" }));
                   }}
                 />
                 {tx(language, "Evet, bir listeyle ilişkilendir", "Yes, link it to a list", "Erê, bi lîsteyekê ve girê bide")}
               </span>
             </label>
-            {hasListRecord && listOptions && (
-              <label>
-                {tx(language, "Liste", "List", "Lîste")}
-                <select
-                  value={form.listId ?? ""}
-                  onChange={(e) => {
-                    const id = e.target.value ? Number(e.target.value) : null;
-                    const picked = listOptions.find((l) => l.id === id);
-                    setForm((f) => ({ ...f, listId: id, listName: picked?.name ?? "" }));
-                  }}
-                >
-                  <option value="">
-                    {listOptions.length
-                      ? tx(language, "Liste seçin", "Select a list", "Lîsteyekê hilbijêre")
-                      : tx(language, "Önce Listeler sayfasından liste oluşturun", "Create a list on the Lists page first", "Pêşî di rûpela Lîste de lîsteyekê biafirînin")}
-                  </option>
-                  {listOptions.filter((l) => l.canWrite).map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.code} · {l.name}{l.ownerName ? ` (${l.ownerName})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {hasListRecord && !listOptions && (
+            {hasListRecord && (
               <label>
                 {tx(language, "Liste Adı", "List Name", "Navê Lîsteyê")}
                 <SuggestInput

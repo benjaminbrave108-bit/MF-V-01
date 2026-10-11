@@ -1005,7 +1005,7 @@ export default function Home() {
             />
           )}
           {page === "guide" && <Guide language={language} />}
-          {page === "lists" && <Lists language={language} users={users} isSuperAdmin={profile.isSuperAdmin} currentUserName={profile.name} />}
+          {page === "lists" && <Lists language={language} />}
         </section>
       </main>
       {modal && (

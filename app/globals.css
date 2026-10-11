@@ -3874,3 +3874,18 @@ main { min-width: 0; overflow-x: hidden; }
 .listShareModes { display: flex; gap: 6px; margin-bottom: 8px; }
 .listShareModes .active { background: #dff0f4; border-color: #7fb3c0; }
 .listShareInclude { display: flex; gap: 6px; align-items: center; }
+
+/* Listeler: çalışma alanı görünümü, ürün tablosu */
+.listRowLink { cursor: pointer; }
+.listRowLink:hover td { background: #f3f9fb; }
+.listTotalRow td { font-weight: 700; background: #f3f7f8; }
+.listRecipients { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.listRecipientChip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border: 1px solid #d8e2e5; border-radius: 999px; font-size: 12px; background: #fff; }
+.listRecipientChip button { border: 0; background: transparent; cursor: pointer; color: #5d7580; padding: 0 4px; font-size: 12px; }
+.listRecipientChip button:hover { color: #1d5666; }
+.listMatrixScroll { overflow-x: auto; }
+.listItemsBar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }
+.listItemsWrap { overflow-x: auto; }
+.listItemsWrap:focus { outline: 0; }
+.listItemsTable input, .listItemsTable select { width: 100%; min-width: 0; padding: 4px 6px; font-size: 12px; }
+.listItemsTable input.r { text-align: right; }

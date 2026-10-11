@@ -1,113 +1,140 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
-import { cashAccountAccess, cashAccounts, listDistributions, listExpenseShares, listMembers, lists, records, users } from "../../../db/schema";
+import { cashAccounts, listItems, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
 import type { SessionUser } from "./auth";
+import { accessibleCashAccountIds, canWriteCashAccount } from "./cash-access";
 
-// Proje Aşaması 2 — Liste defteri. Bir listeyi görebilmek için: listenin
-// çalışma alanının (ownerUserId) sahibi olmak, süper admin olmak veya o
-// sahibin en az bir kasasına erişimi olmak gerekir. Yazma (liste/üye/dağıtım/
-// paylaşım düzenleme) yalnızca sahibe veya süper admine açıktır — kasa
-// paylaşımı yalnızca okuma yetkisi verir (bkz. canWriteCashAccount).
+// Proje Aşaması 2 — Liste defteri. Çalışma alanı = kasa (cash_accounts):
+// kasanın geliri (kasa + gelir kayıtları) alıcılara dağıtılır; kasanın altında
+// kodlu listeler vardır; bir listenin ürünleri alıcılara yazılır ve her
+// alıcının listelerdeki harcaması çıkar. Okuma kasa erişimine, yazma kasanın
+// sahibine / süper admine bağlıdır (bkz. cash-access.ts).
 type Actor = Pick<SessionUser, "id" | "isSuperAdmin">;
 
-export async function visibleListOwnerIds(user: Actor, db: DbClient = getDb()): Promise<number[] | null> {
-  if (user.isSuperAdmin) return null;
-  const shared = await db
-    .selectDistinct({ ownerUserId: cashAccounts.ownerUserId })
-    .from(cashAccountAccess)
-    .innerJoin(cashAccounts, eq(cashAccounts.id, cashAccountAccess.cashAccountId))
-    .where(eq(cashAccountAccess.userId, user.id));
-  const ids = new Set<number>([user.id]);
-  for (const row of shared) if (row.ownerUserId != null) ids.add(row.ownerUserId);
-  return [...ids];
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export type WorkspaceAccess = { canRead: boolean; canWrite: boolean };
+
+export async function workspaceAccess(kasaId: number, user: Actor, db: DbClient = getDb()): Promise<WorkspaceAccess> {
+  const [kasa] = await db.select({ id: cashAccounts.id }).from(cashAccounts).where(eq(cashAccounts.id, kasaId)).limit(1);
+  if (!kasa) return { canRead: false, canWrite: false };
+  const canWrite = await canWriteCashAccount(user, kasaId, db);
+  if (canWrite) return { canRead: true, canWrite: true };
+  const ids = await accessibleCashAccountIds(user, db);
+  return { canRead: ids === null || ids.includes(kasaId), canWrite: false };
 }
 
 export async function loadListForUser(listId: number, user: Actor, db: DbClient = getDb()) {
   const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
-  if (!list) return { list: null, canRead: false, canWrite: false } as const;
-  const canWrite = user.isSuperAdmin || list.ownerUserId === user.id;
-  if (canWrite) return { list, canRead: true, canWrite } as const;
-  const owners = await visibleListOwnerIds(user, db);
-  const canRead = owners === null || (list.ownerUserId != null && owners.includes(list.ownerUserId));
-  return { list, canRead, canWrite: false } as const;
+  if (!list || list.cashAccountId == null) return { list: null, canRead: false, canWrite: false } as const;
+  const access = await workspaceAccess(list.cashAccountId, user, db);
+  return { list, ...access } as const;
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+// Kullanıcının yeni liste/çalışma alanı açabileceği kasalar (yazma yetkisi olanlar).
+export async function writableKasas(user: Actor, db: DbClient = getDb()) {
+  const rows = await db.select({ id: cashAccounts.id, name: cashAccounts.name, ownerUserId: cashAccounts.ownerUserId }).from(cashAccounts).orderBy(cashAccounts.name);
+  return rows.filter((k) => user.isSuperAdmin || k.ownerUserId === user.id).map((k) => ({ id: k.id, name: k.name }));
+}
 
-// Bir listenin tüm ekran verisi: üyeler, dağıtımlar, liste gelir/gider kayıtları
-// (gider başına paylaşımlarıyla) ve hesaplanmış özet/kişi bakiyeleri.
-export async function buildListDetails(listIds: number[], user: Actor, db: DbClient = getDb()) {
-  if (!listIds.length) return [];
-  const [listRows, memberRows, distRows, recordRows] = await Promise.all([
-    db
-      .select({ list: lists, ownerName: users.name })
-      .from(lists)
-      .leftJoin(users, eq(users.id, lists.ownerUserId))
-      .where(inArray(lists.id, listIds)),
-    db.select().from(listMembers).where(inArray(listMembers.listId, listIds)).orderBy(listMembers.id),
-    db.select().from(listDistributions).where(inArray(listDistributions.listId, listIds)).orderBy(listDistributions.date, listDistributions.id),
-    db.select().from(records).where(inArray(records.listId, listIds)).orderBy(records.date, records.id),
+// Listesi, alıcısı veya dağıtımı olan çalışma alanlarının tam ekran verisi.
+export async function buildWorkspaces(user: Actor, only: number[] | null = null, db: DbClient = getDb()) {
+  const accessible = await accessibleCashAccountIds(user, db);
+  const [withLists, withRecipients] = await Promise.all([
+    db.selectDistinct({ id: lists.cashAccountId }).from(lists),
+    db.selectDistinct({ id: workspaceRecipients.cashAccountId }).from(workspaceRecipients),
   ]);
-  const expenseIds = recordRows.filter((r) => r.kind === "expense").map((r) => r.id);
-  const shareRows = expenseIds.length ? await db.select().from(listExpenseShares).where(inArray(listExpenseShares.recordId, expenseIds)) : [];
+  let kasaIds = [...new Set([...withLists, ...withRecipients].map((r) => r.id).filter((v): v is number => v != null))];
+  if (accessible !== null) kasaIds = kasaIds.filter((id) => accessible.includes(id));
+  if (only) kasaIds = kasaIds.filter((id) => only.includes(id));
+  if (!kasaIds.length) return [];
 
-  return listRows.map(({ list, ownerName }) => {
-    const members = memberRows.filter((m) => m.listId === list.id);
-    const distributions = distRows.filter((d) => d.listId === list.id);
-    const listRecords = recordRows.filter((r) => r.listId === list.id);
-    const incomes = listRecords.filter((r) => r.kind === "income");
-    const expenses = listRecords
-      .filter((r) => r.kind === "expense")
-      .map((r) => ({
-        id: r.id,
-        date: r.date,
-        source: r.source,
-        detail: r.detail,
-        amount: r.amount,
-        currency: r.currency,
-        shares: shareRows.filter((s) => s.recordId === r.id).map((s) => ({ memberId: s.memberId, amount: s.amount })),
-      }));
-    const incomeTotal = round2(incomes.reduce((a, r) => a + r.amount, 0));
-    const expenseTotal = round2(expenses.reduce((a, r) => a + r.amount, 0));
-    const distributedTotal = round2(distributions.reduce((a, d) => a + d.amount, 0));
-    const balances = members.map((m) => {
-      const received = round2(distributions.filter((d) => d.memberId === m.id).reduce((a, d) => a + d.amount, 0));
-      const share = round2(expenses.reduce((a, e) => a + (e.shares.find((s) => s.memberId === m.id)?.amount ?? 0), 0));
-      return { memberId: m.id, name: m.name, received, share, balance: round2(received - share) };
-    });
-    const unsharedExpense = round2(expenses.reduce((a, e) => a + e.amount - e.shares.reduce((x, s) => x + s.amount, 0), 0));
-    return {
-      id: list.id,
-      code: list.code,
-      name: list.name,
-      date: list.date,
-      currency: list.currency,
-      ownerUserId: list.ownerUserId,
-      ownerName: ownerName ?? "",
-      canWrite: user.isSuperAdmin || list.ownerUserId === user.id,
-      members: members.map((m) => ({ id: m.id, name: m.name })),
-      distributions: distributions.map((d) => ({ id: d.id, memberId: d.memberId, amount: d.amount, date: d.date, note: d.note })),
-      incomes: incomes.map((r) => ({ id: r.id, date: r.date, source: r.source, detail: r.detail, amount: r.amount, currency: r.currency })),
-      expenses,
-      balances,
-      // Kişi bakiyeleri + liste kasası = gelir − gider (dağıtım ve paylaşımlar
-      // tamamen girildiyse); fark "paylaştırılmamış gider"dir.
-      totals: {
-        income: incomeTotal,
-        expense: expenseTotal,
-        distributed: distributedTotal,
-        listCash: round2(incomeTotal - distributedTotal),
-        unsharedExpense,
-        net: round2(incomeTotal - expenseTotal),
-      },
-    };
-  });
+  const [kasaRows, listRows, recipientRows, distRows, incomeRows] = await Promise.all([
+    db
+      .select({ id: cashAccounts.id, name: cashAccounts.name, ownerUserId: cashAccounts.ownerUserId, ownerName: users.name })
+      .from(cashAccounts)
+      .leftJoin(users, eq(users.id, cashAccounts.ownerUserId))
+      .where(inArray(cashAccounts.id, kasaIds)),
+    db.select().from(lists).where(inArray(lists.cashAccountId, kasaIds)).orderBy(lists.date, lists.id),
+    db.select().from(workspaceRecipients).where(inArray(workspaceRecipients.cashAccountId, kasaIds)).orderBy(workspaceRecipients.id),
+    db.select().from(workspaceDistributions).where(inArray(workspaceDistributions.cashAccountId, kasaIds)).orderBy(workspaceDistributions.date, workspaceDistributions.id),
+    db
+      .select({ cashAccountId: records.cashAccountId, amount: records.amount, currency: records.currency })
+      .from(records)
+      .where(and(inArray(records.cashAccountId, kasaIds), inArray(records.kind, ["cash", "income"]))),
+  ]);
+  const listIds = listRows.map((l) => l.id);
+  const itemRows = listIds.length ? await db.select().from(listItems).where(inArray(listItems.listId, listIds)).orderBy(listItems.position, listItems.id) : [];
+
+  const workspaces = await Promise.all(
+    kasaRows.map(async (kasa) => {
+      const recipients = recipientRows.filter((r) => r.cashAccountId === kasa.id);
+      const distributions = distRows.filter((d) => d.cashAccountId === kasa.id);
+      const wsLists = listRows
+        .filter((l) => l.cashAccountId === kasa.id)
+        .map((l) => {
+          const items = itemRows.filter((i) => i.listId === l.id);
+          const byRecipient: Record<number, number> = {};
+          let unassigned = 0;
+          for (const i of items) {
+            if (i.recipientId == null) unassigned += i.amount;
+            else byRecipient[i.recipientId] = (byRecipient[i.recipientId] ?? 0) + i.amount;
+          }
+          return {
+            id: l.id,
+            code: l.code,
+            name: l.name,
+            date: l.date,
+            status: l.status as "open" | "closed",
+            itemCount: items.length,
+            total: round2(items.reduce((a, i) => a + i.amount, 0)),
+            byRecipient: Object.fromEntries(Object.entries(byRecipient).map(([k, v]) => [k, round2(v)])),
+            unassigned: round2(unassigned),
+            items: items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, amount: i.amount, recipientId: i.recipientId, note: i.note })),
+          };
+        });
+      const incomeRowsForKasa = incomeRows.filter((r) => r.cashAccountId === kasa.id);
+      const income = round2(incomeRowsForKasa.reduce((a, r) => a + r.amount, 0));
+      const currencyCount = new Map<string, number>();
+      for (const r of incomeRowsForKasa) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
+      const currency = [...currencyCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+      const distributed = round2(distributions.reduce((a, d) => a + d.amount, 0));
+      const expense = round2(wsLists.reduce((a, l) => a + l.total, 0));
+      const balances = recipients.map((r) => {
+        const received = round2(distributions.filter((d) => d.recipientId === r.id).reduce((a, d) => a + d.amount, 0));
+        const perList: Record<number, number> = {};
+        for (const l of wsLists) if (l.byRecipient[r.id]) perList[l.id] = l.byRecipient[r.id];
+        const spent = round2(Object.values(perList).reduce((a, v) => a + v, 0));
+        return { recipientId: r.id, name: r.name, received, spent, balance: round2(received - spent), perList };
+      });
+      return {
+        cashAccountId: kasa.id,
+        name: kasa.name,
+        ownerName: kasa.ownerName ?? "",
+        canWrite: await canWriteCashAccount(user, kasa.id, db),
+        currency,
+        recipients: recipients.map((r) => ({ id: r.id, name: r.name })),
+        distributions: distributions.map((d) => ({ id: d.id, recipientId: d.recipientId, amount: d.amount, date: d.date, note: d.note })),
+        lists: wsLists,
+        balances,
+        // Kasada kalan + alıcılarda kalan = gelir − gider (dağıtım ve ürünler tamamen girildiyse).
+        totals: {
+          income,
+          distributed,
+          expense,
+          kasaRemaining: round2(income - distributed),
+          recipientsNet: round2(balances.reduce((a, b) => a + b.balance, 0)),
+          unassigned: round2(wsLists.reduce((a, l) => a + l.unassigned, 0)),
+        },
+      };
+    }),
+  );
+  workspaces.sort((a, b) => a.name.localeCompare(b.name));
+  return workspaces;
 }
 
-// Bir gelir/gider kaydı kaydedilirken liste bağlantısını çözer. `listId`
-// verilmişse o listeye bağlanır (yazma yetkisi gerekir) ve listName listenin
-// adından türetilir; `null` ise bağ kaldırılır; hiçbiri verilmediyse (eski
-// istemciler/içe aktarma) yalnızca listName'e göre sahibin listesi aranır.
+// Bir gelir/gider kaydı kaydedilirken liste bağlantısı (eski "Liste Kaydı" alanı):
+// yalnızca serbest listName korunur; listId verilmişse varlığı ve yazma yetkisi doğrulanır.
 export async function resolveRecordList(
   user: Actor,
   input: { listId?: number | null; listName?: string },
@@ -119,13 +146,6 @@ export async function resolveRecordList(
     if (!list) return { error: "Liste bulunamadı" };
     if (!canWrite) return { error: "Bu listeye kayıt ekleme yetkiniz yok" };
     return { listId: list.id, listName: list.name };
-  }
-  const name = input.listName?.trim();
-  if (name) {
-    const rows = await db.select().from(lists).where(eq(lists.name, name));
-    const match = rows.find((l) => l.ownerUserId === user.id) ?? (user.isSuperAdmin ? rows[0] : undefined);
-    if (match) return { listId: match.id, listName: match.name };
-    return { listId: null, listName: input.listName };
   }
   return { listId: undefined, listName: input.listName };
 }

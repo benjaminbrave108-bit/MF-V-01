@@ -155,39 +155,46 @@ export const noteInputSchema = z.object({
   isArchived: z.boolean().optional().default(false),
 });
 
-// Proje Aşaması 2 — Liste defteri girdileri.
+// Proje Aşaması 2 — Liste defteri girdileri (çalışma alanı = kasa).
 const listCodeSchema = z.string().trim().min(1, "Kod gerekli").max(40);
 const listNameSchema = z.string().trim().min(1, "Liste adı gerekli").max(200);
-const listMemberNameSchema = z.string().trim().min(1).max(200);
+const moneyAmount = z.number().finite().min(0).max(999_999_999_999.99);
 
 export const listInputSchema = z.object({
+  cashAccountId: z.number().int().positive(),
   code: listCodeSchema,
   name: listNameSchema,
   date: dateSchema,
-  currency: currencySchema.optional().default("USD"),
-  // Çalışma alanı sahibi — yalnızca süper admin başka bir kullanıcınınkini seçebilir.
-  ownerUserId: z.number().int().positive().optional(),
-  members: z.array(listMemberNameSchema).max(100).optional().default([]),
 });
 
 export const listUpdateSchema = z.object({
   code: listCodeSchema.optional(),
   name: listNameSchema.optional(),
   date: dateSchema.optional(),
-  members: z.array(z.object({ id: z.number().int().positive().optional(), name: listMemberNameSchema })).max(100).optional(),
+  status: z.enum(["open", "closed"]).optional(),
 });
 
-export const distributionInputSchema = z.object({
-  memberId: z.number().int().positive(),
-  amount: z.number().finite().positive().max(999_999_999_999.99),
+export const listItemsInputSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        name: z.string().trim().max(300),
+        quantity: z.number().finite().min(0).max(999_999_999),
+        unitPrice: moneyAmount,
+        recipientId: z.number().int().positive().nullable().optional(),
+        note: z.string().max(500).optional().default(""),
+      }),
+    )
+    .max(1000),
+});
+
+export const recipientInputSchema = z.object({ name: z.string().trim().min(1, "Ad gerekli").max(200) });
+
+export const workspaceDistributionSchema = z.object({
+  recipientId: z.number().int().positive(),
+  amount: moneyAmount.refine((n) => n > 0, "Tutar sıfırdan büyük olmalı"),
   date: dateSchema,
   note: shortText(500),
-});
-
-export const expenseSharesInputSchema = z.object({
-  shares: z
-    .array(z.object({ memberId: z.number().int().positive(), amount: z.number().finite().min(0).max(999_999_999_999.99) }))
-    .max(100),
 });
 
 export const commentInputSchema = z.object({

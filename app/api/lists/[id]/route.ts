@@ -1,9 +1,9 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { listMembers, lists, records } from "../../../../db/schema";
+import { lists, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
-import { buildListDetails, loadListForUser } from "../../_lib/lists";
+import { buildWorkspaces, loadListForUser } from "../../_lib/lists";
 import { listUpdateSchema, parseBody } from "../../_lib/validate";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -33,36 +33,20 @@ export const PUT = withErrorHandling<Ctx>(async (request, { params }) => {
       const name = payload.name ?? list.name;
       await tx
         .update(lists)
-        .set({ code: payload.code ?? list.code, name, date: payload.date ?? list.date, updatedAt: new Date() })
+        .set({ code: payload.code ?? list.code, name, date: payload.date ?? list.date, status: payload.status ?? list.status, updatedAt: new Date() })
         .where(eq(lists.id, id));
-      // Liste adı değiştiyse bağlı kayıtlardaki ad kopyası da güncellenir.
+      // Liste adı değiştiyse eski "Liste Kaydı" alanındaki ad kopyası da güncellenir.
       if (name !== list.name) await tx.update(records).set({ listName: name }).where(eq(records.listId, id));
-
-      if (payload.members) {
-        const keepIds = payload.members.map((m) => m.id).filter((v): v is number => typeof v === "number");
-        // Listeden çıkarılan üyelerin dağıtım/paylaşımları da (cascade) silinir.
-        if (keepIds.length) await tx.delete(listMembers).where(and(eq(listMembers.listId, id), notInArray(listMembers.id, keepIds)));
-        else await tx.delete(listMembers).where(eq(listMembers.listId, id));
-        for (const m of payload.members) {
-          const memberName = m.name.trim();
-          if (!memberName) continue;
-          if (typeof m.id === "number") {
-            await tx.update(listMembers).set({ name: memberName }).where(and(eq(listMembers.id, m.id), eq(listMembers.listId, id)));
-          } else {
-            await tx.insert(listMembers).values({ listId: id, name: memberName });
-          }
-        }
-      }
     });
   } catch (error) {
     if (isUniqueViolation(error)) return json({ error: "Bu çalışma alanında aynı kodlu bir liste zaten var" }, { status: 409 });
     throw error;
   }
-  const [detail] = await buildListDetails([id], session.user, db);
-  return json({ list: detail });
+  const [workspace] = await buildWorkspaces(session.user, [list.cashAccountId!], db);
+  return json({ workspace });
 });
 
-// Listeyi siler; bağlı gelir/gider kayıtları silinmez, yalnızca listeden ayrılır.
+// Listeyi ve ürünlerini siler; bağlı eski gelir/gider kayıtları silinmez.
 export const DELETE = withErrorHandling<Ctx>(async (request, { params }) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
@@ -78,5 +62,6 @@ export const DELETE = withErrorHandling<Ctx>(async (request, { params }) => {
     await tx.update(records).set({ listName: "" }).where(eq(records.listId, id));
     await tx.delete(lists).where(eq(lists.id, id));
   });
-  return json({ ok: true });
+  const [workspace] = await buildWorkspaces(session.user, [list.cashAccountId!], db);
+  return json({ workspace: workspace ?? null });
 });
