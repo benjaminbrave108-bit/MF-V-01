@@ -26,7 +26,7 @@ type ListSummary = {
   unassigned: number;
   items: Item[];
 };
-type Balance = { recipientId: number; name: string; received: number; spent: number; balance: number; perList: Record<string, number> };
+type Balance = { recipientId: number; name: string; spent: number; perList: Record<string, number> };
 type Workspace = {
   cashAccountId: number;
   name: string;
@@ -34,11 +34,10 @@ type Workspace = {
   canWrite: boolean;
   currency: string;
   recipients: Recipient[];
-  distributions: Distribution[];
   incomes: { id: number; date: string; source: string; amount: number; currency: string }[];
   lists: ListSummary[];
   balances: Balance[];
-  totals: { income: number; distributed: number; expense: number; kasaRemaining: number; recipientsNet: number; unassigned: number };
+  totals: { income: number; distributed: number; expense: number; kasaRemaining: number; unassigned: number };
 };
 type Kasa = { id: number; name: string };
 
@@ -188,8 +187,6 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onDeleteRecipient={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "DELETE")}
           onShowResult={() => setResultFor([workspace.cashAccountId])}
           onSaveAllocations={(id, allocations) => mutate(`/api/lists/${id}/allocations`, "PUT", { allocations })}
-          onAddDistribution={(body) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions`, "POST", body)}
-          onDeleteDistribution={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions/${id}`, "DELETE")}
         />
       )}
       {workspace && list && (
@@ -286,7 +283,7 @@ function ListsResultModal({
   const expense = byCurrency((w) => w.totals.expense);
   const result = byCurrency((w) => w.totals.income - w.totals.expense);
   const cashLeft = byCurrency((w) => w.totals.kasaRemaining);
-  const recipientsNet = byCurrency((w) => w.totals.recipientsNet);
+  const allocatedSum = byCurrency((w) => w.totals.distributed);
   const incomeTotal = sum((w) => w.totals.income);
   const expenseTotal = sum((w) => w.totals.expense);
   const barMax = Math.max(incomeTotal, expenseTotal, 1);
@@ -350,11 +347,11 @@ function ListsResultModal({
     section(tx(language, "GİDER (LİSTELER)", "EXPENSE (LISTS)", "MESREF (LÎSTE)"), expenseRows, fmt(expense), "FFFFF0DF", "FFD06F22");
 
     band(tx(language, "ALICILAR", "RECIPIENTS", "WERGIR"), "FFE7EEF6", "FF176B87");
-    const rh = sheet.addRow([tx(language, "Çalışma alanı", "Workspace", "Qada xebatê"), tx(language, "Alıcı", "Recipient", "Wergir"), tx(language, "Aldığı / Harcadığı", "Received / Spent", "Wergirtî / Lêçûn"), tx(language, "Sonuç", "Result", "Encam")]);
+    const rh = sheet.addRow([tx(language, "Çalışma alanı", "Workspace", "Qada xebatê"), tx(language, "Alıcı", "Recipient", "Wergir"), tx(language, "Listelerde harcadığı", "Spent per list", "Lêçûn li gorî lîsteyê"), tx(language, "Toplam harcama", "Total spent", "Lêçûna giştî")]);
     rh.eachCell((cell) => { cell.font = { name: "Arial", bold: true, size: 9, color: { argb: "FF5B6F77" } }; cell.border = border; });
     for (const w of blocks) {
       for (const b of w.balances) {
-        const row = sheet.addRow([w.name, b.name, `${money(b.received, w.currency)} / ${money(b.spent, w.currency)}`, b.balance]);
+        const row = sheet.addRow([w.name, b.name, w.lists.filter((l) => b.perList[l.id]).map((l) => `${l.code}: ${money(b.perList[l.id], w.currency)}`).join(" · ") || "—", b.spent]);
         row.eachCell({ includeEmpty: true }, (cell, n) => {
           cell.font = { name: "Arial", size: 9, color: { argb: "FF314750" } };
           cell.alignment = { horizontal: n === 4 ? "right" : "left" };
@@ -365,11 +362,10 @@ function ListsResultModal({
     }
     sheet.addRow([]);
     const lines: [string, string, string, string][] = [
-      [tx(language, "SONUÇ (GELİR − GİDER)", "RESULT (INCOME − EXPENSE)", "ENCAM (DAHAT − MESREF)"), fmt(result), "FFEAF4F7", "FF12414F"],
+      [tx(language, "KASADA KALAN (GELİR − GİDER)", "CASH LEFT (INCOME − EXPENSE)", "DI QASEYÊ DE (DAHAT − MESREF)"), fmt(result), "FFEAF4F7", "FF12414F"],
       [tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ"), fmt(income), "FFE7F4EF", "FF14795E"],
       [tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ"), fmt(expense), "FFFDF1E7", "FFB33D3D"],
-      [tx(language, "KASADA KALAN", "CASH LEFT", "DI QASEYÊ DE"), fmt(cashLeft), "FFEAF4F7", "FF12414F"],
-      [tx(language, "ALICILARDA KALAN", "LEFT WITH RECIPIENTS", "LI CEM WERGIRAN"), fmt(recipientsNet), "FFFFF6DB", "FF7A5A1D"],
+      [tx(language, "ALICILARA DAĞITILAN (HARCAMA)", "ALLOCATED TO RECIPIENTS (SPENT)", "JI WERGIRAN RE (LÊÇÛN)"), fmt(allocatedSum), "FFFFF6DB", "FF7A5A1D"],
       [tx(language, "TARİH", "DATE", "TARÎX"), reportDate, "FFF5F7F8", "FF5B6F77"],
     ];
     for (const [label, value, bg, color] of lines) {
@@ -471,7 +467,7 @@ function ListsResultModal({
           <div className="kasaReportList">{rowsView(expenseRows)}</div>
         </div>
         <div className="kasaReportSection">
-          <div className="kasaReportSectionHead"><span>{tx(language, "Alıcılar", "Recipients", "Wergir")}</span><strong>{fmt(recipientsNet)}</strong></div>
+          <div className="kasaReportSectionHead"><span>{tx(language, "Alıcılar (liste harcamaları)", "Recipients (list spending)", "Wergir (lêçûnên lîsteyê)")}</span><strong>{fmt(allocatedSum)}</strong></div>
           <div className="kasaReportList">
             {blocks.every((w) => w.balances.length === 0) ? (
               <p className="kasaReportEmpty">{tx(language, "Alıcı yok.", "No recipients.", "Wergir tune.")}</p>
@@ -483,10 +479,10 @@ function ListsResultModal({
                     <span className="kasaReportRowTitle">
                       {b.name}
                       <small className="kasaReportRowKasa">
-                        {tx(language, "aldığı", "received", "wergirtî")} {money(b.received, w.currency)} · {tx(language, "harcadığı", "spent", "lêçûn")} {money(b.spent, w.currency)}
+                        {w.lists.filter((l) => b.perList[l.id]).map((l) => `${l.code} ${money(b.perList[l.id], w.currency)}`).join(" · ") || "—"}
                       </small>
                     </span>
-                    <span className={`kasaReportRowAmount ${b.balance < 0 ? "negative" : ""}`}>{money(b.balance, w.currency)}</span>
+                    <span className="kasaReportRowAmount">{money(b.spent, w.currency)}</span>
                   </div>
                 )),
               )
@@ -494,11 +490,10 @@ function ListsResultModal({
           </div>
         </div>
         <div className="kasaReportSummary">
-          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "SONUÇ (GELİR − GİDER)", "RESULT (INCOME − EXPENSE)", "ENCAM (DAHAT − MESREF)")}</small><strong>{fmt(result)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "KASADA KALAN (GELİR − GİDER)", "CASH LEFT (INCOME − EXPENSE)", "DI QASEYÊ DE (DAHAT − MESREF)")}</small><strong>{fmt(result)}</strong></div>
           <div className="kasaReportSummaryRow kasaReportSummaryIncome"><small>{tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ")}</small><strong>{fmt(income)}</strong></div>
           <div className="kasaReportSummaryRow kasaReportSummaryExpense"><small>{tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ")}</small><strong>{fmt(expense)}</strong></div>
-          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "KASADA KALAN", "CASH LEFT", "DI QASEYÊ DE")}</small><strong>{fmt(cashLeft)}</strong></div>
-          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "ALICILARDA KALAN", "LEFT WITH RECIPIENTS", "LI CEM WERGIRAN")}</small><strong>{fmt(recipientsNet)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "ALICILARA DAĞITILAN (HARCAMA)", "ALLOCATED TO RECIPIENTS (SPENT)", "JI WERGIRAN RE (LÊÇÛN)")}</small><strong>{fmt(allocatedSum)}</strong></div>
           <div className="kasaReportSummaryRow kasaReportSummaryDate"><small>{tx(language, "TARİH", "DATE", "TARÎX")}</small><strong>{reportDate}</strong></div>
         </div>
         <div className="modalActions">
@@ -520,8 +515,6 @@ function WorkspaceView({
   onAddRecipient,
   onRenameRecipient,
   onDeleteRecipient,
-  onAddDistribution,
-  onDeleteDistribution,
   onSaveAllocations,
   onShowResult,
 }: {
@@ -536,8 +529,6 @@ function WorkspaceView({
   onAddRecipient: (name: string) => Promise<boolean>;
   onRenameRecipient: (id: number, name: string) => Promise<boolean>;
   onDeleteRecipient: (id: number) => Promise<boolean>;
-  onAddDistribution: (body: { recipientId: number; amount: number; date: string; note: string }) => Promise<boolean>;
-  onDeleteDistribution: (id: number) => Promise<boolean>;
 }) {
   const c = ws.currency;
   const [panel, setPanel] = useState<"recipients" | "distribution" | "accounts" | null>(null);
@@ -547,8 +538,6 @@ function WorkspaceView({
   const [dDate, setDDate] = useState(today());
   const [note, setNote] = useState("");
   const name = (id: number) => ws.recipients.find((r) => r.id === id)?.name ?? "—";
-  const check = r2(ws.totals.kasaRemaining + ws.totals.recipientsNet);
-  const expected = r2(ws.totals.income - ws.totals.expense);
 
   return (
     <div className="listDetail">
@@ -567,10 +556,9 @@ function WorkspaceView({
 
       <div className="listMetrics">
         <div className="metricBlue" title={tx(language, "Bu kasadaki kasa ve gelir kayıtlarının toplamı (Kasalar/Gelir sayfalarından girilir)", "Total of this account's cash and income records (entered on the Cash/Income pages)", "Hejmara tomarên qase û dahatê yên vê qasayê")}><small>{tx(language, "Kasa geliri", "Cash income", "Dahata qasayê")}</small><b>{money(ws.totals.income, c)}</b></div>
-        <div><small>{tx(language, "Alıcılara dağıtılan", "Distributed", "Ji wergiran re hatiye dabeşkirin")}</small><b>{money(ws.totals.distributed, c)}</b></div>
+        <div><small>{tx(language, "Alıcılara dağıtılan", "Allocated to recipients", "Ji wergiran re hatiye dabeşkirin")}</small><b>{money(ws.totals.distributed, c)}</b></div>
         <div><small>{tx(language, "Toplam gider", "Total expense", "Mesrefa giştî")}</small><b>{money(ws.totals.expense, c)}</b></div>
-        <div><small>{tx(language, "Kasada kalan", "Cash left", "Di qasayê de")}</small><b className={ws.totals.kasaRemaining < 0 ? "negative" : undefined}>{money(ws.totals.kasaRemaining, c)}</b></div>
-        <div className={ws.totals.recipientsNet < 0 ? "metricAmber" : undefined}><small>{tx(language, "Alıcılarda kalan", "Left with recipients", "Li cem wergiran")}</small><b className={ws.totals.recipientsNet < 0 ? "negative" : "positive"}>{money(ws.totals.recipientsNet, c)}</b></div>
+        <div className={ws.totals.kasaRemaining < 0 ? "metricAmber" : undefined}><small>{tx(language, "Kasada kalan", "Cash left", "Di qasayê de")}</small><b className={ws.totals.kasaRemaining < 0 ? "negative" : "positive"}>{money(ws.totals.kasaRemaining, c)}</b></div>
         <div><small>{tx(language, "Açık listeler", "Open lists", "Lîsteyên vekirî")}</small><b>{ws.lists.filter((l) => l.status === "open").length}</b></div>
         <div><small>{tx(language, "Kapanan listeler", "Closed lists", "Lîsteyên girtî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
       </div>
@@ -637,63 +625,22 @@ function WorkspaceView({
       </div>)}
 
       {panel === "distribution" && (<div className="listToolsBody">
-        <p className="listsHint">{tx(language, "Kasadan alıcılara verilen paralar", "Money given from the cash account to recipients", "Pereyên ji qasayê ji wergiran re hatine dayîn")}</p>
+        <p className="listsHint">{tx(language, "Alıcılara dağıtılan miktarlar — her alıcının liste giderlerindeki harcaması", "Amounts allocated to recipients — each recipient's spending in list expenses", "Mîqdarên ji wergiran re hatine dabeşkirin — lêçûna her wergirekî di mesrefên lîsteyê de")}</p>
         <div className="listReceivedRow">
           {ws.balances.length === 0 && <span className="listMuted">—</span>}
           {ws.balances.map((b, i) => (
             <span key={b.recipientId} className="listReceivedChip">
               <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{b.name}</span>
-              <b>{money(b.received, c)}</b>
-              <small className="listMuted">{tx(language, "harcadığı", "spent", "lêçûn")} {money(b.spent, c)}</small>
+              <b>{money(b.spent, c)}</b>
             </span>
           ))}
+          {ws.totals.unassigned > 0.005 && (
+            <span className="listReceivedChip">
+              <span style={{ background: "#fde9c0" }}>{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</span>
+              <b>{money(ws.totals.unassigned, c)}</b>
+            </span>
+          )}
         </div>
-      {ws.distributions.length > 0 && (
-        <table className="listTable">
-          <thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Alıcı", "Recipient", "Wergir")}</th><th>{tx(language, "Not", "Note", "Nîşe")}</th><th className="r">{tx(language, "Tutar", "Amount", "Mîqdar")}</th>{ws.canWrite && <th className="listActionCol" />}</tr></thead>
-          <tbody>
-            {ws.distributions.map((d) => (
-              <tr key={d.id}>
-                <td>{formatDate(d.date, language)}</td>
-                <td>{name(d.recipientId)}</td>
-                <td>{d.note}</td>
-                <td className="r">{money(d.amount, c)}</td>
-                {ws.canWrite && (
-                  <td className="listActionCol">
-                    <button className="light compact" onClick={() => confirm(tx(language, "Bu dağıtım silinsin mi?", "Delete this distribution?", "Ev dabeşkirin were jêbirin?")) && onDeleteDistribution(d.id)}>
-                      {tx(language, "Sil", "Delete", "Jê bibe")}
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {ws.canWrite && ws.recipients.length > 0 && (
-        <form
-          className="listInlineForm"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const value = parseNumber(amount);
-            if (recipientId === "" || !(value > 0)) return;
-            if (await onAddDistribution({ recipientId, amount: value, date: dDate, note: note.trim() })) {
-              setAmount("");
-              setNote("");
-            }
-          }}
-        >
-          <select value={recipientId} onChange={(e) => setRecipientId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">{tx(language, "Alıcı seçin", "Select recipient", "Wergir hilbijêre")}</option>
-            {ws.recipients.map((r) => (<option key={r.id} value={r.id}>{r.name}</option>))}
-          </select>
-          <input inputMode="decimal" placeholder={tx(language, "Tutar", "Amount", "Mîqdar")} value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <input type="date" value={dDate} onChange={(e) => setDDate(e.target.value)} />
-          <input placeholder={tx(language, "Not (isteğe bağlı)", "Note (optional)", "Nîşe (bijarte)")} value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="primary compact" disabled={recipientId === "" || !(parseNumber(amount) > 0) || busy}>{tx(language, "Dağıtım ekle", "Add distribution", "Dabeşkirinê zêde bike")}</button>
-        </form>
-      )}
-
       </div>)}
 
       {panel === "accounts" && (<div className="listToolsBody">
@@ -707,8 +654,6 @@ function WorkspaceView({
                 <th>{tx(language, "Alıcı", "Recipient", "Wergir")}</th>
                 {ws.lists.map((l) => (<th key={l.id} className="r">{l.code}</th>))}
                 <th className="r">{tx(language, "Toplam harcama", "Total spent", "Lêçûna giştî")}</th>
-                <th className="r">{tx(language, "Dağıtım aldı", "Received", "Wergirtî")}</th>
-                <th className="r">{tx(language, "Sonuç", "Result", "Encam")}</th>
               </tr>
             </thead>
             <tbody>
@@ -717,18 +662,12 @@ function WorkspaceView({
                   <td>{b.name}</td>
                   {ws.lists.map((l) => (<td key={l.id} className="r">{b.perList[l.id] ? money(b.perList[l.id], c) : "—"}</td>))}
                   <td className="r">{money(b.spent, c)}</td>
-                  <td className="r">{money(b.received, c)}</td>
-                  <td className={`r ${b.balance < 0 ? "negative" : b.balance > 0 ? "positive" : ""}`}>
-                    {b.balance < 0 ? `${money(b.balance, c)} ${tx(language, "borç", "debt", "deyn")}` : b.balance > 0 ? `+${money(b.balance, c)}` : "0"}
-                  </td>
                 </tr>
               ))}
               <tr className="listTotalRow">
                 <td>{tx(language, "Toplam", "Total", "Giştî")}</td>
                 {ws.lists.map((l) => (<td key={l.id} className="r">{money(l.total - l.unassigned, c)}</td>))}
                 <td className="r">{money(r2(ws.balances.reduce((a, b) => a + b.spent, 0)), c)}</td>
-                <td className="r">{money(ws.totals.distributed, c)}</td>
-                <td className="r">{money(ws.totals.recipientsNet, c)}</td>
               </tr>
             </tbody>
           </table>
@@ -736,11 +675,6 @@ function WorkspaceView({
       )}
       </div>)}
       </section>
-      <p className="listsHint">
-        {tx(language, "Kontrol", "Check", "Kontrol")}: {tx(language, "kasada kalan", "cash left", "di qasayê de")} {money(ws.totals.kasaRemaining, c)} + {tx(language, "alıcılarda kalan", "left with recipients", "li cem wergiran")} {money(ws.totals.recipientsNet, c)} = {money(check, c)}
-        {check === r2(expected - ws.totals.unassigned) ? " ✓" : ""} ({tx(language, "gelir", "income", "dahat")} {money(ws.totals.income, c)} − {tx(language, "gider", "expense", "mesref")} {money(ws.totals.expense, c)} = {money(expected, c)})
-        {ws.totals.unassigned > 0.005 && ` · ${tx(language, "alıcısız ürün gideri", "expense without recipient", "mesrefa bê wergir")} ${money(ws.totals.unassigned, c)}`}
-      </p>
     </div>
   );
 }

@@ -49,7 +49,7 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
   if (only) kasaIds = kasaIds.filter((id) => only.includes(id));
   if (!kasaIds.length) return [];
 
-  const [kasaRows, listRows, recipientRows, distRows, incomeRows] = await Promise.all([
+  const [kasaRows, listRows, recipientRows, incomeRows] = await Promise.all([
     db
       .select({ id: cashAccounts.id, name: cashAccounts.name, ownerUserId: cashAccounts.ownerUserId, ownerName: users.name })
       .from(cashAccounts)
@@ -57,7 +57,6 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       .where(inArray(cashAccounts.id, kasaIds)),
     db.select().from(lists).where(inArray(lists.cashAccountId, kasaIds)).orderBy(lists.date, lists.id),
     db.select().from(workspaceRecipients).where(inArray(workspaceRecipients.cashAccountId, kasaIds)).orderBy(workspaceRecipients.id),
-    db.select().from(workspaceDistributions).where(inArray(workspaceDistributions.cashAccountId, kasaIds)).orderBy(workspaceDistributions.date, workspaceDistributions.id),
     db
       .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, amount: records.amount, currency: records.currency })
       .from(records)
@@ -79,7 +78,6 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
   const workspaces = await Promise.all(
     kasaRows.map(async (kasa) => {
       const recipients = recipientRows.filter((r) => r.cashAccountId === kasa.id);
-      const distributions = distRows.filter((d) => d.cashAccountId === kasa.id);
       const wsLists = listRows
         .filter((l) => l.cashAccountId === kasa.id)
         .map((l) => {
@@ -112,15 +110,16 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       const currencyCount = new Map<string, number>();
       for (const r of incomeRowsForKasa) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
       const currency = [...currencyCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
-      const distributed = round2(distributions.reduce((a, d) => a + d.amount, 0));
+      // Bir listede bir alıcıya yazılan tutar, o alıcının o liste giderindeki harcamasıdır (gider);
+      // "alıcılarda kalan" diye bir tutar yoktur — kasada kalan = kasa geliri − liste giderleri.
       const expense = round2(wsLists.reduce((a, l) => a + l.total, 0));
       const balances = recipients.map((r) => {
-        const received = round2(distributions.filter((d) => d.recipientId === r.id).reduce((a, d) => a + d.amount, 0));
         const perList: Record<number, number> = {};
         for (const l of wsLists) if (l.byRecipient[r.id]) perList[l.id] = l.byRecipient[r.id];
         const spent = round2(Object.values(perList).reduce((a, v) => a + v, 0));
-        return { recipientId: r.id, name: r.name, received, spent, balance: round2(received - spent), perList };
+        return { recipientId: r.id, name: r.name, spent, perList };
       });
+      const distributed = round2(balances.reduce((a, b) => a + b.spent, 0));
       return {
         cashAccountId: kasa.id,
         name: kasa.name,
@@ -128,20 +127,18 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
         canWrite: await canWriteCashAccount(user, kasa.id, db),
         currency,
         recipients: recipients.map((r) => ({ id: r.id, name: r.name })),
-        distributions: distributions.map((d) => ({ id: d.id, recipientId: d.recipientId, amount: d.amount, date: d.date, note: d.note })),
         // Çalışma alanının (kasa) gelir kalemleri — Sonuç Raporu'nda listelenir.
         incomes: incomeRowsForKasa
           .map((r) => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, currency: r.currency }))
           .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
         lists: wsLists,
         balances,
-        // Kasada kalan + alıcılarda kalan = gelir − gider (dağıtım ve ürünler tamamen girildiyse).
         totals: {
           income,
+          // Alıcılara dağıtılan = alıcıların liste giderlerindeki toplam harcaması.
           distributed,
           expense,
-          kasaRemaining: round2(income - distributed),
-          recipientsNet: round2(balances.reduce((a, b) => a + b.balance, 0)),
+          kasaRemaining: round2(income - expense),
           unassigned: round2(wsLists.reduce((a, l) => a + l.unassigned, 0)),
         },
       };
