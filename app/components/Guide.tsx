@@ -29,9 +29,9 @@ export function Guide({ language }: { language: Language }) {
           <p>
             {tx(
               language,
-              "Sol menüden Kasalar, Gelir, Gider, Rapor Hazırla, Mali Özel Notlarım, Yorumlar, Arşiv, Kullanıcılar ve Ayarlar bölümlerine ulaşabilirsiniz. Her bölüm, yalnızca yetkiniz olan verileri gösterir.",
-              "The left menu gives you access to Kasalar (Cash), Gelir (Income), Gider (Expense), Rapor Hazırla (Prepare Report), Mali Özel Notlarım (Private Notes), Yorumlar (Comments), Arşiv (Archive), Kullanıcılar (Users) and Ayarlar (Settings). Each section only shows data you're permitted to see.",
-              "Ji menuya çepê hûn dikarin bigihîjin beşên Qase, Dahat, Mesref, Raporê Amade Bike, Nîşeyên Min ên Taybet, Şîrove, Arşîv, Bikarhêner û Mîheng. Her beş tenê daneyên ku destûra we jê heye nîşan dide.",
+              "Sol menüden Kasalar, Gelir, Gider, Listeler, Rapor Hazırla, Mali Özel Notlarım, Yorumlar, Arşiv, Kullanıcılar ve Ayarlar bölümlerine ulaşabilirsiniz. Her bölüm, yalnızca yetkiniz olan verileri gösterir.",
+              "The left menu gives you access to Kasalar (Cash), Gelir (Income), Gider (Expense), Listeler (Lists), Rapor Hazırla (Prepare Report), Mali Özel Notlarım (Private Notes), Yorumlar (Comments), Arşiv (Archive), Kullanıcılar (Users) and Ayarlar (Settings). Each section only shows data you're permitted to see.",
+              "Ji menuya çepê hûn dikarin bigihîjin beşên Qase, Dahat, Mesref, Lîste, Raporê Amade Bike, Nîşeyên Min ên Taybet, Şîrove, Arşîv, Bikarhêner û Mîheng. Her beş tenê daneyên ku destûra we jê heye nîşan dide.",
             )}
           </p>
         </>
@@ -95,6 +95,110 @@ export function Guide({ language }: { language: Language }) {
             "Birbiriyle ilgili birden fazla kaydı ortak bir başlık altında toplamak isterseniz \"Liste Kaydı\" seçeneğini işaretleyip bir liste adı girin — örneğin Örnek A.Ş.'nin \"2026 Fuar Bütçesi\" için yaptığı tüm harcamaları \"Fuar 2026\" listesinde toplayabilirsiniz. Bu kayıtlar, sayfanın altındaki sarı \"Tüm Liste Gelirleri/Giderleri\" satırında ayrıca özetlenir.",
             "To group several related records under one label, check \"List Record\" and give it a name — e.g. all of Örnek A.Ş.'s spending on its \"2026 Trade Fair Budget\" could be grouped under \"Fair 2026\". These records are also summarized separately in the yellow \"All List Income/Expenses\" row below the main grid.",
             "Ji bo çend qeydên têkildar bin sernavekî hevpar bicivînin, \"Qeyda Lîsteyê\" nîşan bikin û navekî lê bikin — mînak hemû lêçûnên Örnek A.Ş. yên \"Bûdceya Pêşangeha 2026\" dikare di lîsteya \"Pêşangeh 2026\" de bicive. Ev qeyd di rêza zer a \"Hemû Dahat/Mesrefên Lîsteyê\" de jî bi taybetî tên kurtkirin.",
+          )}
+        </p>
+      ),
+    },
+    {
+      id: "lists",
+      title: tx(language, "Listeler (Çalışma Alanları)", "Lists (Workspaces)", "Lîste (Qadên Xebatê)"),
+      body: (
+        <>
+          <p>
+            {tx(
+              language,
+              "Listeler sayfası, bir kasanın altında yürüyen işleri (ör. Örnek A.Ş.'nin \"2026-V\" kasasındaki mutfak, banyo, elektrik alımları) yönetir. Yapı şöyledir: Çalışma alanı (bir kasa) → listeler (kod, ad, tarih, gider tutarı) → her listenin alıcılara dağılımı.",
+              "The Lists page manages the work running under a cash account (e.g. the kitchen, bathroom and electrical purchases in Örnek A.Ş.'s \"2026-V\" account). The structure is: Workspace (a cash account) → lists (code, name, date, expense amount) → each list's allocation to recipients.",
+              "Rûpela Lîste kar û barên di bin qaseyekê de birêve dibe (mînak kirîna metbex, hemam û elektrîkê di qaseya \"2026-V\" a Örnek A.Ş. de). Avahî wiha ye: Qada xebatê (qaseyek) → lîste (kod, nav, dîrok, mîqdara mesrefê) → dabeşkirina her lîsteyê ji wergiran re.",
+            )}
+          </p>
+          <ul>
+            <li>
+              {tx(
+                language,
+                "Yeni çalışma alanı: Listeler sayfasında \"＋ Yeni Çalışma Alanı\" ile bir kasa seçin. Ad, gelir tutarı (kasadan otomatik ya da elle; \"Kasadaki tutarı getir\" düğmesi mevcut tutarı yazar) ve not isteğe bağlıdır. Kasayı Kasalar'da yeni kayıt açarken \"Liste Kasası (Çalışma Alanı)\" kutusunu işaretleyerek de oluşturabilirsiniz; işaretli kasa Listeler'de otomatik çalışma alanı olur ve yalnızca \"Tüm Liste Kasaları\" bölümünde görünür.",
+                "New workspace: on the Lists page use \"＋ New Workspace\" and pick a cash account. Name, income amount (automatic from the cash account or manual; the \"Fetch the cash account amount\" button fills the current amount) and note are optional. You can also create one from Kasalar by ticking \"List Cash Account (Workspace)\" on a new record; a ticked cash account becomes a workspace on the Lists page automatically and shows only under \"All List Accounts\".",
+                "Qada xebatê ya nû: li rûpela Lîste bi \"＋ Qada Xebatê ya Nû\" qaseyekê hilbijêrin. Nav, mîqdara dahatê (ji qaseyê bixweber an bi destî) û nîşe bijarte ne. Her wiha dikarin di Qase de dema qeydekê nû vedikin \"Qaseya Lîsteyê (Qada Xebatê)\" nîşan bikin; qaseya nîşankirî bixweber di Lîste de dibe qada xebatê û tenê di \"Hemû Qaseyên Lîsteyê\" de xuya dibe.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Yeni liste: çalışma alanının içinde \"＋ Yeni Liste\" ile tarih, liste adı, kod, gider tutarı ve not girin. Liste gideri, bağlı kasaya otomatik bir Gider kaydı olarak yazılır (Gider sayfasında, Kasalar bakiyesinde ve Ana Sayfa'da görünür); bu kaydı Gider sayfasından değil, Listeler'den düzenlersiniz.",
+                "New list: inside the workspace use \"＋ New List\" to enter date, list name, code, expense amount and note. The list expense is written to the linked cash account as an automatic Expense record (it shows on the Expense page, in Kasalar balances and on the Home page); you edit it from Lists, not from the Expense page.",
+                "Lîsteya nû: di nav qada xebatê de bi \"＋ Lîsteya Nû\" dîrok, navê lîsteyê, kod, mîqdara mesrefê û nîşe têkevin. Mesrefa lîsteyê bixweber wekî qeydeke Mesrefê li qaseya girêdayî tê nivîsandin (di rûpela Mesref, bakiyeya Qase û Rûpela Sereke de xuya dibe); hûn wê ji Lîste diguherînin, ne ji rûpela Mesref.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Alıcılar ve dağıtım: \"＋ Alıcı ekle\" ile alıcı ekleyin; her alıcının listedeki sütununa yazdığınız tutar, o alıcının bu liste giderindeki harcamasıdır (Enter ile kaydedilir). Alıcılar sütunları \"▸ Alıcılar\" düğmesiyle soldan sağa açılıp kapanır. \"Kalan\", listenin henüz alıcılara yazılmamış kısmıdır. Alıcılarda kalan diye bir tutar yoktur; kasada kalan = kasa geliri − liste giderleri.",
+                "Recipients and allocation: add recipients with \"＋ Add recipient\"; the amount you type in a recipient's column is that recipient's spending in this list expense (Enter saves). Recipient columns expand and collapse left to right with the \"▸ Recipients\" button. \"Left\" is the part of the list not yet allocated to recipients. There is no \"left with recipients\" amount; cash left = cash income − list expenses.",
+                "Wergir û dabeşkirin: bi \"＋ Wergir zêde bike\" wergir zêde bikin; mîqdara ku hûn di stûna wergirekî de dinivîsin lêçûna wî/wê di vê mesrefa lîsteyê de ye (Enter tomar dike). Stûnên wergiran bi bişkoka \"▸ Wergir\" ji çepê ber bi rastê vedibin û digirin. \"Mayî\" beşa lîsteyê ye ku hê ji wergiran re nehatiye nivîsandin. Mîqdareke \"li cem wergiran\" tune; mayî di qaseyê de = dahata qaseyê − mesrefên lîsteyê.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Liste bitti: durum rozetine (ya da liste ekranındaki \"✔ Liste bitti — Sonuçlandır\" düğmesine) basıp onaylarsanız liste sonuçlanır; liste tutarı, dağıtım ve kalan sabitlenir ve düzenlenemez. Gerekirse \"Yeniden aç\" ile tekrar düzenlenebilir.",
+                "List finished: clicking the status badge (or \"✔ List finished — Finalize\" on the list page) and confirming finalizes the list; its amount, allocation and remainder are locked. You can use \"Reopen\" to edit it again if needed.",
+                "Lîste qediya: heke hûn li rozeta rewşê (an \"✔ Lîste qediya — Biqedîne\" li ser rûpela lîsteyê) bitikînin û erê bikin, lîste diqede; mîqdar, dabeşkirin û mayî tên sabitkirin. Ger hewce be bi \"Dîsa veke\" dikarin dîsa biguherînin.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Sonuçları Görüntüle: hem Listeler ana sayfasında hem çalışma alanında bulunur; kasa geliri, liste giderleri, alıcı harcamaları ve kasada kalan tutarı Kasalar'daki \"Sonuç Oluştur\" raporuyla aynı görünümde gösterir; Excel'e aktarılabilir.",
+                "View Results: available on the Lists main page and inside a workspace; it shows cash income, list expenses, recipient spending and cash left in the same layout as the Kasalar \"Create Result\" report, and can be exported to Excel.",
+                "Encaman Nîşan Bide: li rûpela serekî ya Lîste û di nav qada xebatê de heye; dahata qaseyê, mesrefên lîsteyê, lêçûnên wergiran û mayî di qaseyê de bi heman dîmenê raporê \"Encamê Biafirîne\" a Qase nîşan dide; dikare ji Excelê re were derxistin.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Tablo sütunları: Tarih, Liste, Kod, Durum, Not, Liste gideri ve alıcı sütunlarının genişliği başlığın sağ kenarındaki tutamaçtan sürüklenerek ayarlanır; çift tıklayınca varsayılana döner. Tarayıcı ayarı hatırlar.",
+                "Table columns: drag the handle on a header's right edge to change the width of Date, List, Code, Status, Note, List expense and recipient columns; double-click resets it. The browser remembers your settings.",
+                "Stûnên tabloyê: firehiya stûnên Dîrok, Lîste, Kod, Rewş, Nîşe, Mesrefa lîsteyê û wergiran bi kişandina tutamaka li kêleka rastê ya sernavê tê guhertin; du caran bitikînin vedigere bingehîn. Gerok mîhengê tomar dike.",
+              )}
+            </li>
+          </ul>
+        </>
+      ),
+    },
+    {
+      id: "kasaBoxes",
+      title: tx(language, "Gelir, Gider ve Kasa Kutuları", "Income, Expense and Cash Boxes", "Qutiyên Dahat, Mesref û Qaseyê"),
+      body: (
+        <>
+          <p>
+            {tx(
+              language,
+              "Her gelir ve gider bir kasaya bağlı girilir. Gelir ve Gider sayfalarında ilk satırda \"Tüm Gelirler/Giderler\" kutusunun sağında kayıt başlığı kutuları ve kasa kutuları (ör. \"Ana Kasa Giderleri\") yer alır; başlık kutularında bağlı kasa küçük bir etiketle görünür. Kutunun adının yanındaki parantezdeki sayı kayıt sayısıdır. Kasa kutusuna tıklayınca tablo o kasanın kayıtlarıyla süzülür.",
+              "Every income and expense is entered against a cash account. On the Income and Expense pages the first row has the \"All Income/Expenses\" box followed by record-title boxes and cash-account boxes (e.g. \"Main Cash Expenses\"); title boxes show their linked cash account as a small tag. The number in parentheses next to a name is the record count. Clicking a cash-account box filters the table to that account's records.",
+              "Her dahat û mesref bi qaseyekê ve tê tomarkirin. Di rûpelên Dahat û Mesref de di rêza yekem de li rastê qutiya \"Hemû Dahat/Mesref\" qutiyên sernavê û qutiyên qaseyê (mînak \"Mesrefên Qaseya Sereke\") hene; di qutiyên sernavê de qaseya girêdayî bi etîketeke biçûk xuya dibe. Hejmara di nav parantezê de li kêleka navê hejmara qeydan e. Bi tikandina qutiya qaseyê tablo bi qeydên wê qaseyê tê parzûnkirin.",
+            )}
+          </p>
+          <p>
+            {tx(
+              language,
+              "Kasalar sayfasında her kasa kartı o kasanın geliri (↗), gideri (↘) ve sonucunu gösterir; \"Tüm Kasalar\" ve \"Tüm Liste Kasaları\" kutuları da aynı satırlara sahiptir. Listelerle ilişkili (Liste Kasası) kasalar üstteki kasa kartlarında değil, ikinci satırdaki \"Tüm Liste Kasaları\" bölümünde görünür. Geliri ya da gideri olmayan (tutarı sıfır) kasa ve liste kutuları Gelir/Gider sayfalarında gizlenir.",
+              "On the Kasalar page each cash card shows that account's income (↗), expense (↘) and result; the \"All Cash Accounts\" and \"All List Accounts\" boxes have the same lines. Cash accounts linked to lists (List Cash Accounts) do not appear among the top cards but in the second-row \"All List Accounts\" section. Cash and list boxes with a zero amount are hidden on the Income/Expense pages.",
+              "Di rûpela Qase de her karta qaseyê dahat (↗), mesref (↘) û encama wê qaseyê nîşan dide; qutiyên \"Hemû Qase\" û \"Hemû Qaseyên Lîsteyê\" jî heman rêzan hene. Qaseyên bi lîsteyan ve girêdayî (Qaseya Lîsteyê) di kartên jorîn de nayên xuyakirin, di beşa \"Hemû Qaseyên Lîsteyê\" ya rêza duyemîn de ne. Qutiyên qase û lîsteyê yên mîqdara wan sifir e di rûpelên Dahat/Mesref de têne veşartin.",
+            )}
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "expenseDetail",
+      title: tx(language, "Gider Detay Tablosu", "Expense Detail Table", "Tabloya Hûrguliyên Mesrefê"),
+      body: (
+        <p>
+          {tx(
+            language,
+            "Gider kaydında \"Gider Detaylarını Görüntüle\" bölümüne Excel veya Google Sheets'ten kopyaladığınız tabloyu Ctrl+V (ya da \"⎘ Yapıştır\") ile yapıştırabilirsiniz. Hücreleri düzenleyebilir, satır/sütun başlığına sağ tıklayıp ekleyip silebilir, başlık kenarlarından genişlik/yükseklik ayarlayabilir ve hücre hizalamasını (sola/ortaya/sağa, üste/ortaya/alta) araç çubuğundan seçebilirsiniz. Kayıttan sonra satırdaki \"Detay\" düğmesi tabloyu genişletilebilir bir pencerede gösterir; tablo panoya kopyalanabilir veya Excel'e aktarılabilir.",
+            "In an expense record you can paste a table copied from Excel or Google Sheets into \"View Expense Details\" with Ctrl+V (or \"⎘ Paste\"). You can edit cells, right-click a row/column header to insert or delete, drag header edges to change width/height, and choose cell alignment (left/center/right, top/middle/bottom) from the toolbar. After saving, the row's \"Detail\" button shows the table in an expandable window; it can be copied to the clipboard or exported to Excel.",
+            "Di qeydeke mesrefê de hûn dikarin tabloya ji Excel an Google Sheets hatiye kopîkirin di beşa \"Hûrguliyên Mesrefê Nîşan Bide\" de bi Ctrl+V (an \"⎘ Bi cih bike\") bi cih bikin. Hûn dikarin şaneyan biguherînin, bi tikandina rastê ya li ser sernavê rêz/stûnê zêde bikin û jê bibin, bi kişandina kêleka sernavê firehî/bilindî ayar bikin û rastkirina şaneyê ji darika amûran hilbijêrin. Piştî tomarkirinê bişkoka \"Hûrgulî\" tabloyê di paceyeke fireh dibe de nîşan dide; dikare ji panoyê re were kopîkirin an ji Excelê re were derxistin.",
           )}
         </p>
       ),
