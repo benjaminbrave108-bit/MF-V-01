@@ -465,6 +465,7 @@ function WorkspaceView({
 }
 
 const RECIPIENT_TINTS = ["#f1f6fc", "#f2f9f1", "#fef5ee", "#f7f2fb", "#fdf1f4", "#f1f9f9"];
+const RECIPIENT_TEXT = ["#0c447c", "#085041", "#712b13", "#3c3489", "#72243e", "#0f5a5a"];
 const RECIPIENT_COLORS = ["#cfe1f4", "#d5ecd4", "#fbdcc4", "#e6d9f3", "#f8d3de", "#d3ecec"];
 
 // Çalışma alanındaki listeler: tablo gibi bir ızgara — her liste bir satır, liste gideri
@@ -526,7 +527,7 @@ function ListsGrid({
   const grandAllocated = r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0));
   const money0 = (v: number) => (Math.abs(v) < 0.005 ? "—" : money(v, c));
   const recipientCount = open ? ws.recipients.length : 0;
-  const minWidth = 104 + 170 + 96 + 84 + 170 + 126 + recipientCount * 116 + 116 + 116 + (open && ws.canWrite ? 104 : 0);
+  const minWidth = 104 + 170 + 96 + 84 + 130 + 126 + recipientCount * 116 + 116 + 150;
 
   return (
     <div className="listMatrixScroll">
@@ -536,12 +537,11 @@ function ListsGrid({
           <col style={{ width: 170 }} />
           <col style={{ width: 96 }} />
           <col style={{ width: 84 }} />
-          <col style={{ width: 170 }} />
+          <col style={{ width: 130 }} />
           <col style={{ width: 126 }} />
           {open && ws.recipients.map((r) => <col key={r.id} style={{ width: 116 }} />)}
           <col style={{ width: open ? 116 : 150 }} />
-          <col style={{ width: 116 }} />
-          {open && ws.canWrite && <col style={{ width: 104 }} />}
+          <col style={{ width: 150 }} />
         </colgroup>
         <thead>
           <tr>
@@ -549,8 +549,8 @@ function ListsGrid({
             <th className="lgH1">{tx(language, "Liste", "List", "Lîste")}</th>
             <th className="lgH1">{tx(language, "Kod", "Code", "Kod")}</th>
             <th className="lgH1">{tx(language, "Durum", "Status", "Rewş")}</th>
-            <th className="lgH1">{tx(language, "Not", "Note", "Nîşe")}</th>
-            <th className="lgH1 r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
+            <th className="lgH1 lgCenter">{tx(language, "Not", "Note", "Nîşe")}</th>
+            <th className="lgH1">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
             {open &&
               ws.recipients.map((r, i) => (
                 <th key={r.id} className="lgH2 r">
@@ -570,36 +570,37 @@ function ListsGrid({
               )}
               {tx(language, "Dağıtılan", "Allocated", "Hatiye dabeşkirin")}
             </th>
-            <th className="lgH3 r">{tx(language, "Kalan", "Left", "Mayî")}</th>
-            {open && ws.canWrite && (
-              <th className="lgAdd">
-                {adding ? (
-                  <input
-                    autoFocus
-                    value={newName}
-                    maxLength={200}
-                    placeholder={tx(language, "Alıcı adı", "Recipient name", "Navê wergir")}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === "Escape") {
-                        setAdding(false);
-                        setNewName("");
-                      } else if (e.key === "Enter" && newName.trim()) {
-                        if (await onAddRecipient(newName.trim())) {
-                          setNewName("");
+            <th className="lgH3 r">
+              <span className="lgKalanHead">
+                {tx(language, "Kalan", "Left", "Mayî")}
+                {ws.canWrite &&
+                  (adding ? (
+                    <input
+                      autoFocus
+                      value={newName}
+                      maxLength={200}
+                      placeholder={tx(language, "Alıcı adı", "Recipient name", "Navê wergir")}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Escape") {
                           setAdding(false);
+                          setNewName("");
+                        } else if (e.key === "Enter" && newName.trim()) {
+                          if (await onAddRecipient(newName.trim())) {
+                            setNewName("");
+                            setAdding(false);
+                          }
                         }
-                      }
-                    }}
-                    onBlur={() => !newName.trim() && setAdding(false)}
-                  />
-                ) : (
-                  <button type="button" className="light compact" onClick={() => setAdding(true)} title={tx(language, "Alıcı ekle", "Add recipient", "Wergir zêde bike")}>
-                    ＋ {tx(language, "Alıcı", "Recipient", "Wergir")}
-                  </button>
-                )}
-              </th>
-            )}
+                      }}
+                      onBlur={() => !newName.trim() && setAdding(false)}
+                    />
+                  ) : (
+                    <button type="button" className="lgAddRecipient" onClick={() => setAdding(true)} title={tx(language, "Çalışma alanına yeni alıcı ekle", "Add a recipient to this workspace", "Wergirekî nû li vê qada xebatê zêde bike")}>
+                      ＋ {tx(language, "Alıcı ekle", "Add recipient", "Wergir zêde bike")}
+                    </button>
+                  ))}
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -612,14 +613,18 @@ function ListsGrid({
                 <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
                 <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
                 <td><span className={`listStatus ${l.status}`}>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</span></td>
-                <td className="listGridNote lgMuted" title={l.note}>{l.note || "—"}</td>
-                <td className="listsGridAmount lgT1 r">{money(l.total, c)}</td>
+                <td className="listGridNote lgMuted lgCenter" title={l.note}>{l.note || "—"}</td>
+                <td className="listsGridAmount lgT1">{money(l.total, c)}</td>
                 {open &&
-                  ws.recipients.map((r) => {
+                  ws.recipients.map((r, i) => {
                     const k = key(l.id, r.id);
                     const value = l.byRecipient[r.id] ?? 0;
                     return (
-                      <td key={r.id} className="listsGridCell lgT2 r">
+                      <td
+                        key={r.id}
+                        className="listsGridCell r"
+                        style={{ background: `${RECIPIENT_COLORS[i % RECIPIENT_COLORS.length]}55`, color: RECIPIENT_TEXT[i % RECIPIENT_TEXT.length], fontWeight: 600 }}
+                      >
                         {editable ? (
                           <input
                             className="r"
@@ -639,17 +644,15 @@ function ListsGrid({
                   })}
                 <td className="lgT2 lgStrong r">{money0(allocatedTotal(l))}</td>
                 <td className={`lgT3 r ${left < -0.005 ? "negative" : left > 0.005 ? "lgRemain" : "lgMuted"}`}>{money0(left)}</td>
-                {open && ws.canWrite && <td className="lgT3" />}
               </tr>
             );
           })}
           <tr className="listTotalRow">
             <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
-            <td className="lgT1 r">{money(ws.totals.expense, c)}</td>
-            {open && ws.recipients.map((r) => (<td key={r.id} className="lgT2 r">{money0(sumRecipient(r.id))}</td>))}
+            <td className="lgT1">{money(ws.totals.expense, c)}</td>
+            {open && ws.recipients.map((r, i) => (<td key={r.id} className="r" style={{ background: `${RECIPIENT_COLORS[i % RECIPIENT_COLORS.length]}55`, color: RECIPIENT_TEXT[i % RECIPIENT_TEXT.length] }}>{money0(sumRecipient(r.id))}</td>))}
             <td className="lgT2 r">{money0(grandAllocated)}</td>
             <td className="lgT3 lgRemain r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
-            {open && ws.canWrite && <td className="lgT3" />}
           </tr>
         </tbody>
       </table>

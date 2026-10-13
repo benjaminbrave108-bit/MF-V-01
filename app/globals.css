@@ -4020,3 +4020,13 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid tr.listTotalRow td.lgT2 { background: rgba(55, 138, 221, 0.07); }
 .listsGrid tr.listTotalRow td.lgT3 { background: rgba(239, 159, 39, 0.10); }
 .listsGrid tbody td.lgT2.listsGridCell input { background: transparent; }
+
+/* Listeler ızgarası: Not ortada, Liste gideri sola yaslı; alıcı hücreleri etiket rengiyle; küçük "Alıcı ekle" Kalan başlığında */
+.listsGrid .lgCenter { text-align: center; }
+.listsGrid thead th.lgH1:nth-child(6) { text-align: left; }
+.listsGrid .listsGridCell input { color: inherit; font-weight: 600; }
+.listsGrid .listsGridCell input::placeholder { color: inherit; opacity: 0.4; }
+.lgKalanHead { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.lgAddRecipient { border: 1px solid rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.16); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 600; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.lgAddRecipient:hover { background: rgba(255, 255, 255, 0.3); }
+.lgKalanHead input { width: 110px; padding: 2px 6px; font-size: 11px; color: #1b2733; }
