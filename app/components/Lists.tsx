@@ -585,8 +585,8 @@ function WorkspaceView({
         <div className="listToolsBar" role="tablist">
           {(
             [
-              ["recipients", tx(language, "Alıcıları yönet", "Manage recipients", "Wergiran birêve bibe"), String(ws.recipients.length)],
               ["distribution", tx(language, "Dağıtılan miktarı görüntüle", "View distributed amount", "Mîqdara hatiye dabeşkirin nîşan bide"), money(ws.totals.distributed, c)],
+              ["recipients", tx(language, "Alıcıları yönet", "Manage recipients", "Wergiran birêve bibe"), String(ws.recipients.length)],
               ["accounts", tx(language, "Alıcı hesapları", "Recipient accounts", "Hesabên wergiran"), ""],
             ] as ["recipients" | "distribution" | "accounts", string, string][]
           ).map(([id, label, badge]) => (
@@ -644,6 +644,7 @@ function WorkspaceView({
             <span key={b.recipientId} className="listReceivedChip">
               <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{b.name}</span>
               <b>{money(b.received, c)}</b>
+              <small className="listMuted">{tx(language, "harcadığı", "spent", "lêçûn")} {money(b.spent, c)}</small>
             </span>
           ))}
         </div>

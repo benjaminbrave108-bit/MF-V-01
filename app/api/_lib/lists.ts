@@ -63,6 +63,15 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       .from(records)
       .where(and(inArray(records.cashAccountId, kasaIds), inArray(records.kind, ["cash", "income"]))),
   ]);
+  // Kasalar'daki "Liste Kasası" kartlarıyla aynı toplam: listenin adıyla etiketlenmiş (Liste Kaydı) kasa/gelir
+  // kayıtları, başka bir kasada girilmiş olsalar bile çalışma alanının gelirine katılır (kayıt başına bir kez).
+  const listNames = [...new Set(listRows.map((l) => l.name).filter(Boolean))];
+  const taggedRows = listNames.length
+    ? await db
+        .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, amount: records.amount, currency: records.currency, listName: records.listName })
+        .from(records)
+        .where(and(inArray(records.listName, listNames), inArray(records.kind, ["cash", "income"])))
+    : [];
   const listIds = listRows.map((l) => l.id);
   const itemRows = listIds.length ? await db.select().from(listItems).where(inArray(listItems.listId, listIds)).orderBy(listItems.position, listItems.id) : [];
   const allocRows = listIds.length ? await db.select().from(listAllocations).where(inArray(listAllocations.listId, listIds)) : [];
@@ -94,7 +103,11 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
             items: items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, amount: i.amount, recipientId: i.recipientId, note: i.note })),
           };
         });
-      const incomeRowsForKasa = incomeRows.filter((r) => r.cashAccountId === kasa.id);
+      const wsListNames = new Set(listRows.filter((l) => l.cashAccountId === kasa.id).map((l) => l.name));
+      const incomeRowsForKasa = [
+        ...incomeRows.filter((r) => r.cashAccountId === kasa.id),
+        ...taggedRows.filter((r) => wsListNames.has(r.listName) && r.cashAccountId !== kasa.id),
+      ];
       const income = round2(incomeRowsForKasa.reduce((a, r) => a + r.amount, 0));
       const currencyCount = new Map<string, number>();
       for (const r of incomeRowsForKasa) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
