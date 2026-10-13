@@ -35,6 +35,7 @@ type Workspace = {
   currency: string;
   recipients: Recipient[];
   distributions: Distribution[];
+  incomes: { id: number; date: string; source: string; amount: number; currency: string }[];
   lists: ListSummary[];
   balances: Balance[];
   totals: { income: number; distributed: number; expense: number; kasaRemaining: number; recipientsNet: number; unassigned: number };
@@ -85,6 +86,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
   const [editingList, setEditingList] = useState<ListSummary | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resultFor, setResultFor] = useState<number[] | null>(null);
 
   const load = useCallback(async () => {
     const result = await api<{ workspaces: Workspace[]; kasas: Kasa[] }>("/api/lists", "GET");
@@ -141,6 +143,9 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
               </small>
             </div>
             <div className="listsToolbarActions">
+              <button className="light" onClick={() => setResultFor((workspaces ?? []).map((w) => w.cashAccountId))} disabled={!workspaces?.length}>
+                📊 {tx(language, "Sonuçları Görüntüle", "View Results", "Encaman Nîşan Bide")}
+              </button>
               <button className="primary" onClick={() => setNewListFor("pick")} disabled={kasas.length === 0}>
                 ＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}
               </button>
@@ -181,6 +186,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onAddRecipient={(name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients`, "POST", { name })}
           onRenameRecipient={(id, name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "PUT", { name })}
           onDeleteRecipient={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "DELETE")}
+          onShowResult={() => setResultFor([workspace.cashAccountId])}
           onSaveAllocations={(id, allocations) => mutate(`/api/lists/${id}/allocations`, "PUT", { allocations })}
           onAddDistribution={(body) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions`, "POST", body)}
           onDeleteDistribution={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/distributions/${id}`, "DELETE")}
@@ -207,6 +213,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onDirty={setEditingItems}
         />
       )}
+      {resultFor && workspaces && <ListsResultModal language={language} workspaces={workspaces} initialIds={resultFor} onClose={() => setResultFor(null)} />}
       {newListFor !== null && (
         <ListFormModal
           language={language}
@@ -241,6 +248,268 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
   );
 }
 
+// "Sonuçları Görüntüle" — Kasalar'daki "Sonuç Oluştur" raporuyla aynı pencere dili: çalışma alanının
+// (kasa) Gelir / Liste gideri dökümü, alıcı özeti ve toplam sonuç; birden çok çalışma alanı birleştirilebilir
+// ve Excel'e aktarılabilir.
+function ListsResultModal({
+  language,
+  workspaces,
+  initialIds,
+  onClose,
+}: {
+  language: Language;
+  workspaces: Workspace[];
+  initialIds: number[];
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<number[]>(initialIds);
+  const [pendingAdd, setPendingAdd] = useState("");
+  const blocks = workspaces.filter((w) => selected.includes(w.cashAccountId));
+  const available = workspaces.filter((w) => !selected.includes(w.cashAccountId));
+  const isMulti = blocks.length > 1;
+  const reportDate = formatDate(today(), language);
+  const title = blocks.map((w) => w.name).join(" + ");
+
+  const sum = (f: (w: Workspace) => number) => r2(blocks.reduce((a, w) => a + f(w), 0));
+  // Birden çok çalışma alanı farklı para birimi kullanabilir; rapor çalışma alanı başına kendi birimiyle
+  // gösterilir, toplamlar para birimine göre ayrı ayrı toplanır.
+  const byCurrency = (f: (w: Workspace) => number): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const w of blocks) out[w.currency] = r2((out[w.currency] ?? 0) + f(w));
+    return out;
+  };
+  const fmt = (m: Record<string, number>) => {
+    const parts = Object.entries(m).filter(([, v]) => Math.abs(v) > 0.004).map(([cur, v]) => money(v, cur));
+    return parts.length ? parts.join(" + ") : money(0);
+  };
+  const income = byCurrency((w) => w.totals.income);
+  const expense = byCurrency((w) => w.totals.expense);
+  const result = byCurrency((w) => w.totals.income - w.totals.expense);
+  const cashLeft = byCurrency((w) => w.totals.kasaRemaining);
+  const recipientsNet = byCurrency((w) => w.totals.recipientsNet);
+  const incomeTotal = sum((w) => w.totals.income);
+  const expenseTotal = sum((w) => w.totals.expense);
+  const barMax = Math.max(incomeTotal, expenseTotal, 1);
+
+  type Row = { key: string; date: string; title: string; ws: string; amount: number; currency: string };
+  const incomeRows: Row[] = blocks
+    .flatMap((w) => w.incomes.map((i) => ({ key: `i${i.id}`, date: i.date, title: i.source, ws: w.name, amount: i.amount, currency: w.currency })))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const expenseRows: Row[] = blocks
+    .flatMap((w) => w.lists.map((l) => ({ key: `l${l.id}`, date: l.date, title: `${l.name} · ${l.code}`, ws: w.name, amount: l.total, currency: w.currency })))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  async function exportToExcel() {
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Maliye-Finans Online";
+    workbook.created = new Date();
+    const thin = { style: "thin" as const, color: { argb: "FFD3DDDD" } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const sheet = workbook.addWorksheet(tx(language, "Liste Sonucu", "List Result", "Encama Lîsteyê").slice(0, 31), {
+      pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      views: [{ showGridLines: false }],
+    });
+    sheet.columns = [{ width: 14 }, { width: 22 }, { width: 34 }, { width: 18 }];
+    const fill = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
+    const band = (text: string, bg: string, color: string, size = 12) => {
+      const row = sheet.addRow([text]);
+      sheet.mergeCells(row.number, 1, row.number, 4);
+      row.height = 22;
+      row.getCell(1).font = { name: "Arial", bold: true, size, color: { argb: color } };
+      row.getCell(1).alignment = { horizontal: "left", vertical: "middle", indent: 1 };
+      row.getCell(1).fill = fill(bg);
+      row.eachCell({ includeEmpty: true }, (cell) => { cell.border = border; });
+    };
+    band(title, "FF123F52", "FFFFFFFF", 16);
+    band(`${tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}: ${fmt(result)}`, "FFDDEEF3", "FF17384A");
+    sheet.addRow([]);
+    const section = (name: string, rows: Row[], totalText: string, bg: string, color: string) => {
+      band(name, bg, color);
+      const head = sheet.addRow([tx(language, "Tarih", "Date", "Tarîx"), tx(language, "Çalışma alanı", "Workspace", "Qada xebatê"), tx(language, "Başlık", "Title", "Sernav"), tx(language, "Tutar", "Amount", "Meblağ")]);
+      head.eachCell((cell) => { cell.font = { name: "Arial", bold: true, size: 9, color: { argb: "FF5B6F77" } }; cell.border = border; });
+      for (const r of rows) {
+        const row = sheet.addRow([formatDate(r.date, language), r.ws, r.title, r.amount]);
+        row.eachCell({ includeEmpty: true }, (cell, n) => {
+          cell.font = { name: "Arial", size: 9, color: { argb: "FF314750" } };
+          cell.alignment = { horizontal: n === 4 ? "right" : "left" };
+          cell.border = border;
+        });
+        row.getCell(4).numFmt = "#,##0.00;[Red]-#,##0.00";
+      }
+      const total = sheet.addRow([tx(language, "Sonuç", "Result", "Encam"), "", "", totalText]);
+      sheet.mergeCells(total.number, 1, total.number, 3);
+      total.eachCell({ includeEmpty: true }, (cell, n) => {
+        cell.font = { name: "Arial", bold: true, size: 10, color: { argb: "FF17384A" } };
+        cell.alignment = { horizontal: n === 1 ? "left" : "right" };
+        cell.border = border;
+      });
+      sheet.addRow([]);
+    };
+    section(tx(language, "GELİR (KASA)", "INCOME (CASH)", "DAHAT (QASE)"), incomeRows, fmt(income), "FFDFF5ED", "FF118164");
+    section(tx(language, "GİDER (LİSTELER)", "EXPENSE (LISTS)", "MESREF (LÎSTE)"), expenseRows, fmt(expense), "FFFFF0DF", "FFD06F22");
+
+    band(tx(language, "ALICILAR", "RECIPIENTS", "WERGIR"), "FFE7EEF6", "FF176B87");
+    const rh = sheet.addRow([tx(language, "Çalışma alanı", "Workspace", "Qada xebatê"), tx(language, "Alıcı", "Recipient", "Wergir"), tx(language, "Aldığı / Harcadığı", "Received / Spent", "Wergirtî / Lêçûn"), tx(language, "Sonuç", "Result", "Encam")]);
+    rh.eachCell((cell) => { cell.font = { name: "Arial", bold: true, size: 9, color: { argb: "FF5B6F77" } }; cell.border = border; });
+    for (const w of blocks) {
+      for (const b of w.balances) {
+        const row = sheet.addRow([w.name, b.name, `${money(b.received, w.currency)} / ${money(b.spent, w.currency)}`, b.balance]);
+        row.eachCell({ includeEmpty: true }, (cell, n) => {
+          cell.font = { name: "Arial", size: 9, color: { argb: "FF314750" } };
+          cell.alignment = { horizontal: n === 4 ? "right" : "left" };
+          cell.border = border;
+        });
+        row.getCell(4).numFmt = "#,##0.00;[Red]-#,##0.00";
+      }
+    }
+    sheet.addRow([]);
+    const lines: [string, string, string, string][] = [
+      [tx(language, "SONUÇ (GELİR − GİDER)", "RESULT (INCOME − EXPENSE)", "ENCAM (DAHAT − MESREF)"), fmt(result), "FFEAF4F7", "FF12414F"],
+      [tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ"), fmt(income), "FFE7F4EF", "FF14795E"],
+      [tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ"), fmt(expense), "FFFDF1E7", "FFB33D3D"],
+      [tx(language, "KASADA KALAN", "CASH LEFT", "DI QASEYÊ DE"), fmt(cashLeft), "FFEAF4F7", "FF12414F"],
+      [tx(language, "ALICILARDA KALAN", "LEFT WITH RECIPIENTS", "LI CEM WERGIRAN"), fmt(recipientsNet), "FFFFF6DB", "FF7A5A1D"],
+      [tx(language, "TARİH", "DATE", "TARÎX"), reportDate, "FFF5F7F8", "FF5B6F77"],
+    ];
+    for (const [label, value, bg, color] of lines) {
+      const row = sheet.addRow([label, "", "", value]);
+      sheet.mergeCells(row.number, 1, row.number, 3);
+      row.getCell(1).font = { name: "Arial", bold: true, size: 10, color: { argb: color } };
+      row.getCell(4).font = { name: "Arial", bold: true, size: 11, color: { argb: color } };
+      row.getCell(4).alignment = { horizontal: "right" };
+      row.eachCell({ includeEmpty: true }, (cell) => { cell.fill = fill(bg); cell.border = border; });
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${title.replace(/[\\/:*?"<>|]/g, "-")}-Liste-Sonuc-${today()}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const rowsView = (rows: Row[]) =>
+    rows.length === 0 ? (
+      <p className="kasaReportEmpty">{tx(language, "Kayıt yok.", "No records.", "Qeyd tune.")}</p>
+    ) : (
+      rows.map((r) => (
+        <div className="kasaReportRow" key={r.key}>
+          <span className="kasaReportRowDate">{formatDate(r.date, language)}</span>
+          <span className="kasaReportRowTitle">
+            {r.title}
+            {isMulti && <small className="kasaReportRowKasa">▣ {r.ws}</small>}
+          </span>
+          <span className="kasaReportRowAmount">{money(r.amount, r.currency)}</span>
+        </div>
+      ))
+    );
+
+  return (
+    <div className="overlay">
+      <div className="modal kasaReportModal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>{tx(language, "Liste Sonuç Raporu", "List Result Report", "Rapora Encama Lîsteyê")}</h2>
+            <p>{title || "—"}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        {available.length > 0 && (
+          <div className="kasaReportAdd">
+            <select value={pendingAdd} onChange={(e) => setPendingAdd(e.target.value)}>
+              <option value="">{tx(language, "— Başka çalışma alanı ekle —", "— Add another workspace —", "— Qadeke xebatê ya din zêde bike —")}</option>
+              {available.map((w) => (<option key={w.cashAccountId} value={w.cashAccountId}>{w.name}</option>))}
+            </select>
+            <button
+              type="button"
+              className="light compact"
+              disabled={!pendingAdd}
+              onClick={() => {
+                if (!pendingAdd) return;
+                setSelected((cur) => [...cur, Number(pendingAdd)]);
+                setPendingAdd("");
+              }}
+            >
+              ＋ {tx(language, "Ekle", "Add", "Zêde Bike")}
+            </button>
+          </div>
+        )}
+        {isMulti && (
+          <div className="kasaReportChips">
+            {blocks.map((w) => (
+              <span className="kasaReportChip" key={w.cashAccountId}>
+                {w.name}
+                <button type="button" onClick={() => setSelected((cur) => (cur.length > 1 ? cur.filter((x) => x !== w.cashAccountId) : cur))} title={tx(language, "Bu çalışma alanını kaldır", "Remove this workspace", "Vê qada xebatê rake")}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="kasaReportHead">
+          <span>{title || "—"}</span>
+          <div>
+            <small>{tx(language, "Toplam Sonucu", "Total Result", "Encama Giştî")}</small>
+            <strong>{fmt(result)}</strong>
+          </div>
+        </div>
+        <div className="bars kasaReportBars">
+          <div>
+            <span><b>{tx(language, "Gelir", "Income", "Dahat")}</b><strong>{fmt(income)}</strong></span>
+            <i><em style={{ width: `${Math.max(4, (incomeTotal / barMax) * 100)}%` }} /></i>
+          </div>
+          <div>
+            <span><b>{tx(language, "Gider", "Expense", "Mesref")}</b><strong>{fmt(expense)}</strong></span>
+            <i><em className="expense" style={{ width: `${Math.max(4, (expenseTotal / barMax) * 100)}%` }} /></i>
+          </div>
+        </div>
+        <div className="kasaReportSection kasaReportIncome">
+          <div className="kasaReportSectionHead"><span>{tx(language, "Gelir (kasa)", "Income (cash)", "Dahat (qase)")}</span><strong>{fmt(income)}</strong></div>
+          <div className="kasaReportList">{rowsView(incomeRows)}</div>
+        </div>
+        <div className="kasaReportSection kasaReportExpense">
+          <div className="kasaReportSectionHead"><span>{tx(language, "Gider (listeler)", "Expense (lists)", "Mesref (lîste)")}</span><strong>{fmt(expense)}</strong></div>
+          <div className="kasaReportList">{rowsView(expenseRows)}</div>
+        </div>
+        <div className="kasaReportSection">
+          <div className="kasaReportSectionHead"><span>{tx(language, "Alıcılar", "Recipients", "Wergir")}</span><strong>{fmt(recipientsNet)}</strong></div>
+          <div className="kasaReportList">
+            {blocks.every((w) => w.balances.length === 0) ? (
+              <p className="kasaReportEmpty">{tx(language, "Alıcı yok.", "No recipients.", "Wergir tune.")}</p>
+            ) : (
+              blocks.flatMap((w) =>
+                w.balances.map((b) => (
+                  <div className="kasaReportRow" key={`${w.cashAccountId}-${b.recipientId}`}>
+                    <span className="kasaReportRowDate">{isMulti ? w.name : ""}</span>
+                    <span className="kasaReportRowTitle">
+                      {b.name}
+                      <small className="kasaReportRowKasa">
+                        {tx(language, "aldığı", "received", "wergirtî")} {money(b.received, w.currency)} · {tx(language, "harcadığı", "spent", "lêçûn")} {money(b.spent, w.currency)}
+                      </small>
+                    </span>
+                    <span className={`kasaReportRowAmount ${b.balance < 0 ? "negative" : ""}`}>{money(b.balance, w.currency)}</span>
+                  </div>
+                )),
+              )
+            )}
+          </div>
+        </div>
+        <div className="kasaReportSummary">
+          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "SONUÇ (GELİR − GİDER)", "RESULT (INCOME − EXPENSE)", "ENCAM (DAHAT − MESREF)")}</small><strong>{fmt(result)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryIncome"><small>{tx(language, "TOPLAM GELİR", "TOTAL INCOME", "DAHATA GİŞTÎ")}</small><strong>{fmt(income)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryExpense"><small>{tx(language, "TOPLAM GİDER", "TOTAL EXPENSE", "MESREFA GİŞTÎ")}</small><strong>{fmt(expense)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "KASADA KALAN", "CASH LEFT", "DI QASEYÊ DE")}</small><strong>{fmt(cashLeft)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryMain"><small>{tx(language, "ALICILARDA KALAN", "LEFT WITH RECIPIENTS", "LI CEM WERGIRAN")}</small><strong>{fmt(recipientsNet)}</strong></div>
+          <div className="kasaReportSummaryRow kasaReportSummaryDate"><small>{tx(language, "TARİH", "DATE", "TARÎX")}</small><strong>{reportDate}</strong></div>
+        </div>
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Kapat", "Close", "Bigire")}</button>
+          <button type="button" className="primary" onClick={exportToExcel}>⇩ {tx(language, "Excel'e Aktar", "Export to Excel", "Derxe Excelê")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceView({
   language,
   ws,
@@ -254,10 +523,12 @@ function WorkspaceView({
   onAddDistribution,
   onDeleteDistribution,
   onSaveAllocations,
+  onShowResult,
 }: {
   language: Language;
   ws: Workspace;
   busy: boolean;
+  onShowResult: () => void;
   onBack: () => void;
   onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onOpenList: (id: number) => void;
@@ -269,6 +540,7 @@ function WorkspaceView({
   onDeleteDistribution: (id: number) => Promise<boolean>;
 }) {
   const c = ws.currency;
+  const [panel, setPanel] = useState<"recipients" | "distribution" | "accounts" | null>(null);
   const [newRecipient, setNewRecipient] = useState("");
   const [recipientId, setRecipientId] = useState<number | "">("");
   const [amount, setAmount] = useState("");
@@ -287,11 +559,10 @@ function WorkspaceView({
           <span className="listWsName">{ws.name}</span>
           <small className="listMuted">{ws.ownerName || "—"} · {c}</small>
         </div>
-        {ws.canWrite && (
-          <div className="listWsActions">
-            <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>
-          </div>
-        )}
+        <div className="listWsActions">
+          <button className="light" onClick={onShowResult}>📊 {tx(language, "Sonuçları Görüntüle", "View Results", "Encaman Nîşan Bide")}</button>
+          {ws.canWrite && <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>}
+        </div>
       </div>
 
       <div className="listMetrics">
@@ -310,10 +581,22 @@ function WorkspaceView({
         <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} onAddRecipient={onAddRecipient} />
       )}
 
-      <details className="listFold">
-        <summary>
-          {tx(language, "Alıcıları yönet", "Manage recipients", "Wergiran birêve bibe")} <em>{ws.recipients.length}</em>
-        </summary>
+      <section className="listTools">
+        <div className="listToolsBar" role="tablist">
+          {(
+            [
+              ["recipients", tx(language, "Alıcıları yönet", "Manage recipients", "Wergiran birêve bibe"), String(ws.recipients.length)],
+              ["distribution", tx(language, "Dağıtılan miktarı görüntüle", "View distributed amount", "Mîqdara hatiye dabeşkirin nîşan bide"), money(ws.totals.distributed, c)],
+              ["accounts", tx(language, "Alıcı hesapları", "Recipient accounts", "Hesabên wergiran"), ""],
+            ] as ["recipients" | "distribution" | "accounts", string, string][]
+          ).map(([id, label, badge]) => (
+            <button key={id} type="button" role="tab" aria-selected={panel === id} className={`listToolsTab${panel === id ? " active" : ""}`} onClick={() => setPanel((cur) => (cur === id ? null : id))}>
+              {label}
+              {badge && <em>{badge}</em>}
+            </button>
+          ))}
+        </div>
+      {panel === "recipients" && (<div className="listToolsBody">
       <div className="listRecipients">
         {ws.recipients.map((r) => (
           <span key={r.id} className="listRecipientChip">
@@ -351,12 +634,9 @@ function WorkspaceView({
         )}
       </div>
 
-      </details>
+      </div>)}
 
-      <details className="listFold">
-        <summary>
-          {tx(language, "Dağıtılan miktarı görüntüle", "View distributed amount", "Mîqdara hatiye dabeşkirin nîşan bide")} <em>{money(ws.totals.distributed, c)}</em>
-        </summary>
+      {panel === "distribution" && (<div className="listToolsBody">
         <p className="listsHint">{tx(language, "Kasadan alıcılara verilen paralar", "Money given from the cash account to recipients", "Pereyên ji qasayê ji wergiran re hatine dayîn")}</p>
         <div className="listReceivedRow">
           {ws.balances.length === 0 && <span className="listMuted">—</span>}
@@ -413,10 +693,9 @@ function WorkspaceView({
         </form>
       )}
 
-      </details>
+      </div>)}
 
-      <details className="listFold">
-        <summary>{tx(language, "Alıcı hesapları (alıcı × liste)", "Recipient accounts (recipient × list)", "Hesabên wergiran (wergir × lîste)")}</summary>
+      {panel === "accounts" && (<div className="listToolsBody">
       {ws.balances.length === 0 ? (
         <p className="listsHint">{tx(language, "Henüz alıcı yok.", "No recipients yet.", "Hê wergir tune.")}</p>
       ) : (
@@ -454,7 +733,8 @@ function WorkspaceView({
           </table>
         </div>
       )}
-      </details>
+      </div>)}
+      </section>
       <p className="listsHint">
         {tx(language, "Kontrol", "Check", "Kontrol")}: {tx(language, "kasada kalan", "cash left", "di qasayê de")} {money(ws.totals.kasaRemaining, c)} + {tx(language, "alıcılarda kalan", "left with recipients", "li cem wergiran")} {money(ws.totals.recipientsNet, c)} = {money(check, c)}
         {check === r2(expected - ws.totals.unassigned) ? " ✓" : ""} ({tx(language, "gelir", "income", "dahat")} {money(ws.totals.income, c)} − {tx(language, "gider", "expense", "mesref")} {money(ws.totals.expense, c)} = {money(expected, c)})

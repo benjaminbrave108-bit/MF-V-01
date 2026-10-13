@@ -59,7 +59,7 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
     db.select().from(workspaceRecipients).where(inArray(workspaceRecipients.cashAccountId, kasaIds)).orderBy(workspaceRecipients.id),
     db.select().from(workspaceDistributions).where(inArray(workspaceDistributions.cashAccountId, kasaIds)).orderBy(workspaceDistributions.date, workspaceDistributions.id),
     db
-      .select({ cashAccountId: records.cashAccountId, amount: records.amount, currency: records.currency })
+      .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, amount: records.amount, currency: records.currency })
       .from(records)
       .where(and(inArray(records.cashAccountId, kasaIds), inArray(records.kind, ["cash", "income"]))),
   ]);
@@ -116,6 +116,10 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
         currency,
         recipients: recipients.map((r) => ({ id: r.id, name: r.name })),
         distributions: distributions.map((d) => ({ id: d.id, recipientId: d.recipientId, amount: d.amount, date: d.date, note: d.note })),
+        // Çalışma alanının (kasa) gelir kalemleri — Sonuç Raporu'nda listelenir.
+        incomes: incomeRowsForKasa
+          .map((r) => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, currency: r.currency }))
+          .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
         lists: wsLists,
         balances,
         // Kasada kalan + alıcılarda kalan = gelir − gider (dağıtım ve ürünler tamamen girildiyse).

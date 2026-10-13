@@ -4067,3 +4067,13 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid thead th { padding: 8px 12px; }
 .listsGrid tbody td { padding: 7px 12px; }
 .listsGrid tr.listTotalRow td { padding: 10px 12px; }
+
+/* Listeler: tablonun altında ayrı araç bölümü — üç sekme, seçilen sekmenin detayı açılır */
+.listTools { border: 1px solid #d8e2e5; border-radius: 12px; background: #f7fafb; padding: 10px 14px 12px; margin-top: 8px; }
+.listToolsBar { display: flex; flex-wrap: wrap; gap: 8px; }
+.listToolsTab { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #c9d6db; background: #fff; color: #1f3a44; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.listToolsTab:hover { background: #eef6f8; }
+.listToolsTab.active { background: #123f52; border-color: #123f52; color: #fff; }
+.listToolsTab em { font-style: normal; font-weight: 600; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #eef3f5; color: #5d7580; }
+.listToolsTab.active em { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.listToolsBody { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #c9d6db; display: flex; flex-direction: column; gap: 8px; }
