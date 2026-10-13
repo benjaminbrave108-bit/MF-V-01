@@ -1344,6 +1344,11 @@ export function Records({
     setFilterProject("");
     setFilterTag("");
   };
+  // "Liste Kasası" işaretli kasalar (Listeler ile ilişkili): üstteki kasa kartlarında değil, yalnızca "Tüm Liste Kasaları"
+  // bölümünde görünür; kasanın kendi kayıtları listeli kayıt sayılır.
+  const kasaListNames = new Set(cashAccounts.filter((a) => a.isListWorkspace).map((a) => a.name));
+  const listOf = (x: RecordItem) => x.listName || (x.kind === "cash" && kasaListNames.has(x.source) ? x.source : "");
+  const isListLinked = (x: RecordItem) => !!x.listName || kasaListNames.has(x.cashAccount);
   const filterSourceOptions = [...new Set(records.map((x) => x.source).filter(Boolean))];
   const openList = (name: string) => {
     setSource("Tümü");
@@ -1359,7 +1364,7 @@ export function Records({
     const candidates = records.filter((x) =>
       field === "source"
         ? x.source === value && (!matchKind || x.kind === matchKind)
-        : x.listName === value,
+        : listOf(x) === value,
     );
     const rec = [...candidates].sort((a, b) => b.date.localeCompare(a.date))[0];
     if (rec) onEdit(rec);
@@ -1372,8 +1377,8 @@ export function Records({
   // gerçek bakiyesinden düşülmemesi/eklenmemesi yanlış olur.
   const groups = useMemo(
     () =>
-      [...new Set(records.filter((x) => !x.listName).map((x) => x.source))].map((name) => {
-        const directRows = records.filter((x) => x.source === name && !x.listName);
+      [...new Set(records.filter((x) => !listOf(x)).map((x) => x.source))].map((name) => {
+        const directRows = records.filter((x) => x.source === name && !listOf(x));
         const linkedIncomeRows =
           kind === "cash"
             ? allRecords.filter((x) => x.kind === "income" && x.cashAccount === name)
@@ -1451,35 +1456,37 @@ export function Records({
   // Overall pill total, computed per currency directly from the record
   // arrays (not by summing groups' already-blended totals) so mixed
   // currencies show as separate amounts instead of one wrong number.
+  // "Tüm Kasalar" toplamı: Listeler ile ilişkili (Liste Kasası) kasalar burada değil, "Tüm Liste Kasaları"nda sayılır.
+  const plainRecords = kind === "cash" ? records.filter((x) => !kasaListNames.has(x.source)) : records;
   const overallByCurrency = useMemo(
     () =>
       combineByCurrency([
-        { rows: records },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount) : [] },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount) : [], sign: -1 },
+        { rows: plainRecords },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [] },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [], sign: -1 },
       ]),
-    [records, allRecords, kind],
+    [plainRecords, allRecords, kind, cashAccounts],
   );
-  const listedRecords = records.filter((x) => x.listName);
+  const listedRecords = records.filter((x) => listOf(x));
   const listGroups = useMemo(
     () =>
-      [...new Set(records.map((x) => x.listName).filter(Boolean))].map(
+      [...new Set(records.map((x) => listOf(x)).filter(Boolean))].map(
         (name) => {
-          const directRows = records.filter((x) => x.listName === name);
+          const directRows = records.filter((x) => listOf(x) === name);
           const linkedIncomeRows =
             kind === "cash"
-              ? allRecords.filter((x) => x.kind === "income" && x.listName === name)
+              ? allRecords.filter((x) => x.kind === "income" && (x.listName === name || (kasaListNames.has(name) && x.cashAccount === name)))
               : [];
           const linkedExpenseRows =
             kind === "cash"
-              ? allRecords.filter((x) => x.kind === "expense" && x.listName === name)
+              ? allRecords.filter((x) => x.kind === "expense" && (x.listName === name || (kasaListNames.has(name) && x.cashAccount === name)))
               : [];
           const directAmount = total(directRows);
           const linkedIncome = total(linkedIncomeRows);
           const linkedExpense = total(linkedExpenseRows);
           return {
             name,
-            count: records.filter((x) => x.listName === name).length,
+            count: records.filter((x) => listOf(x) === name).length,
             totalIn: directAmount + linkedIncome,
             totalOut: linkedExpense,
             total: directAmount + linkedIncome - linkedExpense,
@@ -1499,8 +1506,8 @@ export function Records({
     () =>
       combineByCurrency([
         { rows: listedRecords },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.listName) : [] },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.listName) : [], sign: -1 },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [] },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [], sign: -1 },
       ]),
     [listedRecords, allRecords, kind],
   );
@@ -1516,7 +1523,8 @@ export function Records({
   const rows = [...records, ...linkedRowsForSelectedKasa].filter(
     (x) =>
       (source === "Tümü" || x.source === source || x.cashAccount === source) &&
-      (!showAllLists || x.listName) &&
+      (!showAllLists || listOf(x) || isListLinked(x)) &&
+      (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaListNames.has(x.cashAccount || x.source))) &&
       (!filterFrom || x.date >= filterFrom) &&
       (!filterTo || x.date <= filterTo) &&
       (!filterSource || x.source === filterSource) &&
@@ -1978,7 +1986,7 @@ export function Records({
                 : tx(language, "Tüm Giderler", "All Expenses", "Hemû Mesref")}
           </b>
           <small>
-            {records.length} {recordWord}
+            {plainRecords.length} {recordWord}
           </small>
           <strong>
             {moneyBreakdown(overallByCurrency)}
