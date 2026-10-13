@@ -1383,7 +1383,7 @@ export function Records({
       // Gelir sayfasında kasanın kendi adıyla açılan kayıt kutuları (ör. "Ana -Kasa") ayrı kasa kutusunda (ör. "Ana -Kasa Gelirleri")
       // zaten toplandığı için burada tekrar edilmez.
       [...new Set(records.filter((x) => !listOf(x)).map((x) => x.source))]
-        .filter((name) => !(kind === "income" && cashAccounts.some((a) => a.name === name)))
+        .filter((name) => !(kind !== "cash" && cashAccounts.some((a) => a.name === name)))
         .map((name) => {
         const directRows = records.filter((x) => x.source === name && !listOf(x));
         const linkedIncomeRows =
@@ -2146,7 +2146,7 @@ export function Records({
               </span>
             )}
           </button>
-          {listGroups.map((g) => (
+          {listGroups.filter((g) => kind === "cash" || Math.abs(g.total) > 0.004).map((g) => (
             <div className="groupCard" key={g.name}>
               <button
                 className={activeList === g.name ? "selected" : ""}
