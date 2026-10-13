@@ -4083,3 +4083,12 @@ main { min-width: 0; overflow-x: hidden; }
 .listAmountMode { display: flex; flex-direction: column; gap: 6px; }
 .listAmountMode label { display: flex; align-items: center; gap: 8px; }
 .listAmountMode em { font-style: normal; font-weight: 700; color: #123f52; background: #eef3f5; border-radius: 999px; padding: 1px 10px; font-size: 11px; }
+
+/* Listeler: durum rozeti tıklanabilir (Sonuçlandır / Yeniden aç) */
+.listStatusBtn { border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.listStatusBtn.open:hover { background: #cfe9de; border-color: #1d6a54; }
+.listStatusBtn.closed:hover { background: #dfe5e8; border-color: #5d7580; }
+.listStatus.closed { background: #e3e8ec; color: #35525c; }
+
+/* Listeler ızgarası: tarih sütunu daha büyük ve belirgin */
+.listsGrid tbody td:first-child:not([colspan]) { font-size: 13px; font-weight: 600; color: #1f3a44; }

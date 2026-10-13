@@ -91,6 +91,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resultFor, setResultFor] = useState<number[] | null>(null);
+  const [statusFor, setStatusFor] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const result = await api<{ workspaces: Workspace[]; kasas: Kasa[] }>("/api/lists", "GET");
@@ -190,6 +191,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onAddRecipient={(name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients`, "POST", { name })}
           onRenameRecipient={(id, name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "PUT", { name })}
           onDeleteRecipient={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "DELETE")}
+          onRequestStatus={(id) => setStatusFor(id)}
           onShowResult={() => setResultFor([workspace.cashAccountId])}
           onEditWorkspace={() => setWsForm(workspace)}
           onSaveAllocations={(id, allocations) => mutate(`/api/lists/${id}/allocations`, "PUT", { allocations })}
@@ -206,7 +208,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
             setEditingItems(false);
           }}
           onEdit={() => setEditingList(list)}
-          onToggleStatus={() => mutate(`/api/lists/${list.id}`, "PUT", { status: list.status === "open" ? "closed" : "open" })}
+          onToggleStatus={() => setStatusFor(list.id)}
           onDelete={async () => {
             if (!confirm(tx(language, "Liste ve ürünleri silinsin mi?", "Delete this list and its products?", "Lîste û berhemên wê were jêbirin?"))) return;
             if (await mutate(`/api/lists/${list.id}`, "DELETE")) setListId(null);
@@ -217,6 +219,18 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
         />
       )}
       {resultFor && workspaces && <ListsResultModal language={language} workspaces={workspaces} initialIds={resultFor} onClose={() => setResultFor(null)} />}
+      {statusFor !== null && workspace && workspace.lists.some((l) => l.id === statusFor) && (
+        <ListStatusModal
+          language={language}
+          ws={workspace}
+          list={workspace.lists.find((l) => l.id === statusFor)!}
+          onClose={() => setStatusFor(null)}
+          onConfirm={async () => {
+            const target = workspace.lists.find((l) => l.id === statusFor)!;
+            if (await mutate(`/api/lists/${target.id}`, "PUT", { status: target.status === "open" ? "closed" : "open" })) setStatusFor(null);
+          }}
+        />
+      )}
       {wsForm && (
         <WorkspaceFormModal
           language={language}
@@ -632,6 +646,76 @@ function WorkspaceFormModal({
   );
 }
 
+// Liste durumu: "Liste bitti / Sonuçlandır" — liste sonuçlandığında hesabı kapanır: liste tutarı, dağıtılan
+// miktar ve kalan sabitlenir (kapalı listede tutar, dağıtım ve ürünler değişmez). Yeniden açılabilir.
+function ListStatusModal({
+  language,
+  ws,
+  list,
+  onClose,
+  onConfirm,
+}: {
+  language: Language;
+  ws: Workspace;
+  list: ListSummary;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const c = ws.currency;
+  const closing = list.status === "open";
+  const allocated = r2(Object.values(list.byRecipient).reduce((a, v) => a + v, 0));
+  const left = r2(list.total - allocated);
+  return (
+    <div className="overlay">
+      <div className="modal listFormModal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>
+              {closing
+                ? tx(language, "Listeyi Sonuçlandır", "Finalize List", "Lîsteyê Biqedîne")
+                : tx(language, "Listeyi Yeniden Aç", "Reopen List", "Lîsteyê Dîsa Veke")}
+            </h2>
+            <p>{list.code} · {list.name} · {ws.name}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="listMetrics" style={{ marginBottom: 10 }}>
+          <div><small>{tx(language, "Liste tutarı", "List amount", "Mîqdara lîsteyê")}</small><b>{money(list.total, c)}</b></div>
+          <div><small>{tx(language, "Dağıtılan", "Allocated", "Hatiye dabeşkirin")}</small><b>{money(allocated, c)}</b></div>
+          <div className={left > 0.005 ? "metricAmber" : undefined}><small>{tx(language, "Kalan", "Left", "Mayî")}</small><b>{money(left, c)}</b></div>
+        </div>
+        {closing ? (
+          <p className="listsHint">
+            {left > 0.005
+              ? tx(language, `Listede alıcılara dağıtılmamış ${money(left, c)} var. Sonuçlandırırsanız bu tutar listenin kalanı olarak sabitlenir.`, `${money(left, c)} of this list is not allocated to recipients. If you finalize, it is fixed as the list's remainder.`, `${money(left, c)} ji vê lîsteyê ji wergiran re nehatiye dabeşkirin. Heke biqedînin wekî mayî tê sabitkirin.`)
+              : tx(language, "Liste tutarı alıcılara tamamen dağıtılmış.", "The list amount is fully allocated to recipients.", "Mîqdara lîsteyê bi temamî ji wergiran re hatiye dabeşkirin.")}
+            {" "}
+            {tx(language, "Sonuçlanan listede tutar, dağıtım ve ürünler değiştirilemez; gerekirse yeniden açabilirsiniz.", "A finalized list's amount, allocation and products cannot be changed; you can reopen it if needed.", "Di lîsteya qediyayî de mîqdar, dabeşkirin û berhem nayên guhertin; ger hewce be dîsa dikarin vekin.")}
+          </p>
+        ) : (
+          <p className="listsHint">{tx(language, "Liste yeniden açılınca tutar, dağıtım ve ürünler tekrar düzenlenebilir.", "When reopened, the amount, allocation and products can be edited again.", "Dema lîste dîsa vebe, mîqdar, dabeşkirin û berhem dîsa dikarin werin guhertin.")}</p>
+        )}
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onConfirm();
+              setBusy(false);
+            }}
+          >
+            {closing ? `✔ ${tx(language, "Liste bitti — Sonuçlandır", "List finished — Finalize", "Lîste qediya — Biqedîne")}` : tx(language, "Yeniden aç", "Reopen", "Dîsa veke")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceView({
   language,
   ws,
@@ -645,12 +729,14 @@ function WorkspaceView({
   onSaveAllocations,
   onShowResult,
   onEditWorkspace,
+  onRequestStatus,
 }: {
   language: Language;
   ws: Workspace;
   busy: boolean;
   onShowResult: () => void;
   onEditWorkspace: () => void;
+  onRequestStatus: (listId: number) => void;
   onBack: () => void;
   onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onOpenList: (id: number) => void;
@@ -691,13 +777,13 @@ function WorkspaceView({
         <div><small>{tx(language, "Toplam gider", "Total expense", "Mesrefa giştî")}</small><b>{money(ws.totals.expense, c)}</b></div>
         <div className={ws.totals.kasaRemaining < 0 ? "metricAmber" : undefined}><small>{tx(language, "Kasada kalan", "Cash left", "Di qasayê de")}</small><b className={ws.totals.kasaRemaining < 0 ? "negative" : "positive"}>{money(ws.totals.kasaRemaining, c)}</b></div>
         <div><small>{tx(language, "Açık listeler", "Open lists", "Lîsteyên vekirî")}</small><b>{ws.lists.filter((l) => l.status === "open").length}</b></div>
-        <div><small>{tx(language, "Kapanan listeler", "Closed lists", "Lîsteyên girtî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
+        <div><small>{tx(language, "Sonuçlanan listeler", "Finalized lists", "Lîsteyên qediyayî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
       </div>
 
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (
-        <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} onAddRecipient={onAddRecipient} />
+        <ListsGrid language={language} ws={ws} onOpenList={onOpenList} onSaveAllocations={onSaveAllocations} onAddRecipient={onAddRecipient} onRequestStatus={onRequestStatus} />
       )}
 
       <section className="listTools">
@@ -822,12 +908,14 @@ function ListsGrid({
   onOpenList,
   onSaveAllocations,
   onAddRecipient,
+  onRequestStatus,
 }: {
   language: Language;
   ws: Workspace;
   onOpenList: (id: number) => void;
   onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onAddRecipient: (name: string) => Promise<boolean>;
+  onRequestStatus: (listId: number) => void;
 }) {
   const c = ws.currency;
   const [adding, setAdding] = useState(false);
@@ -958,7 +1046,20 @@ function ListsGrid({
                 <td className="lgMuted">{formatDate(l.date, language)}</td>
                 <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
                 <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
-                <td><span className={`listStatus ${l.status}`}>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</span></td>
+                <td>
+                  {ws.canWrite ? (
+                    <button
+                      type="button"
+                      className={`listStatus listStatusBtn ${l.status}`}
+                      onClick={() => onRequestStatus(l.id)}
+                      title={l.status === "open" ? tx(language, "Liste bitti — sonuçlandır", "List finished — finalize", "Lîste qediya — biqedîne") : tx(language, "Sonuçlandı — yeniden açmak için tıklayın", "Finalized — click to reopen", "Qediya — ji bo vekirinê bitikîne")}
+                    >
+                      {l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : `✔ ${tx(language, "Sonuçlandı", "Finalized", "Qediya")}`}
+                    </button>
+                  ) : (
+                    <span className={`listStatus ${l.status}`}>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : `✔ ${tx(language, "Sonuçlandı", "Finalized", "Qediya")}`}</span>
+                  )}
+                </td>
                 <td className="listGridNote lgMuted lgCenter" title={l.note}>{l.note || "—"}</td>
                 <td className="listsGridAmount lgT1">{money(l.total, c)}</td>
                 {open &&
@@ -1133,14 +1234,14 @@ function ListView({
           <h3>{list.name}</h3>
           <small>
             {formatDate(list.date, language)} · {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}: {ws.name} ·{" "}
-            <span className={closed ? "negative" : "positive"}>{closed ? tx(language, "Kapandı", "Closed", "Girtî") : tx(language, "Açık", "Open", "Vekirî")}</span>
+            <span className={`listStatus ${closed ? "closed" : "open"}`}>{closed ? `✔ ${tx(language, "Sonuçlandı", "Finalized", "Qediya")}` : tx(language, "Açık", "Open", "Vekirî")}</span>
           </small>
         </div>
         {ws.canWrite && (
           <div className="listDetailActions">
             <button className="light compact" onClick={onEdit}>{tx(language, "Düzenle", "Edit", "Biguherîne")}</button>
-            <button className="light compact" onClick={onToggleStatus} disabled={dirty}>
-              {closed ? tx(language, "Yeniden aç", "Reopen", "Dîsa veke") : tx(language, "Listeyi kapat", "Close list", "Lîsteyê bigire")}
+            <button className={closed ? "light compact" : "primary compact"} onClick={onToggleStatus} disabled={dirty}>
+              {closed ? tx(language, "Yeniden aç", "Reopen", "Dîsa veke") : `✔ ${tx(language, "Liste bitti — Sonuçlandır", "List finished — Finalize", "Lîste qediya — Biqedîne")}`}
             </button>
             <button className="light compact danger" onClick={onDelete}>{tx(language, "Sil", "Delete", "Jê bibe")}</button>
           </div>
@@ -1272,7 +1373,7 @@ function ListView({
           {dirty && <small className="negative">{tx(language, "Kaydedilmemiş değişiklikler var", "Unsaved changes", "Guherînên neqeydkirî")}</small>}
         </div>
       )}
-      {closed && <p className="listsHint">{tx(language, "Liste kapalı: ürünler değiştirilemez. Değiştirmek için “Yeniden aç”ı kullanın.", "This list is closed: products can't be changed. Use “Reopen” to edit.", "Lîste girtî ye: berhem nayên guhertin. Ji bo guhertinê “Dîsa veke” bikar bîne.")}</p>}
+      {closed && <p className="listsHint">{tx(language, "Liste sonuçlandı: tutar, dağıtım ve ürünler değiştirilemez. Değiştirmek için “Yeniden aç”ı kullanın.", "This list is finalized: amount, allocation and products can't be changed. Use “Reopen” to edit.", "Lîste qediyaye: mîqdar, dabeşkirin û berhem nayên guhertin. Ji bo guhertinê “Dîsa veke” bikar bîne.")}</p>}
     </div>
   );
 }
