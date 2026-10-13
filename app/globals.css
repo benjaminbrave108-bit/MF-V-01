@@ -4121,3 +4121,15 @@ main { min-width: 0; overflow-x: hidden; }
 .groupCard > button:first-child { min-width: 0; min-height: 92px; }
 .groups > button { min-height: 92px; }
 .groupCard > button:first-child b, .groups > button b { max-width: 100%; }
+
+/* Listeler ızgarası: sürüklenebilir sütun genişliği */
+.listsGrid thead th { position: relative; }
+.lgResizer { position: absolute; top: 0; right: -3px; width: 8px; height: 100%; cursor: col-resize; z-index: 2; }
+.lgResizer::after { content: ""; position: absolute; top: 22%; bottom: 22%; left: 3px; width: 2px; border-radius: 1px; background: rgba(255, 255, 255, 0.35); transition: background 0.12s; }
+.lgResizer:hover::after { background: rgba(255, 255, 255, 0.95); }
+.listsGrid th.lgFill, .listsGrid td.lgFill, .listsGrid tr.listTotalRow td.lgFill { background: transparent; border-bottom: 0; padding: 0; }
+.listsGrid thead th.lgFill { border-radius: 0; }
+.listsGrid thead th:last-child.lgFill { border-top-right-radius: 0; }
+.listsGrid thead th:nth-last-child(2) { border-top-right-radius: 8px; }
+.listsGrid tr.listTotalRow td:last-child.lgFill { border-bottom-right-radius: 0; }
+.listsGrid tr.listTotalRow td:nth-last-child(2) { border-bottom-right-radius: 8px; }

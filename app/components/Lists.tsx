@@ -940,6 +940,52 @@ function ListsGrid({
       return !prev;
     });
   const key = (listId: number, recipientId: number) => `${listId}:${recipientId}`;
+  // Sütun genişlikleri: başlığın sağ kenarından sürüklenerek ayarlanır (çift tıklama varsayılana döndürür); tarayıcıda hatırlanır.
+  const [widths, setWidths] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("listsGridWidths") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const colW = (k: string, def: number) => widths[k] ?? def;
+  function startResize(k: string, def: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const base = colW(k, def);
+    let latest = base;
+    const onMove = (ev: MouseEvent) => {
+      latest = Math.min(560, Math.max(56, Math.round(base + ev.clientX - startX)));
+      setWidths((prev) => ({ ...prev, [k]: latest }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("noSelectDragging");
+      setWidths((prev) => {
+        try {
+          localStorage.setItem("listsGridWidths", JSON.stringify(prev));
+        } catch {}
+        return prev;
+      });
+    };
+    document.body.classList.add("noSelectDragging");
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+  const resetWidth = (k: string) =>
+    setWidths((prev) => {
+      const next = { ...prev };
+      delete next[k];
+      try {
+        localStorage.setItem("listsGridWidths", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  const grip = (k: string, def: number) => (
+    <i className="lgResizer" title="↔" onMouseDown={(e) => startResize(k, def, e)} onDoubleClick={() => resetWidth(k)} />
+  );
 
   async function commit(list: ListSummary, recipientId: number) {
     const k = key(list.id, recipientId);
@@ -964,30 +1010,34 @@ function ListsGrid({
   const grandAllocated = r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0));
   const money0 = (v: number) => (Math.abs(v) < 0.005 ? "—" : money(v, c));
   const recipientCount = open ? ws.recipients.length : 0;
-  const minWidth = 104 + 170 + 96 + 84 + 130 + 126 + recipientCount * 116 + 116 + 150;
+  const D = { date: 104, name: 170, code: 96, status: 96, note: 130, amount: 126, recipient: 116, alloc: open ? 116 : 150, left: 150 };
+  const minWidth =
+    colW("date", D.date) + colW("name", D.name) + colW("code", D.code) + colW("status", D.status) + colW("note", D.note) + colW("amount", D.amount) +
+    (open ? ws.recipients.reduce((a, r) => a + colW(`r${r.id}`, D.recipient), 0) : 0) + colW("alloc", D.alloc) + colW("left", D.left);
 
   return (
     <div className="listMatrixScroll">
       <table className="listTable listsGrid" style={{ minWidth }}>
         <colgroup>
-          <col style={{ width: 104 }} />
-          <col style={{ width: 170 }} />
-          <col style={{ width: 96 }} />
-          <col style={{ width: 84 }} />
-          <col style={{ width: 130 }} />
-          <col style={{ width: 126 }} />
-          {open && ws.recipients.map((r) => <col key={r.id} style={{ width: 116 }} />)}
-          <col style={{ width: open ? 116 : 150 }} />
-          <col style={{ width: 150 }} />
+          <col style={{ width: colW("date", D.date) }} />
+          <col style={{ width: colW("name", D.name) }} />
+          <col style={{ width: colW("code", D.code) }} />
+          <col style={{ width: colW("status", D.status) }} />
+          <col style={{ width: colW("note", D.note) }} />
+          <col style={{ width: colW("amount", D.amount) }} />
+          {open && ws.recipients.map((r) => <col key={r.id} style={{ width: colW(`r${r.id}`, D.recipient) }} />)}
+          <col style={{ width: colW("alloc", D.alloc) }} />
+          <col style={{ width: colW("left", D.left) }} />
+          <col />
         </colgroup>
         <thead>
           <tr>
-            <th className="lgH1">{tx(language, "Tarih", "Date", "Dîrok")}</th>
-            <th className="lgH1">{tx(language, "Liste", "List", "Lîste")}</th>
-            <th className="lgH1">{tx(language, "Kod", "Code", "Kod")}</th>
-            <th className="lgH1">{tx(language, "Durum", "Status", "Rewş")}</th>
-            <th className="lgH1 lgCenter">{tx(language, "Not", "Note", "Nîşe")}</th>
-            <th className="lgH1">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
+            <th className="lgH1">{tx(language, "Tarih", "Date", "Dîrok")}{grip("date", D.date)}</th>
+            <th className="lgH1">{tx(language, "Liste", "List", "Lîste")}{grip("name", D.name)}</th>
+            <th className="lgH1">{tx(language, "Kod", "Code", "Kod")}{grip("code", D.code)}</th>
+            <th className="lgH1">{tx(language, "Durum", "Status", "Rewş")}{grip("status", D.status)}</th>
+            <th className="lgH1 lgCenter">{tx(language, "Not", "Note", "Nîşe")}{grip("note", D.note)}</th>
+            <th className="lgH1">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}{grip("amount", D.amount)}</th>
             {open &&
               ws.recipients.map((r, i) => (
                 <th key={r.id} className="lgH2 r">
@@ -997,6 +1047,7 @@ function ListsGrid({
                     </button>
                   )}
                   <span className="lgName" style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+                  {grip(`r${r.id}`, D.recipient)}
                 </th>
               ))}
             <th className="lgH2 r">
@@ -1006,6 +1057,7 @@ function ListsGrid({
                 </button>
               )}
               {tx(language, "Dağıtılan", "Allocated", "Hatiye dabeşkirin")}
+              {grip("alloc", D.alloc)}
             </th>
             <th className="lgH3 r">
               <span className="lgKalanHead">
@@ -1037,7 +1089,9 @@ function ListsGrid({
                     </button>
                   ))}
               </span>
+              {grip("left", D.left)}
             </th>
+            <th className="lgFill" />
           </tr>
         </thead>
         <tbody>
@@ -1094,6 +1148,7 @@ function ListsGrid({
                   })}
                 <td className="lgT2 lgStrong r">{money0(allocatedTotal(l))}</td>
                 <td className={`lgT3 r ${left < -0.005 ? "negative" : left > 0.005 ? "lgRemain" : "lgMuted"}`}>{money0(left)}</td>
+                <td className="lgFill" />
               </tr>
             );
           })}
@@ -1103,6 +1158,7 @@ function ListsGrid({
             {open && ws.recipients.map((r, i) => (<td key={r.id} className="lgTot2 r">{money0(sumRecipient(r.id))}</td>))}
             <td className="lgTot2 r">{money0(grandAllocated)}</td>
             <td className="lgTot3 r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
+            <td className="lgFill" />
           </tr>
         </tbody>
       </table>
