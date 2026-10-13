@@ -1521,6 +1521,8 @@ export function Records({
               const rows = records.filter((x) => x.cashAccount === name);
               return { name, count: rows.length, totalByCurrency: combineByCurrency([{ rows }]), amount: total(rows) };
             })
+            // Geliri (Gelir sayfası) ya da gideri (Gider sayfası) olmayan, tutarı sıfır kasalar kutu olarak gösterilmez.
+            .filter((k) => Math.abs(k.amount) > 0.004)
             .sort((a, b) => b.amount - a.amount),
     [records, kind, cashAccounts],
   );
