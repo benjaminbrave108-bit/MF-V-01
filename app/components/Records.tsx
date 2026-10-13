@@ -1524,6 +1524,17 @@ export function Records({
             .sort((a, b) => b.amount - a.amount),
     [records, kind, cashAccounts],
   );
+  // "Tüm Kasalar" / "Tüm Liste Kasaları" kutuları da tek tek kasa kartları gibi gelir ↗ ve gider ↘ satırını gösterir.
+  const overallInOut = useMemo(() => {
+    const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [];
+    const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [];
+    return { inBy: combineByCurrency([{ rows: plainRecords }, { rows: incomeRows }]), outBy: combineByCurrency([{ rows: expenseRows }]) };
+  }, [plainRecords, allRecords, kind, cashAccounts]);
+  const overallListInOut = useMemo(() => {
+    const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
+    const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [];
+    return { inBy: combineByCurrency([{ rows: listedRecords }, { rows: incomeRows }]), outBy: combineByCurrency([{ rows: expenseRows }]) };
+  }, [listedRecords, allRecords, kind, cashAccounts]);
   const overallListByCurrency = useMemo(
     () =>
       combineByCurrency([
@@ -2007,14 +2018,18 @@ export function Records({
               ? tx(language, "Tüm Kasalar", "All Cash Accounts", "Hemû Qase")
               : kind === "income"
                 ? tx(language, "Tüm Gelirler", "All Income", "Hemû Dahat")
-                : tx(language, "Tüm Giderler", "All Expenses", "Hemû Mesref")}
+                : tx(language, "Tüm Giderler", "All Expenses", "Hemû Mesref")}{" "}
+            <span className="groupCount">({plainRecords.length})</span>
           </b>
-          <small>
-            {plainRecords.length} {recordWord}
-          </small>
           <strong>
             {moneyBreakdown(overallByCurrency)}
           </strong>
+          {kind === "cash" && (
+            <span className="groupInOut">
+              <span className="in">↗ {moneyBreakdown(overallInOut.inBy)}</span>
+              <span className="out">↘ {moneyBreakdown(overallInOut.outBy)}</span>
+            </span>
+          )}
         </button>
         {groups.map((g) => {
           const matchingAccount = g.kind === "cash" ? cashAccounts.find((a) => a.name === g.name) : undefined;
@@ -2028,17 +2043,8 @@ export function Records({
                 setShowAllLists(false);
               }}
             >
-              <b>{localizeData(g.name, language)}</b>
+              <b>{localizeData(g.name, language)} <span className="groupCount">({g.count})</span></b>
               {kind !== "cash" && g.kasas.length > 0 && <em className="groupKasaTag">▣ {g.kasas.map((n) => localizeData(n, language)).join(", ")}</em>}
-              <small>
-                {g.count}{" "}
-                {tx(
-                  language,
-                  "tarihli kayıt",
-                  "dated records",
-                  "qeydên bi tarîx",
-                )}
-              </small>
               <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
               {kind === "cash" && (
                 <span className="groupInOut">
@@ -2098,11 +2104,10 @@ export function Records({
                   {localizeData(k.name, language)}
                   {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(k.name)
                     ? ""
-                    : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}
+                    : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}{" "}
+                  <span className="groupCount">({k.count})</span>
                 </b>
-                <small>
-                  ▣ {tx(language, "Kasa", "Cash account", "Qase")} · {k.count} {recordWord}
-                </small>
+                <em className="groupKasaTag">▣ {tx(language, "Kasa", "Cash account", "Qase")}</em>
                 <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
               </button>
             </div>
@@ -2126,14 +2131,18 @@ export function Records({
                 ? tx(language, "Tüm Liste Kasaları", "All List Accounts", "Hemû Qaseyên Lîsteyê")
                 : kind === "income"
                   ? tx(language, "Tüm Liste Gelirleri", "All List Income", "Hemû Dahatên Lîsteyê")
-                  : tx(language, "Tüm Liste Giderleri", "All List Expenses", "Hemû Mesrefên Lîsteyê")}
+                  : tx(language, "Tüm Liste Giderleri", "All List Expenses", "Hemû Mesrefên Lîsteyê")}{" "}
+              <span className="groupCount">({listedRecords.length})</span>
             </b>
-            <small>
-              {listedRecords.length} {recordWord}
-            </small>
             <strong>
               {moneyBreakdown(overallListByCurrency)}
             </strong>
+            {kind === "cash" && (
+              <span className="groupInOut">
+                <span className="in">↗ {moneyBreakdown(overallListInOut.inBy)}</span>
+                <span className="out">↘ {moneyBreakdown(overallListInOut.outBy)}</span>
+              </span>
+            )}
           </button>
           {listGroups.map((g) => (
             <div className="groupCard" key={g.name}>
@@ -2141,10 +2150,7 @@ export function Records({
                 className={activeList === g.name ? "selected" : ""}
                 onClick={() => openList(g.name)}
               >
-                <b>{localizeData(g.name, language)}</b>
-                <small>
-                  {g.count} {tx(language, "kayıt", "records", "qeyd")}
-                </small>
+                <b>{localizeData(g.name, language)} <span className="groupCount">({g.count})</span></b>
                 <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
                 {kind === "cash" && (
                   <span className="groupInOut">

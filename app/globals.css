@@ -4099,3 +4099,21 @@ main { min-width: 0; overflow-x: hidden; }
 .groupInOut { display: flex; flex-direction: column; gap: 1px; margin-top: 3px; font-size: 10px; font-weight: 600; }
 .groupInOut .in { color: #14795e; }
 .groupInOut .out { color: #b33d3d; }
+
+/* Kasa/Gelir/Gider kutuları: eşit boyut ve düzen; kayıt sayısı adın yanında parantez içinde */
+.groups { align-items: stretch; }
+.groups > button,
+.groupCard > button:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 84px;
+}
+.groups > button { flex: 0 0 168px; min-width: 168px; }
+.groupCard { flex: 0 0 168px; display: flex; }
+.groupCard > button:first-child { flex: 1; }
+.groups b { font-size: 12px; }
+.groups strong { font-size: 13px; margin-top: auto; }
+.groupCount { font-weight: 500; color: var(--muted); font-size: 11px; }
+.groupKasaTag { align-self: flex-start; }
+.groupInOut { margin-top: 0; }
