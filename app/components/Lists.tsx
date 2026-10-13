@@ -304,7 +304,6 @@ function WorkspaceView({
         <div><small>{tx(language, "Kapanan listeler", "Closed lists", "Lîsteyên girtî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
       </div>
 
-      <h4>{tx(language, "Listeler", "Lists", "Lîste")} <span className="listMuted">· {ws.lists.length}</span></h4>
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (
@@ -541,6 +540,12 @@ function ListsGrid({
           {open && ws.canWrite && <col style={{ width: 104 }} />}
         </colgroup>
         <thead>
+          <tr className="listsGroupRow">
+            <th colSpan={6} className="listsGroupMain">{tx(language, "Liste bilgileri", "List details", "Agahiyên lîsteyê")}</th>
+            <th colSpan={(open ? ws.recipients.length : 1) + 1 + (open && ws.canWrite ? 1 : 0)} className="listsGroupRecipients">
+              {tx(language, "Alıcılara dağıtım", "Allocation to recipients", "Dabeşkirina ji wergiran re")}
+            </th>
+          </tr>
           <tr>
             <th>{tx(language, "Tarih", "Date", "Dîrok")}</th>
             <th>{tx(language, "Liste", "List", "Lîste")}</th>
@@ -550,7 +555,7 @@ function ListsGrid({
             <th className="listsGridAmountHead r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
             {open ? (
               ws.recipients.map((r, i) => (
-                <th key={r.id} className="listsGridRecipientHead">
+                <th key={r.id} className={`listsGridRecipientHead${i === 0 ? " listsGridGroupStart" : ""}`}>
                   {i === 0 && (
                     <button type="button" className="listsGridToggle" onClick={toggle} title={tx(language, "Alıcı sütunlarını kapat", "Collapse recipient columns", "Stûnên wergiran bigire")}>
                       ◂
@@ -560,7 +565,7 @@ function ListsGrid({
                 </th>
               ))
             ) : (
-              <th className="listsGridRecipientHead">
+              <th className="listsGridRecipientHead listsGridGroupStart">
                 <button type="button" className="listsGridToggle wide" onClick={toggle} title={tx(language, "Alıcı sütunlarını aç", "Expand recipient columns", "Stûnên wergiran veke")}>
                   ▸ {tx(language, "Alıcılar", "Recipients", "Wergir")} ({ws.recipients.length})
                 </button>
@@ -606,7 +611,7 @@ function ListsGrid({
                 <td>{formatDate(l.date, language)}</td>
                 <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
                 <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
-                <td>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</td>
+                <td><span className={`listStatus ${l.status}`}>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</span></td>
                 <td className="listGridNote" title={l.note}>{l.note}</td>
                 <td className="listsGridAmount r">{money(l.total, c)}</td>
                 {open ? (
@@ -614,7 +619,7 @@ function ListsGrid({
                     const k = key(l.id, r.id);
                     const value = l.byRecipient[r.id] ?? 0;
                     return (
-                      <td key={r.id} className="listsGridCell r" style={{ background: RECIPIENT_TINTS[i % RECIPIENT_TINTS.length] }}>
+                      <td key={r.id} className={`listsGridCell r${i === 0 ? " listsGridGroupStart" : ""}`} style={{ background: RECIPIENT_TINTS[i % RECIPIENT_TINTS.length] }}>
                         {editable ? (
                           <input
                             className="r"
@@ -635,7 +640,7 @@ function ListsGrid({
                     );
                   })
                 ) : (
-                  <td className="listsGridCell r">{allocatedTotal(l) ? money(allocatedTotal(l), c) : "—"}</td>
+                  <td className="listsGridCell r listsGridGroupStart">{allocatedTotal(l) ? money(allocatedTotal(l), c) : "—"}</td>
                 )}
                 <td className={`r ${l.unassigned < -0.005 ? "negative" : ""}`}>{l.unassigned > 0.005 || l.unassigned < -0.005 ? money(l.unassigned, c) : "—"}</td>
                 {open && ws.canWrite && <td />}
@@ -645,7 +650,7 @@ function ListsGrid({
           <tr className="listTotalRow">
             <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
             <td className="r">{money(ws.totals.expense, c)}</td>
-            {open ? ws.recipients.map((r) => (<td key={r.id} className="r">{money(sumRecipient(r.id), c)}</td>)) : <td className="r">{money(r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0)), c)}</td>}
+            {open ? ws.recipients.map((r, i) => (<td key={r.id} className={`r${i === 0 ? " listsGridGroupStart" : ""}`}>{money(sumRecipient(r.id), c)}</td>)) : <td className="r listsGridGroupStart">{money(r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0)), c)}</td>}
             <td className="r">{money(ws.totals.unassigned, c)}</td>
             {open && ws.canWrite && <td />}
           </tr>
