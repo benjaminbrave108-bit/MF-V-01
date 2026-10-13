@@ -3992,3 +3992,31 @@ main { min-width: 0; overflow-x: hidden; }
 .listStatus { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .listStatus.open { background: #e2f4ea; color: #1b7f4b; }
 .listStatus.closed { background: #eceff1; color: #5d7580; }
+
+/* Listeler ızgarası — "renk kodlu sütun grupları": yeşil = liste bilgileri, mavi = alıcı dağıtımı, kehribar = kalan */
+.listsGrid { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; font-size: 12px; }
+.listsGrid thead th { color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; padding: 10px 12px; text-align: left; border: 0; white-space: nowrap; }
+.listsGrid thead th.r { text-align: right; }
+.listsGrid .lgH1 { background: #0f6e56; }
+.listsGrid .lgH2 { background: #185fa5; }
+.listsGrid .lgH3 { background: #854f0b; }
+.listsGrid thead th:first-child { border-top-left-radius: 8px; }
+.listsGrid thead th:last-child { border-top-right-radius: 8px; }
+.listsGrid th.lgAdd { background: transparent; text-align: left; padding-left: 12px; }
+.listsGrid th.lgAdd input { width: 100%; }
+.listsGrid .lgName { display: inline-block; padding: 1px 10px; border-radius: 999px; font-weight: 700; color: #1f3a44; }
+.listsGrid .listsGridToggle { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.45); color: #fff; margin-right: 8px; }
+.listsGrid .listsGridToggle:hover { background: rgba(255,255,255,0.3); }
+.listsGrid tbody td { padding: 11px 12px; border-bottom: 1px solid #e6edef; vertical-align: middle; }
+.listsGrid .lgT1 { background: rgba(29, 158, 117, 0.07); }
+.listsGrid .lgT2 { background: rgba(55, 138, 221, 0.07); }
+.listsGrid .lgT3 { background: rgba(239, 159, 39, 0.10); }
+.listsGrid .listsGridAmount { font-weight: 700; font-size: 13px; color: #0b4f3e; }
+.listsGrid .lgMuted { color: #7c8b93; }
+.listsGrid .lgStrong { font-weight: 700; }
+.listsGrid .lgRemain { font-weight: 700; color: #854f0b; }
+.listsGrid tr.listTotalRow td { font-weight: 700; border-top: 1px solid #b9c7cd; border-bottom: 0; background: #f6f8fa; }
+.listsGrid tr.listTotalRow td.lgT1 { background: rgba(29, 158, 117, 0.07); }
+.listsGrid tr.listTotalRow td.lgT2 { background: rgba(55, 138, 221, 0.07); }
+.listsGrid tr.listTotalRow td.lgT3 { background: rgba(239, 159, 39, 0.10); }
+.listsGrid tbody td.lgT2.listsGridCell input { background: transparent; }

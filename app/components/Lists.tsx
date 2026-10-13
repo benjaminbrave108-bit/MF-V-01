@@ -523,11 +523,14 @@ function ListsGrid({
 
   const sumRecipient = (id: number) => r2(ws.lists.reduce((a, l) => a + (l.byRecipient[id] ?? 0), 0));
   const allocatedTotal = (l: ListSummary) => r2(Object.values(l.byRecipient).reduce((a, v) => a + v, 0));
-  const recipientCols = open ? ws.recipients.length : 0;
+  const grandAllocated = r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0));
+  const money0 = (v: number) => (Math.abs(v) < 0.005 ? "—" : money(v, c));
+  const recipientCount = open ? ws.recipients.length : 0;
+  const minWidth = 104 + 170 + 96 + 84 + 170 + 126 + recipientCount * 116 + 116 + 116 + (open && ws.canWrite ? 104 : 0);
 
   return (
     <div className="listMatrixScroll">
-      <table className="listTable listsGrid" style={{ minWidth: 104 + 170 + 96 + 84 + 170 + 126 + (open ? ws.recipients.length : 1) * 116 + 126 + (open && ws.canWrite ? 104 : 0) }}>
+      <table className="listTable listsGrid" style={{ minWidth }}>
         <colgroup>
           <col style={{ width: 104 }} />
           <col style={{ width: 170 }} />
@@ -535,45 +538,41 @@ function ListsGrid({
           <col style={{ width: 84 }} />
           <col style={{ width: 170 }} />
           <col style={{ width: 126 }} />
-          {open ? ws.recipients.map((r) => <col key={r.id} style={{ width: 116 }} />) : <col style={{ width: 126 }} />}
-          <col style={{ width: 126 }} />
+          {open && ws.recipients.map((r) => <col key={r.id} style={{ width: 116 }} />)}
+          <col style={{ width: open ? 116 : 150 }} />
+          <col style={{ width: 116 }} />
           {open && ws.canWrite && <col style={{ width: 104 }} />}
         </colgroup>
         <thead>
-          <tr className="listsGroupRow">
-            <th colSpan={6} className="listsGroupMain">{tx(language, "Liste bilgileri", "List details", "Agahiyên lîsteyê")}</th>
-            <th colSpan={(open ? ws.recipients.length : 1) + 1 + (open && ws.canWrite ? 1 : 0)} className="listsGroupRecipients">
-              {tx(language, "Alıcılara dağıtım", "Allocation to recipients", "Dabeşkirina ji wergiran re")}
-            </th>
-          </tr>
           <tr>
-            <th>{tx(language, "Tarih", "Date", "Dîrok")}</th>
-            <th>{tx(language, "Liste", "List", "Lîste")}</th>
-            <th>{tx(language, "Kod", "Code", "Kod")}</th>
-            <th>{tx(language, "Durum", "Status", "Rewş")}</th>
-            <th>{tx(language, "Not", "Note", "Nîşe")}</th>
-            <th className="listsGridAmountHead r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
-            {open ? (
+            <th className="lgH1">{tx(language, "Tarih", "Date", "Dîrok")}</th>
+            <th className="lgH1">{tx(language, "Liste", "List", "Lîste")}</th>
+            <th className="lgH1">{tx(language, "Kod", "Code", "Kod")}</th>
+            <th className="lgH1">{tx(language, "Durum", "Status", "Rewş")}</th>
+            <th className="lgH1">{tx(language, "Not", "Note", "Nîşe")}</th>
+            <th className="lgH1 r">{tx(language, "Liste gideri", "List expense", "Mesrefa lîsteyê")}</th>
+            {open &&
               ws.recipients.map((r, i) => (
-                <th key={r.id} className={`listsGridRecipientHead${i === 0 ? " listsGridGroupStart" : ""}`}>
+                <th key={r.id} className="lgH2 r">
                   {i === 0 && (
                     <button type="button" className="listsGridToggle" onClick={toggle} title={tx(language, "Alıcı sütunlarını kapat", "Collapse recipient columns", "Stûnên wergiran bigire")}>
                       ◂
                     </button>
                   )}
-                  <span style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
+                  <span className="lgName" style={{ background: RECIPIENT_COLORS[i % RECIPIENT_COLORS.length] }}>{r.name}</span>
                 </th>
-              ))
-            ) : (
-              <th className="listsGridRecipientHead listsGridGroupStart">
-                <button type="button" className="listsGridToggle wide" onClick={toggle} title={tx(language, "Alıcı sütunlarını aç", "Expand recipient columns", "Stûnên wergiran veke")}>
+              ))}
+            <th className="lgH2 r">
+              {!open && (
+                <button type="button" className="listsGridToggle" onClick={toggle} title={tx(language, "Alıcı sütunlarını aç", "Expand recipient columns", "Stûnên wergiran veke")}>
                   ▸ {tx(language, "Alıcılar", "Recipients", "Wergir")} ({ws.recipients.length})
                 </button>
-              </th>
-            )}
-            <th className="r">{tx(language, "Dağıtılmamış", "Unallocated", "Nehatiye dabeşkirin")}</th>
+              )}
+              {tx(language, "Dağıtılan", "Allocated", "Hatiye dabeşkirin")}
+            </th>
+            <th className="lgH3 r">{tx(language, "Kalan", "Left", "Mayî")}</th>
             {open && ws.canWrite && (
-              <th className="listsGridAddHead">
+              <th className="lgAdd">
                 {adding ? (
                   <input
                     autoFocus
@@ -606,20 +605,21 @@ function ListsGrid({
         <tbody>
           {ws.lists.map((l) => {
             const editable = ws.canWrite && l.status === "open";
+            const left = r2(l.total - allocatedTotal(l));
             return (
               <tr key={l.id}>
-                <td>{formatDate(l.date, language)}</td>
+                <td className="lgMuted">{formatDate(l.date, language)}</td>
                 <td><button type="button" className="listNameLink" onClick={() => onOpenList(l.id)}>{l.name}</button></td>
                 <td><button type="button" className="listCodeLink" onClick={() => onOpenList(l.id)}>{l.code}</button></td>
                 <td><span className={`listStatus ${l.status}`}>{l.status === "open" ? tx(language, "Açık", "Open", "Vekirî") : tx(language, "Kapandı", "Closed", "Girtî")}</span></td>
-                <td className="listGridNote" title={l.note}>{l.note}</td>
-                <td className="listsGridAmount r">{money(l.total, c)}</td>
-                {open ? (
-                  ws.recipients.map((r, i) => {
+                <td className="listGridNote lgMuted" title={l.note}>{l.note || "—"}</td>
+                <td className="listsGridAmount lgT1 r">{money(l.total, c)}</td>
+                {open &&
+                  ws.recipients.map((r) => {
                     const k = key(l.id, r.id);
                     const value = l.byRecipient[r.id] ?? 0;
                     return (
-                      <td key={r.id} className={`listsGridCell r${i === 0 ? " listsGridGroupStart" : ""}`} style={{ background: RECIPIENT_TINTS[i % RECIPIENT_TINTS.length] }}>
+                      <td key={r.id} className="listsGridCell lgT2 r">
                         {editable ? (
                           <input
                             className="r"
@@ -631,33 +631,30 @@ function ListsGrid({
                             onBlur={() => commit(l, r.id)}
                             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                           />
-                        ) : value ? (
-                          money(value, c)
                         ) : (
-                          "—"
+                          money0(value)
                         )}
                       </td>
                     );
-                  })
-                ) : (
-                  <td className="listsGridCell r listsGridGroupStart">{allocatedTotal(l) ? money(allocatedTotal(l), c) : "—"}</td>
-                )}
-                <td className={`r ${l.unassigned < -0.005 ? "negative" : ""}`}>{l.unassigned > 0.005 || l.unassigned < -0.005 ? money(l.unassigned, c) : "—"}</td>
-                {open && ws.canWrite && <td />}
+                  })}
+                <td className="lgT2 lgStrong r">{money0(allocatedTotal(l))}</td>
+                <td className={`lgT3 r ${left < -0.005 ? "negative" : left > 0.005 ? "lgRemain" : "lgMuted"}`}>{money0(left)}</td>
+                {open && ws.canWrite && <td className="lgT3" />}
               </tr>
             );
           })}
           <tr className="listTotalRow">
             <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
-            <td className="r">{money(ws.totals.expense, c)}</td>
-            {open ? ws.recipients.map((r, i) => (<td key={r.id} className={`r${i === 0 ? " listsGridGroupStart" : ""}`}>{money(sumRecipient(r.id), c)}</td>)) : <td className="r listsGridGroupStart">{money(r2(ws.lists.reduce((a, l) => a + allocatedTotal(l), 0)), c)}</td>}
-            <td className="r">{money(ws.totals.unassigned, c)}</td>
-            {open && ws.canWrite && <td />}
+            <td className="lgT1 r">{money(ws.totals.expense, c)}</td>
+            {open && ws.recipients.map((r) => (<td key={r.id} className="lgT2 r">{money0(sumRecipient(r.id))}</td>))}
+            <td className="lgT2 r">{money0(grandAllocated)}</td>
+            <td className="lgT3 lgRemain r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
+            {open && ws.canWrite && <td className="lgT3" />}
           </tr>
         </tbody>
       </table>
       <p className="listsHint">
-        {recipientCols
+        {open
           ? tx(language, "Tutarı doğrudan alıcı hücresine yazın; Enter ile kaydedilir.", "Type amounts straight into a recipient cell; Enter saves.", "Mîqdarê rasterast di şaneya wergir de binivîse; Enter tomar dike.")
           : tx(language, "Alıcılara göre dağılımı görmek ve düzenlemek için “Alıcılar” düğmesiyle sütunları sağa doğru açın.", "Use the “Recipients” button to expand the per-recipient columns to the right.", "Ji bo dîtina dabeşkirina li gorî wergiran bi bişkoka “Wergir” stûnan ber bi rastê veke.")}
       </p>
