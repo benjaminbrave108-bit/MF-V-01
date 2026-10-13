@@ -1327,6 +1327,8 @@ export function Records({
   const [source, setSource] = useState("Tümü");
   const [showListColumn, setShowListColumn] = useState(false);
   const [activeList, setActiveList] = useState("");
+  // Gelir/Gider sayfalarında kasa kutusuyla (ör. "Ana Kasa Giderleri") süzülen kasa adı.
+  const [activeKasa, setActiveKasa] = useState("");
   const [showAllLists, setShowAllLists] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState("");
@@ -1351,6 +1353,7 @@ export function Records({
   const isListLinked = (x: RecordItem) => !!x.listName || kasaListNames.has(x.cashAccount);
   const filterSourceOptions = [...new Set(records.map((x) => x.source).filter(Boolean))];
   const openList = (name: string) => {
+    setActiveKasa("");
     setSource("Tümü");
     setSearch(name);
     setActiveList(name);
@@ -1393,6 +1396,7 @@ export function Records({
         return {
           name,
           kind: records.find((x) => x.source === name)?.kind ?? kind,
+          kasas: [...new Set(directRows.map((r) => r.cashAccount).filter(Boolean))],
           count: directRows.length + linkedIncomeRows.length + linkedExpenseRows.length,
           totalIn: directAmount + linkedIncome,
           totalOut: linkedExpense,
@@ -1502,6 +1506,20 @@ export function Records({
       ),
     [records, allRecords, kind],
   );
+  // Gelir/Gider sayfaları: her kasa için ayrı kutu ("Ana Kasa Giderleri", "Ana Kasa Gelirleri"). Kutudaki tutar o kasaya
+  // bağlı kayıtların toplamıdır; Listeler ile ilişkili (Liste Kasası) kasalar burada değil "Tüm Liste ..." satırında görünür.
+  const kasaBoxes = useMemo(
+    () =>
+      kind === "cash"
+        ? []
+        : [...new Set(records.map((x) => x.cashAccount).filter((n) => n && !kasaListNames.has(n)))]
+            .map((name) => {
+              const rows = records.filter((x) => x.cashAccount === name);
+              return { name, count: rows.length, totalByCurrency: combineByCurrency([{ rows }]), amount: total(rows) };
+            })
+            .sort((a, b) => b.amount - a.amount),
+    [records, kind, cashAccounts],
+  );
   const overallListByCurrency = useMemo(
     () =>
       combineByCurrency([
@@ -1524,6 +1542,7 @@ export function Records({
     (x) =>
       (source === "Tümü" || x.source === source || x.cashAccount === source) &&
       (!showAllLists || listOf(x) || isListLinked(x)) &&
+      (!activeKasa || x.cashAccount === activeKasa) &&
       (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaListNames.has(x.cashAccount || x.source))) &&
       (!filterFrom || x.date >= filterFrom) &&
       (!filterTo || x.date <= filterTo) &&
@@ -1972,9 +1991,10 @@ export function Records({
       )}
       <div className="groups">
         <button
-          className={source === "Tümü" && !showAllLists ? "selected" : ""}
+          className={source === "Tümü" && !showAllLists && !activeKasa ? "selected" : ""}
           onClick={() => {
             setSource("Tümü");
+            setActiveKasa("");
             setShowAllLists(false);
           }}
         >
@@ -2000,10 +2020,12 @@ export function Records({
               className={source === g.name && !showAllLists ? "selected" : ""}
               onClick={() => {
                 setSource(g.name);
+                setActiveKasa("");
                 setShowAllLists(false);
               }}
             >
               <b>{localizeData(g.name, language)}</b>
+              {kind !== "cash" && g.kasas.length > 0 && <em className="groupKasaTag">▣ {g.kasas.map((n) => localizeData(n, language)).join(", ")}</em>}
               <small>
                 {g.count}{" "}
                 {tx(
@@ -2014,6 +2036,12 @@ export function Records({
                 )}
               </small>
               <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
+              {kind === "cash" && (
+                <span className="groupInOut">
+                  <span className="in">↗ {moneyBreakdown(g.totalInByCurrency)}</span>
+                  <span className="out">↘ {moneyBreakdown(g.totalOutByCurrency)}</span>
+                </span>
+              )}
             </button>
             {!readOnly && source === g.name && (
               <button
@@ -2048,12 +2076,42 @@ export function Records({
           );
         })}
       </div>
+      {kind !== "cash" && kasaBoxes.length > 0 && (
+        <div className="groups kasaGroups">
+          {kasaBoxes.map((k) => (
+            <div className="groupCard" key={k.name}>
+              <button
+                className={activeKasa === k.name ? "selected" : ""}
+                onClick={() => {
+                  setActiveKasa(activeKasa === k.name ? "" : k.name);
+                  setSource("Tümü");
+                  setSearch("");
+                  setActiveList("");
+                  setShowAllLists(false);
+                }}
+              >
+                <b>
+                  {localizeData(k.name, language)}
+                  {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(k.name)
+                    ? ""
+                    : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}
+                </b>
+                <small>
+                  ▣ {tx(language, "Kasa", "Cash account", "Qase")} · {k.count} {recordWord}
+                </small>
+                <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {listGroups.length > 0 && (
         <div className="groups listGroups">
           <button
             className={showAllLists ? "selected" : ""}
             onClick={() => {
               setSource("Tümü");
+              setActiveKasa("");
               setSearch("");
               setActiveList("");
               setShowAllLists(true);
@@ -2084,6 +2142,12 @@ export function Records({
                   {g.count} {tx(language, "kayıt", "records", "qeyd")}
                 </small>
                 <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
+                {kind === "cash" && (
+                  <span className="groupInOut">
+                    <span className="in">↗ {moneyBreakdown(g.totalInByCurrency)}</span>
+                    <span className="out">↘ {moneyBreakdown(g.totalOutByCurrency)}</span>
+                  </span>
+                )}
               </button>
               {!readOnly && activeList === g.name && (
                 <button

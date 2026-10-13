@@ -4092,3 +4092,10 @@ main { min-width: 0; overflow-x: hidden; }
 
 /* Listeler ızgarası: tarih sütunu daha büyük ve belirgin */
 .listsGrid tbody td:first-child:not([colspan]) { font-size: 13px; font-weight: 600; color: #1f3a44; }
+
+/* Gelir/Gider: kasa kutuları, kutularda kasa etiketi; Kasalar kartlarında gelir ↗ / gider ↘ satırı */
+.kasaGroups .groupCard button b { color: #123f52; }
+.groupKasaTag { display: block; font-style: normal; font-size: 10px; color: #176b87; background: #e8f3f6; border-radius: 999px; padding: 1px 8px; margin: 2px 0; width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.groupInOut { display: flex; flex-direction: column; gap: 1px; margin-top: 3px; font-size: 10px; font-weight: 600; }
+.groupInOut .in { color: #14795e; }
+.groupInOut .out { color: #b33d3d; }
