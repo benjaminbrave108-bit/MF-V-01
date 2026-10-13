@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Title } from "./shared";
 import { date as formatDate, money } from "../lib/finance";
 import { tx } from "../lib/i18n";
 import type { Language } from "../lib/types";
@@ -129,24 +128,23 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
     return true;
   }
 
-  const title = tx(language, "Listeler", "Lists", "Lîste");
-  const sub = tx(
-    language,
-    "Çalışma alanı (kasa), listeler, ürünler ve alıcı harcamaları",
-    "Workspace (cash account), lists, products and recipient spending",
-    "Qada xebatê (qase), lîste, berhem û lêçûnên wergiran",
-  );
-
   return (
     <section className="listsPage">
-      <Title title={title} sub={sub} />
       {error && <p className="listsError">{error}</p>}
       {!workspace && (
         <>
           <div className="listsToolbar">
-            <button className="primary" onClick={() => setNewListFor("pick")} disabled={kasas.length === 0}>
-              ＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}
-            </button>
+            <div className="listsToolbarInfo">
+              <span className="listWsLabel">{tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}</span>
+              <small className="listMuted">
+                {tx(language, "Kasa bazında listeler, ürünler ve alıcı harcamaları", "Lists, products and recipient spending per cash account", "Lîste, berhem û lêçûnên wergiran li gorî qaseyê")}
+              </small>
+            </div>
+            <div className="listsToolbarActions">
+              <button className="primary" onClick={() => setNewListFor("pick")} disabled={kasas.length === 0}>
+                ＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}
+              </button>
+            </div>
           </div>
           {workspaces === null && <p className="listsHint">…</p>}
           {workspaces?.length === 0 && (
@@ -283,17 +281,21 @@ function WorkspaceView({
   return (
     <div className="listDetail">
       <div className="listWsBar">
-        <button className="light compact" onClick={onBack}>← {tx(language, "Listeler", "Lists", "Lîste")}</button>
+        <div className="listWsInfo">
+          <button className="light compact" onClick={onBack}>← {tx(language, "Listeler", "Lists", "Lîste")}</button>
+          <span className="listWsLabel">{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</span>
+          <span className="listWsName">{ws.name}</span>
+          <small className="listMuted">{ws.ownerName || "—"} · {c}</small>
+        </div>
         {ws.canWrite && (
-          <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>
+          <div className="listWsActions">
+            <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>
+          </div>
         )}
-        <span className="listWsLabel">{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</span>
-        <span className="listWsName">{ws.name}</span>
-        <small className="listMuted">{ws.ownerName || "—"} · {c}</small>
       </div>
 
       <div className="listMetrics">
-        <div className="metricBlue"><small>{tx(language, "Kasa geliri", "Cash income", "Dahata qasayê")}</small><b>{money(ws.totals.income, c)}</b></div>
+        <div className="metricBlue" title={tx(language, "Bu kasadaki kasa ve gelir kayıtlarının toplamı (Kasalar/Gelir sayfalarından girilir)", "Total of this account's cash and income records (entered on the Cash/Income pages)", "Hejmara tomarên qase û dahatê yên vê qasayê")}><small>{tx(language, "Kasa geliri", "Cash income", "Dahata qasayê")}</small><b>{money(ws.totals.income, c)}</b></div>
         <div><small>{tx(language, "Alıcılara dağıtılan", "Distributed", "Ji wergiran re hatiye dabeşkirin")}</small><b>{money(ws.totals.distributed, c)}</b></div>
         <div><small>{tx(language, "Toplam gider", "Total expense", "Mesrefa giştî")}</small><b>{money(ws.totals.expense, c)}</b></div>
         <div><small>{tx(language, "Kasada kalan", "Cash left", "Di qasayê de")}</small><b className={ws.totals.kasaRemaining < 0 ? "negative" : undefined}>{money(ws.totals.kasaRemaining, c)}</b></div>
@@ -301,11 +303,8 @@ function WorkspaceView({
         <div><small>{tx(language, "Açık listeler", "Open lists", "Lîsteyên vekirî")}</small><b>{ws.lists.filter((l) => l.status === "open").length}</b></div>
         <div><small>{tx(language, "Kapanan listeler", "Closed lists", "Lîsteyên girtî")}</small><b>{ws.lists.filter((l) => l.status === "closed").length}</b></div>
       </div>
-      <p className="listsHint">
-        {tx(language, "Kasa geliri, bu kasadaki kasa ve gelir kayıtlarının toplamıdır (Kasalar/Gelir sayfalarından girilir).", "Cash income is the total of this account's cash and income records (entered on the Cash/Income pages).", "Dahata qasayê, hejmara tomarên qase û dahatê yên vê qasayê ye.")}
-      </p>
 
-      <h4>{tx(language, "1) Listeler", "1) Lists", "1) Lîste")} <span className="listMuted">· {tx(language, "kasa geliri", "cash income", "dahata qasayê")} {money(ws.totals.income, c)}</span></h4>
+      <h4>{tx(language, "Listeler", "Lists", "Lîste")} <span className="listMuted">· {ws.lists.length}</span></h4>
       {ws.lists.length === 0 ? (
         <p className="listsHint">{tx(language, "Bu çalışma alanında henüz liste yok.", "No lists in this workspace yet.", "Di vê qada xebatê de hê lîste tune.")}</p>
       ) : (

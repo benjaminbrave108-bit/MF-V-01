@@ -3974,3 +3974,9 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGridToggle.wide { margin-right: 0; }
 .listsGridAddHead { text-align: left; min-width: 0; }
 .listsGridAddHead input { width: 100%; }
+
+/* Listeler: tek üst şerit — tanıtım/bağlam solda, oluşturma eylemleri sağda */
+.listsToolbar, .listWsBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.listsToolbarInfo, .listWsInfo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.listsToolbarActions, .listWsActions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.listsPage { gap: 10px; }
