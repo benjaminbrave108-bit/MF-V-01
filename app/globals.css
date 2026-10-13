@@ -4040,3 +4040,22 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid tr.listTotalRow td.lgTot3 { background: #854f0b; }
 .listsGrid tr.listTotalRow td:first-child { border-bottom-left-radius: 8px; }
 .listsGrid tr.listTotalRow td:last-child { border-bottom-right-radius: 8px; }
+
+/* Listeler ızgarası: uygulamanın kendi paletiyle (lacivert-petrol menü #123f52, mavi #176b87) uyumlu sakin renkler;
+   başlıklar ana ton, Toplam satırı aynı ailenin daha koyu tonu. */
+.listsGrid .lgH1 { background: #123f52; }
+.listsGrid .lgH2 { background: #176b87; }
+.listsGrid .lgH3 { background: #9a7326; }
+.listsGrid .lgT1 { background: rgba(18, 63, 82, 0.05); }
+.listsGrid .lgT2 { background: rgba(23, 107, 135, 0.07); }
+.listsGrid .lgT3 { background: rgba(154, 115, 38, 0.10); }
+.listsGrid .listsGridAmount { color: #123f52; }
+.listsGrid .lgRemain { color: #7a5a1d; }
+.listsGrid tr.listTotalRow td.lgTot1 { background: #0b2a38; }
+.listsGrid tr.listTotalRow td.lgTot2 { background: #0f4c62; }
+.listsGrid tr.listTotalRow td.lgTot3 { background: #7a5a1d; }
+.listsGrid thead th { border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.listsGrid thead th:last-child { border-right: 0; }
+.listsGrid tbody td { border-bottom-color: #e3eaee; }
+.listsGrid tbody tr:hover td.lgT1, .listsGrid tbody tr:hover td.lgT3 { filter: brightness(0.98); }
+.listStatus.open { background: #e3f1ec; color: #1d6a54; }
