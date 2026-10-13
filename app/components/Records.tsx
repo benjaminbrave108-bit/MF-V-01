@@ -2085,35 +2085,35 @@ export function Records({
           </div>
           );
         })}
+        {kind !== "cash" && (
+          <>
+            {kasaBoxes.map((k) => (
+              <div className="groupCard" key={k.name}>
+                <button
+                  className={activeKasa === k.name ? "selected" : ""}
+                  onClick={() => {
+                    setActiveKasa(activeKasa === k.name ? "" : k.name);
+                    setSource("Tümü");
+                    setSearch("");
+                    setActiveList("");
+                    setShowAllLists(false);
+                  }}
+                >
+                  <b>
+                    {localizeData(k.name, language)}
+                    {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(k.name)
+                      ? ""
+                      : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}{" "}
+                    <span className="groupCount">({k.count})</span>
+                  </b>
+                  <em className="groupKasaTag">▣ {tx(language, "Kasa", "Cash account", "Qase")}</em>
+                  <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
       </div>
-      {kind !== "cash" && kasaBoxes.length > 0 && (
-        <div className="groups kasaGroups">
-          {kasaBoxes.map((k) => (
-            <div className="groupCard" key={k.name}>
-              <button
-                className={activeKasa === k.name ? "selected" : ""}
-                onClick={() => {
-                  setActiveKasa(activeKasa === k.name ? "" : k.name);
-                  setSource("Tümü");
-                  setSearch("");
-                  setActiveList("");
-                  setShowAllLists(false);
-                }}
-              >
-                <b>
-                  {localizeData(k.name, language)}
-                  {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(k.name)
-                    ? ""
-                    : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}{" "}
-                  <span className="groupCount">({k.count})</span>
-                </b>
-                <em className="groupKasaTag">▣ {tx(language, "Kasa", "Cash account", "Qase")}</em>
-                <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
       {listGroups.length > 0 && (
         <div className="groups listGroups">
           <button
