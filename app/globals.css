@@ -4030,3 +4030,13 @@ main { min-width: 0; overflow-x: hidden; }
 .lgAddRecipient { border: 1px solid rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.16); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 600; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .lgAddRecipient:hover { background: rgba(255, 255, 255, 0.3); }
 .lgKalanHead input { width: 110px; padding: 2px 6px; font-size: 11px; color: #1b2733; }
+
+/* Listeler ızgarası: tutar yazıları tek ölçekte; Toplam satırı başlık renkleriyle, daha belirgin ve büyük */
+.listsGrid .listsGridAmount { font-size: 12px; font-weight: 600; color: #0b4f3e; }
+.listsGrid .lgStrong, .listsGrid .lgRemain { font-size: 12px; font-weight: 600; }
+.listsGrid tr.listTotalRow td { font-size: 14px; font-weight: 700; padding: 13px 12px; border-top: 0; color: #fff; }
+.listsGrid tr.listTotalRow td.lgTot1 { background: #0f6e56; }
+.listsGrid tr.listTotalRow td.lgTot2 { background: #185fa5; }
+.listsGrid tr.listTotalRow td.lgTot3 { background: #854f0b; }
+.listsGrid tr.listTotalRow td:first-child { border-bottom-left-radius: 8px; }
+.listsGrid tr.listTotalRow td:last-child { border-bottom-right-radius: 8px; }

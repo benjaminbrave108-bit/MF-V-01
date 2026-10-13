@@ -648,11 +648,11 @@ function ListsGrid({
             );
           })}
           <tr className="listTotalRow">
-            <td colSpan={5}>{tx(language, "Toplam", "Total", "Giştî")}</td>
-            <td className="lgT1">{money(ws.totals.expense, c)}</td>
-            {open && ws.recipients.map((r, i) => (<td key={r.id} className="r" style={{ background: `${RECIPIENT_COLORS[i % RECIPIENT_COLORS.length]}55`, color: RECIPIENT_TEXT[i % RECIPIENT_TEXT.length] }}>{money0(sumRecipient(r.id))}</td>))}
-            <td className="lgT2 r">{money0(grandAllocated)}</td>
-            <td className="lgT3 lgRemain r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
+            <td colSpan={5} className="lgTot1">{tx(language, "Toplam", "Total", "Giştî")}</td>
+            <td className="lgTot1">{money(ws.totals.expense, c)}</td>
+            {open && ws.recipients.map((r, i) => (<td key={r.id} className="lgTot2 r">{money0(sumRecipient(r.id))}</td>))}
+            <td className="lgTot2 r">{money0(grandAllocated)}</td>
+            <td className="lgTot3 r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
           </tr>
         </tbody>
       </table>
