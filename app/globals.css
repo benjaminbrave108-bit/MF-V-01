@@ -4059,3 +4059,11 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid tbody td { border-bottom-color: #e3eaee; }
 .listsGrid tbody tr:hover td.lgT1, .listsGrid tbody tr:hover td.lgT3 { filter: brightness(0.98); }
 .listStatus.open { background: #e3f1ec; color: #1d6a54; }
+
+/* Listeler ızgarası: Toplam satırı başlıkla aynı renkler; satır aralıkları biraz daha sıkı */
+.listsGrid tr.listTotalRow td.lgTot1 { background: #123f52; }
+.listsGrid tr.listTotalRow td.lgTot2 { background: #176b87; }
+.listsGrid tr.listTotalRow td.lgTot3 { background: #9a7326; }
+.listsGrid thead th { padding: 8px 12px; }
+.listsGrid tbody td { padding: 7px 12px; }
+.listsGrid tr.listTotalRow td { padding: 10px 12px; }
