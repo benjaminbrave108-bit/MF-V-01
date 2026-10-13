@@ -1380,7 +1380,11 @@ export function Records({
   // gerçek bakiyesinden düşülmemesi/eklenmemesi yanlış olur.
   const groups = useMemo(
     () =>
-      [...new Set(records.filter((x) => !listOf(x)).map((x) => x.source))].map((name) => {
+      // Gelir sayfasında kasanın kendi adıyla açılan kayıt kutuları (ör. "Ana -Kasa") ayrı kasa kutusunda (ör. "Ana -Kasa Gelirleri")
+      // zaten toplandığı için burada tekrar edilmez.
+      [...new Set(records.filter((x) => !listOf(x)).map((x) => x.source))]
+        .filter((name) => !(kind === "income" && cashAccounts.some((a) => a.name === name)))
+        .map((name) => {
         const directRows = records.filter((x) => x.source === name && !listOf(x));
         const linkedIncomeRows =
           kind === "cash"
@@ -1410,7 +1414,7 @@ export function Records({
           ]),
         };
       }),
-    [records, allRecords, kind],
+    [records, allRecords, kind, cashAccounts],
   );
   // Kart satırı flex-wrap olduğu için genişlik yeterliyse zaten hepsi
   // görünür — önceden ilk 4'ten sonrasını "Diğer Kasalar" açılır menüsünde
