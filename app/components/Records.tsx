@@ -2825,6 +2825,8 @@ export function RecordModal({
   // kapanıyor. Düzenlenen bir kayıtta zaten bir liste adı varsa, kutu
   // başta işaretli açılır.
   const [hasListRecord, setHasListRecord] = useState(!!base.listName);
+  // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
+  const [listKasa, setListKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace));
   // "Gider Detaylarını Görüntüle" bölümü kayıt penceresi her açıldığında
   // kapalı başlar (detay kayıtlıysa bile); açılınca tablonun tamamı görünür.
   const [detailTrimmed, setDetailTrimmed] = useState(false);
@@ -2959,7 +2961,7 @@ export function RecordModal({
         assignedUserIds: [],
       });
     }
-    onSave(form, initial?.id);
+    onSave(kind === "cash" ? { ...form, listKasa } : form, initial?.id);
   }
   return (
     <div className="overlay overlayScrollThrough">
@@ -3117,6 +3119,26 @@ export function RecordModal({
           </label>
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
+            {kind === "cash" && (
+              <label>
+                {tx(language, "Liste Kasası (Çalışma Alanı)", "List Cash Account (Workspace)", "Qaseya Lîsteyê (Qada Xebatê)")}
+                <span className="checkField">
+                  <input
+                    type="checkbox"
+                    checked={listKasa}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setListKasa(checked);
+                      if (checked) {
+                        setHasListRecord(true);
+                        setForm((f) => ({ ...f, listName: f.listName || f.source.trim() }));
+                      }
+                    }}
+                  />
+                  {tx(language, "Evet, bu kasa bir Liste Kasasıdır — Listeler sayfasında çalışma alanı olsun", "Yes, this is a List cash account — make it a workspace on the Lists page", "Erê, ev qase Qaseya Lîsteyê ye — li rûpela Lîste bibe qada xebatê")}
+                </span>
+              </label>
+            )}
             <label>
               {tx(language, "Bu Kayıt Bir Listeyi İlgilendiriyor mu?", "Is this record related to a list?", "Ev qeyd bi lîsteyekê ve girêdayî ye?")}
               <span className="checkField">

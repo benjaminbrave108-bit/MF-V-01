@@ -87,6 +87,8 @@ export const recordInputSchema = z.object({
   listName: shortText(200),
   // Proje Aşaması 2: bağlı liste (varsa listName, listenin adından türetilir).
   listId: z.number().int().positive().nullable().optional(),
+  // Kasa kaydında "Liste Kasası" işareti: kasa Listeler sayfasında çalışma alanı olur.
+  listKasa: z.boolean().optional(),
   attachments: attachmentsSchema,
   detailTable: detailTableSchema.optional().default([]),
   detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),
@@ -111,6 +113,7 @@ export const recordUpdateSchema = z.object({
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
   listId: z.number().int().positive().nullable().optional(),
+  listKasa: z.boolean().optional(),
   attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional(),
   detailTable: detailTableSchema.optional(),
   detailTableLayout: detailTableLayoutSchema.optional(),

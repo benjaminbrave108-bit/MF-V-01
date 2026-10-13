@@ -379,6 +379,11 @@ export default function Home() {
         body: JSON.stringify(next),
       });
       if (!response.ok) {
+        if (response.status === 423) {
+          const info = await response.json().catch(() => ({}));
+          alert(info.error || tx(language, "Bu kayıt bir listeden otomatik oluşturuldu; Listeler sayfasından düzenleyin.", "This record was generated from a list; edit it on the Lists page.", "Ev qeyd ji lîsteyekê hate çêkirin; li rûpela Lîste biguherîne."));
+          return;
+        }
         if (response.status === 409) {
           alert(tx(language, "Bu kayıt siz düzenlerken başka bir kullanıcı tarafından değiştirildi. Lütfen sayfayı yenileyip tekrar deneyin.", "This record was changed by another user while you were editing it. Please refresh and try again.", "Dema te ev qeyd sererast dikir, bikarhênerek din ew guherand. Ji kerema xwe rûpelê nûve bike û dîsa biceribîne."));
           return;
@@ -500,6 +505,11 @@ export default function Home() {
     try {
       const response = await fetch(`/api/records/${item.id}`, { method: "DELETE" });
       if (!response.ok) {
+        if (response.status === 423) {
+          const info = await response.json().catch(() => ({}));
+          alert(info.error || tx(language, "Bu kayıt bir listeden otomatik oluşturuldu; Listeler sayfasından silin.", "This record was generated from a list; delete it on the Lists page.", "Ev qeyd ji lîsteyekê hate çêkirin; li rûpela Lîste jê bibe."));
+          return;
+        }
         alert(tx(language, "Kayıt silinemedi. Lütfen tekrar deneyin.", "The record could not be deleted. Please try again.", "Qeyd nehat jêbirin. Ji kerema xwe dîsa biceribîne."));
         return;
       }
@@ -1005,7 +1015,7 @@ export default function Home() {
             />
           )}
           {page === "guide" && <Guide language={language} />}
-          {page === "lists" && <Lists language={language} />}
+          {page === "lists" && <Lists language={language} onDataChanged={() => { refreshRecords(); refreshCashAccounts(); }} />}
         </section>
       </main>
       {modal && (

@@ -2,7 +2,7 @@ import { getDb } from "../../../db";
 import { lists } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
-import { buildWorkspaces, ensureWorkspace, workspaceAccess, writableKasas, writeAllocations } from "../_lib/lists";
+import { buildWorkspaces, ensureFlaggedWorkspaces, ensureWorkspace, syncListExpense, workspaceAccess, writableKasas, writeAllocations } from "../_lib/lists";
 import { listInputSchema, parseBody } from "../_lib/validate";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -21,6 +21,7 @@ export const GET = withErrorHandling(async (request: Request) => {
   if (!canUseLists(session.user)) return json({ error: "Forbidden" }, { status: 403 });
 
   const db = getDb();
+  await ensureFlaggedWorkspaces(session.user, db);
   const [workspaces, kasas] = await Promise.all([buildWorkspaces(session.user, null, db), writableKasas(session.user, db)]);
   return json({ workspaces, kasas });
 });
@@ -49,6 +50,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         allocationError = await writeAllocations(tx, created, payload.amount, payload.allocations);
         if (allocationError) tx.rollback();
       }
+      await syncListExpense(tx, created.id);
       return created;
     });
     const [workspace] = await buildWorkspaces(session.user, [payload.cashAccountId], db);

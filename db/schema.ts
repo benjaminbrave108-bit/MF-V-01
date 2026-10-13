@@ -72,6 +72,8 @@ export const cashAccounts = pgTable("cash_accounts", {
   // Independent of cashAccountAccess — a kasa can be shared for viewing
   // without ever appearing in anyone's dashboard aggregate, and vice versa.
   dashboardShareEnabled: boolean("dashboard_share_enabled").notNull().default(false),
+  // "Liste Kasası": Gelir/Kasa kaydında işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur.
+  isListWorkspace: boolean("is_list_workspace").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -108,6 +110,9 @@ export const lists = pgTable("lists", {
   // dağılımı list_allocations'ta tutulur. Ürün satırları isteğe bağlı detaydır.
   amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
   note: text("note").notNull().default(""),
+  // Listenin gider tutarının Gider kaydı (records, kind=expense) olarak karşılığı — liste kaydedildikçe
+  // senkronlanır, böylece Gider sayfası ve Kasalar bakiyesi kendiliğinden güncel kalır.
+  expenseRecordId: integer("expense_record_id"),
   currency: text("currency").notNull().default("USD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

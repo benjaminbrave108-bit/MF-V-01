@@ -3,7 +3,7 @@ import { getDb } from "../../../../db";
 import { lists, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
-import { buildWorkspaces, loadListForUser, writeAllocations } from "../../_lib/lists";
+import { buildWorkspaces, loadListForUser, syncListExpense, writeAllocations } from "../../_lib/lists";
 import { listUpdateSchema, parseBody } from "../../_lib/validate";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -55,6 +55,7 @@ export const PUT = withErrorHandling<Ctx>(async (request, { params }) => {
       }
       // Liste adı değiştiyse eski "Liste Kaydı" alanındaki ad kopyası da güncellenir.
       if (name !== list.name) await tx.update(records).set({ listName: name }).where(eq(records.listId, id));
+      await syncListExpense(tx, id);
     });
   } catch (error) {
     if (allocationError) return json({ error: allocationError }, { status: 400 });
@@ -78,6 +79,8 @@ export const DELETE = withErrorHandling<Ctx>(async (request, { params }) => {
   if (!canWrite) return json({ error: "Forbidden" }, { status: 403 });
 
   await db.transaction(async (tx) => {
+    // Listenin otomatik gider kaydı da silinir; diğer eski kayıtlar listeden ayrılır.
+    if (list.expenseRecordId != null) await tx.delete(records).where(eq(records.id, list.expenseRecordId));
     await tx.update(records).set({ listName: "" }).where(eq(records.listId, id));
     await tx.delete(lists).where(eq(lists.id, id));
   });

@@ -210,3 +210,68 @@ export async function writeAllocations(
 export async function ensureWorkspace(cashAccountId: number, db: DbClient = getDb()): Promise<void> {
   await db.insert(listWorkspaces).values({ cashAccountId }).onConflictDoNothing();
 }
+
+// Listenin gider tutarı, bağlı kasada bir Gider kaydı olarak da tutulur (Gider sayfası, Kasalar bakiyesi ve Ana Sayfa
+// toplamları kendiliğinden güncel kalır). Liste kaydedildikçe bu kayıt oluşturulur/güncellenir; tutar 0 ise silinir.
+export async function syncListExpense(tx: DbClient, listId: number): Promise<void> {
+  const [list] = await tx.select().from(lists).where(eq(lists.id, listId)).limit(1);
+  if (!list || list.cashAccountId == null) return;
+  const [kasa] = await tx.select({ id: cashAccounts.id, name: cashAccounts.name }).from(cashAccounts).where(eq(cashAccounts.id, list.cashAccountId)).limit(1);
+  if (!kasa) return;
+  const existing = list.expenseRecordId != null ? (await tx.select({ id: records.id }).from(records).where(eq(records.id, list.expenseRecordId)).limit(1))[0] : undefined;
+  if (!(list.amount > 0)) {
+    if (existing) await tx.delete(records).where(eq(records.id, existing.id));
+    if (list.expenseRecordId != null) await tx.update(lists).set({ expenseRecordId: null }).where(eq(lists.id, listId));
+    return;
+  }
+  // Para birimi: kasanın gelir kayıtlarında en çok kullanılan birim (yoksa USD).
+  const incomeRows = await tx
+    .select({ currency: records.currency })
+    .from(records)
+    .where(and(eq(records.cashAccountId, kasa.id), inArray(records.kind, ["cash", "income"])));
+  const counts = new Map<string, number>();
+  for (const r of incomeRows) counts.set(r.currency, (counts.get(r.currency) ?? 0) + 1);
+  const currency = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+  const values = {
+    kind: "expense",
+    date: list.date,
+    source: list.name,
+    detail: `Liste gideri · ${list.code}`,
+    note: list.note,
+    amount: list.amount,
+    currency,
+    cashAccount: kasa.name,
+    cashAccountId: kasa.id,
+    listName: list.name,
+    listId: list.id,
+    updatedAt: new Date(),
+  };
+  if (existing) {
+    await tx.update(records).set(values).where(eq(records.id, existing.id));
+  } else {
+    const [created] = await tx.insert(records).values(values).returning({ id: records.id });
+    await tx.update(lists).set({ expenseRecordId: created.id }).where(eq(lists.id, listId));
+  }
+}
+
+// Bir Gider kaydı bir listeden otomatik üretildiyse true (o kayıt Gider sayfasından değiştirilemez/silinemez).
+export async function listForExpenseRecord(recordId: number, db: DbClient = getDb()) {
+  const [row] = await db.select({ id: lists.id, name: lists.name, code: lists.code }).from(lists).where(eq(lists.expenseRecordId, recordId)).limit(1);
+  return row ?? null;
+}
+
+// "Liste Kasası" işaretli kasalar için (kullanıcının erişebildiği) çalışma alanı kaydı yoksa oluşturur.
+export async function ensureFlaggedWorkspaces(user: Actor, db: DbClient = getDb()): Promise<void> {
+  const flagged = await db.select({ id: cashAccounts.id }).from(cashAccounts).where(eq(cashAccounts.isListWorkspace, true));
+  if (!flagged.length) return;
+  const accessible = await accessibleCashAccountIds(user, db);
+  const ids = flagged.map((k) => k.id).filter((id) => accessible === null || accessible.includes(id));
+  if (!ids.length) return;
+  await db.insert(listWorkspaces).values(ids.map((cashAccountId) => ({ cashAccountId }))).onConflictDoNothing();
+}
+
+// Kasa "Liste Kasası" olarak işaretlenir ve çalışma alanı kaydı açılır.
+export async function markListKasa(cashAccountId: number, db: DbClient = getDb()): Promise<void> {
+  await db.update(cashAccounts).set({ isListWorkspace: true, updatedAt: new Date() }).where(eq(cashAccounts.id, cashAccountId));
+  await ensureWorkspace(cashAccountId, db);
+}

@@ -28,6 +28,7 @@ export const GET = withErrorHandling(async (request: Request) => {
         ownerName: users.name,
         createdAt: cashAccounts.createdAt,
         dashboardShareEnabled: cashAccounts.dashboardShareEnabled,
+        isListWorkspace: cashAccounts.isListWorkspace,
       })
       .from(cashAccounts)
       .leftJoin(users, eq(cashAccounts.ownerUserId, users.id))
@@ -64,6 +65,7 @@ export const GET = withErrorHandling(async (request: Request) => {
         ownerUserId: cashAccounts.ownerUserId,
         ownerName: users.name,
         dashboardShareEnabled: cashAccounts.dashboardShareEnabled,
+        isListWorkspace: cashAccounts.isListWorkspace,
       })
       .from(cashAccounts)
       .leftJoin(users, eq(cashAccounts.ownerUserId, users.id)),

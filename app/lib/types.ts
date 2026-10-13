@@ -27,6 +27,8 @@ export type RecordItem = {
   listName: string;
   // Proje Aşaması 2: bağlı liste (Listeler sayfası).
   listId?: number | null;
+  // Kasa kaydı gönderilirken "Liste Kasası" işareti (sunucu kasayı çalışma alanı yapar).
+  listKasa?: boolean;
   // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
   // avatar/logo ile aynı desen, her biri base64 data URL. Boş dizi = dosya
   // eklenmemiş.
@@ -124,6 +126,8 @@ export type CashAccountSummary = {
   createdAt?: string;
   isOwner: boolean;
   sharedWithUserIds: number[];
+  // "Liste Kasası" işaretli kasa — Listeler sayfasında otomatik çalışma alanıdır.
+  isListWorkspace?: boolean;
   // Owner-controlled opt-in (Kasalar > Paylaş or Ayarlar > Paylaşım): lets a
   // super admin fold this kasa into their own Ana Sayfa via Görüntüle.
   dashboardShareEnabled: boolean;

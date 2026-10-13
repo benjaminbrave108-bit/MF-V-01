@@ -80,7 +80,7 @@ function parseNumber(text: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function Lists({ language }: { language: Language; users?: unknown; isSuperAdmin?: boolean; currentUserName?: string }) {
+export function Lists({ language, onDataChanged }: { language: Language; onDataChanged?: () => void; users?: unknown; isSuperAdmin?: boolean; currentUserName?: string }) {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
   const [kasas, setKasas] = useState<Kasa[]>([]);
   const [kasaId, setKasaId] = useState<number | null>(null);
@@ -132,6 +132,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
       return false;
     }
     if (id != null && "workspace" in result.data) apply(result.data.workspace, id);
+    onDataChanged?.();
     return true;
   }
 
@@ -254,6 +255,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           list={null}
           onClose={() => setNewListFor(null)}
           onSaved={(ws, id) => {
+            onDataChanged?.();
             setNewListFor(null);
             apply(ws, ws.cashAccountId);
             setKasaId(ws.cashAccountId);
@@ -270,6 +272,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           list={editingList}
           onClose={() => setEditingList(null)}
           onSaved={(ws) => {
+            onDataChanged?.();
             setEditingList(null);
             apply(ws, ws.cashAccountId);
           }}
