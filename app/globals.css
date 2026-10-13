@@ -4117,3 +4117,7 @@ main { min-width: 0; overflow-x: hidden; }
 .groupCount { font-weight: 500; color: var(--muted); font-size: 11px; }
 .groupKasaTag { align-self: flex-start; }
 .groupInOut { margin-top: 0; }
+.groupCard { min-width: 0; }
+.groupCard > button:first-child { min-width: 0; min-height: 92px; }
+.groups > button { min-height: 92px; }
+.groupCard > button:first-child b, .groups > button b { max-width: 100%; }
