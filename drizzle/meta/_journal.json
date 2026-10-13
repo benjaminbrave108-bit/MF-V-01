@@ -225,6 +225,13 @@
       "when": 1791745737167,
       "tag": "0031_smiling_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791884760945,
+      "tag": "0032_slim_azazel",
+      "breakpoints": true
     }
   ]
 }

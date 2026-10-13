@@ -115,6 +115,20 @@ export const lists = pgTable("lists", {
   uniqueIndex("lists_cash_account_code_idx").on(table.cashAccountId, table.code),
 ]);
 
+// Çalışma alanı (Listeler): bir kasaya bağlı kayıt; listeler, alıcılar bunun altında yaşar.
+// amount boşsa (null) alanın geliri kasadan otomatik hesaplanır; doluysa elle girilen tutar kullanılır.
+export const listWorkspaces = pgTable("list_workspaces", {
+  id: serial("id").primaryKey(),
+  cashAccountId: integer("cash_account_id").notNull().references(() => cashAccounts.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default(""),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("list_workspaces_cash_account_idx").on(table.cashAccountId),
+]);
+
 // Çalışma alanındaki (kasa) liste alıcıları: kasadan para dağıtılan ve listelerdeki
 // ürünleri alan kişiler.
 export const workspaceRecipients = pgTable("workspace_recipients", {

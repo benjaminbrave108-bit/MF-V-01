@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
-import { cashAccounts, listAllocations, listItems, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
+import { cashAccounts, listAllocations, listItems, listWorkspaces, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
 import type { SessionUser } from "./auth";
 import { accessibleCashAccountIds, canWriteCashAccount } from "./cash-access";
 
@@ -34,17 +34,26 @@ export async function loadListForUser(listId: number, user: Actor, db: DbClient 
 // Kullanıcının yeni liste/çalışma alanı açabileceği kasalar (yazma yetkisi olanlar).
 export async function writableKasas(user: Actor, db: DbClient = getDb()) {
   const rows = await db.select({ id: cashAccounts.id, name: cashAccounts.name, ownerUserId: cashAccounts.ownerUserId }).from(cashAccounts).orderBy(cashAccounts.name);
-  return rows.filter((k) => user.isSuperAdmin || k.ownerUserId === user.id).map((k) => ({ id: k.id, name: k.name }));
+  const mine = rows.filter((k) => user.isSuperAdmin || k.ownerUserId === user.id);
+  // Yeni çalışma alanı penceresinde "kasadaki tutarı getir" için kasanın mevcut geliri (kasa + gelir kayıtları).
+  const sums = mine.length
+    ? await db
+        .select({ cashAccountId: records.cashAccountId, amount: records.amount })
+        .from(records)
+        .where(and(inArray(records.cashAccountId, mine.map((k) => k.id)), inArray(records.kind, ["cash", "income"])))
+    : [];
+  return mine.map((k) => ({
+    id: k.id,
+    name: k.name,
+    currentAmount: round2(sums.filter((r) => r.cashAccountId === k.id).reduce((a, r) => a + r.amount, 0)),
+  }));
 }
 
 // Listesi, alıcısı veya dağıtımı olan çalışma alanlarının tam ekran verisi.
 export async function buildWorkspaces(user: Actor, only: number[] | null = null, db: DbClient = getDb()) {
   const accessible = await accessibleCashAccountIds(user, db);
-  const [withLists, withRecipients] = await Promise.all([
-    db.selectDistinct({ id: lists.cashAccountId }).from(lists),
-    db.selectDistinct({ id: workspaceRecipients.cashAccountId }).from(workspaceRecipients),
-  ]);
-  let kasaIds = [...new Set([...withLists, ...withRecipients].map((r) => r.id).filter((v): v is number => v != null))];
+  const wsRows = await db.select().from(listWorkspaces);
+  let kasaIds = wsRows.map((r) => r.cashAccountId);
   if (accessible !== null) kasaIds = kasaIds.filter((id) => accessible.includes(id));
   if (only) kasaIds = kasaIds.filter((id) => only.includes(id));
   if (!kasaIds.length) return [];
@@ -106,7 +115,10 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
         ...incomeRows.filter((r) => r.cashAccountId === kasa.id),
         ...taggedRows.filter((r) => wsListNames.has(r.listName) && r.cashAccountId !== kasa.id),
       ];
-      const income = round2(incomeRowsForKasa.reduce((a, r) => a + r.amount, 0));
+      const wsRow = wsRows.find((w) => w.cashAccountId === kasa.id);
+      const autoIncome = round2(incomeRowsForKasa.reduce((a, r) => a + r.amount, 0));
+      // Elle girilen tutar varsa o, yoksa kasadan otomatik (Kasalar'daki liste kasası toplamıyla aynı).
+      const income = wsRow?.amount != null ? round2(wsRow.amount) : autoIncome;
       const currencyCount = new Map<string, number>();
       for (const r of incomeRowsForKasa) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
       const currency = [...currencyCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
@@ -122,7 +134,12 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       const distributed = round2(balances.reduce((a, b) => a + b.spent, 0));
       return {
         cashAccountId: kasa.id,
-        name: kasa.name,
+        // Çalışma alanının görünen adı: verilmişse o, yoksa kasanın adı.
+        name: wsRow?.name?.trim() ? wsRow.name.trim() : kasa.name,
+        kasaName: kasa.name,
+        note: wsRow?.note ?? "",
+        amountMode: wsRow?.amount != null ? ("manual" as const) : ("auto" as const),
+        autoIncome,
         ownerName: kasa.ownerName ?? "",
         canWrite: await canWriteCashAccount(user, kasa.id, db),
         currency,
@@ -187,4 +204,9 @@ export async function writeAllocations(
   await tx.delete(listAllocations).where(eq(listAllocations.listId, list.id));
   if (rows.length) await tx.insert(listAllocations).values(rows.map((r) => ({ listId: list.id, recipientId: r.recipientId, amount: r.amount })));
   return null;
+}
+
+// Bir kasa için çalışma alanı kaydı yoksa oluşturur (liste/alıcı eklerken güvence).
+export async function ensureWorkspace(cashAccountId: number, db: DbClient = getDb()): Promise<void> {
+  await db.insert(listWorkspaces).values({ cashAccountId }).onConflictDoNothing();
 }

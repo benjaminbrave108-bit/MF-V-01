@@ -175,6 +175,20 @@ export const listInputSchema = z.object({
   allocations: allocationsSchema.optional(),
 });
 
+export const workspaceInputSchema = z.object({
+  cashAccountId: z.number().int().positive(),
+  name: shortText(200),
+  // Elle girilen gelir tutarı; null/boş = kasadan otomatik.
+  amount: moneyAmount.nullable().optional().default(null),
+  note: shortText(2000),
+});
+
+export const workspaceUpdateSchema = z.object({
+  name: z.string().max(200).optional(),
+  amount: moneyAmount.nullable().optional(),
+  note: z.string().max(2000).optional(),
+});
+
 export const listAllocationsInputSchema = z.object({ allocations: allocationsSchema });
 
 export const listUpdateSchema = z.object({

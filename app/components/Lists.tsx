@@ -30,6 +30,10 @@ type Balance = { recipientId: number; name: string; spent: number; perList: Reco
 type Workspace = {
   cashAccountId: number;
   name: string;
+  kasaName: string;
+  note: string;
+  amountMode: "auto" | "manual";
+  autoIncome: number;
   ownerName: string;
   canWrite: boolean;
   currency: string;
@@ -39,7 +43,7 @@ type Workspace = {
   balances: Balance[];
   totals: { income: number; distributed: number; expense: number; kasaRemaining: number; unassigned: number };
 };
-type Kasa = { id: number; name: string };
+type Kasa = { id: number; name: string; currentAmount?: number };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -81,7 +85,8 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
   const [kasas, setKasas] = useState<Kasa[]>([]);
   const [kasaId, setKasaId] = useState<number | null>(null);
   const [listId, setListId] = useState<number | null>(null);
-  const [newListFor, setNewListFor] = useState<number | "pick" | null>(null);
+  const [newListFor, setNewListFor] = useState<number | null>(null);
+  const [wsForm, setWsForm] = useState<"new" | Workspace | null>(null);
   const [editingList, setEditingList] = useState<ListSummary | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -145,15 +150,15 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
               <button className="light" onClick={() => setResultFor((workspaces ?? []).map((w) => w.cashAccountId))} disabled={!workspaces?.length}>
                 📊 {tx(language, "Sonuçları Görüntüle", "View Results", "Encaman Nîşan Bide")}
               </button>
-              <button className="primary" onClick={() => setNewListFor("pick")} disabled={kasas.length === 0}>
-                ＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}
+              <button className="primary" onClick={() => setWsForm("new")}>
+                ＋ {tx(language, "Yeni Çalışma Alanı", "New Workspace", "Qada Xebatê ya Nû")}
               </button>
             </div>
           </div>
           {workspaces === null && <p className="listsHint">…</p>}
           {workspaces?.length === 0 && (
             <p className="listsHint">
-              {tx(language, "Henüz liste yok. Bir kasayı çalışma alanı olarak seçip ilk listenizi oluşturun.", "No lists yet. Pick a cash account as the workspace and create your first list.", "Hê lîste tune. Qaseyekê wekî qada xebatê hilbijêrin û lîsteya xwe ya yekem biafirînin.")}
+              {tx(language, "Henüz çalışma alanı yok. Yeni Çalışma Alanı ile bir kasa seçin; listeleri alanın içinde oluşturursunuz.", "No workspaces yet. Create one with New Workspace by picking a cash account; you create lists inside it.", "Hê qada xebatê tune. Bi Qada Xebatê ya Nû qaseyekê hilbijêrin; lîste di nav qadê de têne çêkirin.")}
             </p>
           )}
           <div className="listCards">
@@ -162,7 +167,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
                 <span className="listCardCode">{tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}</span>
                 <strong>{w.name}</strong>
                 <small>
-                  {w.ownerName || "—"} · {w.lists.length} {tx(language, "liste", "lists", "lîste")} · {w.recipients.length} {tx(language, "alıcı", "recipients", "wergir")}
+                  {w.kasaName !== w.name ? `${tx(language, "Kasa", "Cash", "Qase")}: ${w.kasaName} · ` : ""}{w.ownerName || "—"} · {w.lists.length} {tx(language, "liste", "lists", "lîste")} · {w.recipients.length} {tx(language, "alıcı", "recipients", "wergir")}
                 </small>
                 <dl>
                   <div><dt>{tx(language, "Gelir", "Income", "Dahat")}</dt><dd>{money(w.totals.income, w.currency)}</dd></div>
@@ -186,6 +191,7 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
           onRenameRecipient={(id, name) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "PUT", { name })}
           onDeleteRecipient={(id) => mutate(`/api/list-workspaces/${workspace.cashAccountId}/recipients/${id}`, "DELETE")}
           onShowResult={() => setResultFor([workspace.cashAccountId])}
+          onEditWorkspace={() => setWsForm(workspace)}
           onSaveAllocations={(id, allocations) => mutate(`/api/lists/${id}/allocations`, "PUT", { allocations })}
         />
       )}
@@ -211,12 +217,26 @@ export function Lists({ language }: { language: Language; users?: unknown; isSup
         />
       )}
       {resultFor && workspaces && <ListsResultModal language={language} workspaces={workspaces} initialIds={resultFor} onClose={() => setResultFor(null)} />}
+      {wsForm && (
+        <WorkspaceFormModal
+          language={language}
+          kasas={wsForm === "new" ? kasas.filter((k) => !workspaces?.some((w) => w.cashAccountId === k.id)) : kasas}
+          workspace={wsForm === "new" ? null : wsForm}
+          onClose={() => setWsForm(null)}
+          onSaved={(ws) => {
+            setWsForm(null);
+            apply(ws, ws.cashAccountId);
+            setKasaId(ws.cashAccountId);
+            setListId(null);
+          }}
+        />
+      )}
       {newListFor !== null && (
         <ListFormModal
           language={language}
           kasas={kasas}
-          fixedKasaId={newListFor === "pick" ? null : newListFor}
-          workspace={newListFor === "pick" ? null : workspaces?.find((w) => w.cashAccountId === newListFor) ?? null}
+          fixedKasaId={newListFor}
+          workspace={workspaces?.find((w) => w.cashAccountId === newListFor) ?? null}
           list={null}
           onClose={() => setNewListFor(null)}
           onSaved={(ws, id) => {
@@ -505,6 +525,113 @@ function ListsResultModal({
   );
 }
 
+// Yeni çalışma alanı / düzenleme: bir kasa seçilir (çalışma alanının kasası), isteğe bağlı ad, gelir tutarı
+// (kasadan otomatik ya da elle) ve not girilir. Alt listeler çalışma alanının içinde oluşturulur.
+function WorkspaceFormModal({
+  language,
+  kasas,
+  workspace,
+  onClose,
+  onSaved,
+}: {
+  language: Language;
+  kasas: Kasa[];
+  workspace: Workspace | null;
+  onClose: () => void;
+  onSaved: (ws: Workspace) => void;
+}) {
+  const [kasaId, setKasaId] = useState<number | "">(workspace?.cashAccountId ?? "");
+  const [name, setName] = useState(workspace && workspace.name !== workspace.kasaName ? workspace.name : "");
+  const [mode, setMode] = useState<"auto" | "manual">(workspace?.amountMode ?? "auto");
+  const [amount, setAmount] = useState(workspace && workspace.amountMode === "manual" ? String(workspace.totals.income) : "");
+  const [note, setNote] = useState(workspace?.note ?? "");
+  const [saving, setSaving] = useState(false);
+  const kasa = kasas.find((k) => k.id === kasaId);
+  const current = workspace ? workspace.autoIncome : kasa?.currentAmount ?? 0;
+
+  async function save() {
+    if (kasaId === "") return;
+    const manual = mode === "manual";
+    const value = manual ? r2(parseNumber(amount)) : null;
+    setSaving(true);
+    const result = workspace
+      ? await api<{ workspace: Workspace }>(`/api/list-workspaces/${workspace.cashAccountId}`, "PUT", { name: name.trim(), amount: value, note: note.trim() })
+      : await api<{ workspace: Workspace }>("/api/list-workspaces", "POST", { cashAccountId: kasaId, name: name.trim(), amount: value, note: note.trim() });
+    setSaving(false);
+    if (!result.ok) return alert(result.error);
+    onSaved(result.data.workspace);
+  }
+
+  return (
+    <div className="overlay">
+      <form
+        className="modal listFormModal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (kasaId !== "") save();
+        }}
+      >
+        <div className="modalHead">
+          <div>
+            <h2>{workspace ? tx(language, "Çalışma Alanını Düzenle", "Edit Workspace", "Qada Xebatê Biguherîne") : tx(language, "Yeni Çalışma Alanı", "New Workspace", "Qada Xebatê ya Nû")}</h2>
+            <p>{tx(language, "Çalışma alanının kasasını seçin; ad, gelir tutarı ve not isteğe bağlıdır. Listeler alanın içinde oluşturulur.", "Pick the workspace's cash account; name, income amount and note are optional. Lists are created inside the workspace.", "Qaseya qada xebatê hilbijêrin; nav, mîqdar û nîşe bijarte ne. Lîste di nav qadê de têne çêkirin.")}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="formGrid">
+          <label>
+            {tx(language, "Kasa (çalışma alanı)", "Cash account (workspace)", "Qase (qada xebatê)")}
+            {workspace ? (
+              <input value={workspace.kasaName} disabled />
+            ) : (
+              <select required value={kasaId} onChange={(e) => setKasaId(e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{kasas.length ? tx(language, "Kasa seçin", "Select a cash account", "Qaseyekê hilbijêre") : tx(language, "Seçilebilecek kasa yok", "No cash account available", "Qase tune")}</option>
+                {kasas.map((k) => (<option key={k.id} value={k.id}>{k.name}</option>))}
+              </select>
+            )}
+          </label>
+          <label>
+            {tx(language, "Ad (isteğe bağlı)", "Name (optional)", "Nav (bijarte)")}
+            <input value={name} maxLength={200} placeholder={kasa?.name ?? workspace?.kasaName ?? ""} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className="wide listMembersEditor">
+            <small>{tx(language, "Gelir tutarı", "Income amount", "Mîqdara dahatê")}</small>
+            <div className="listAmountMode">
+              <label className="checkField">
+                <input type="radio" name="wsAmountMode" checked={mode === "auto"} onChange={() => setMode("auto")} />
+                {tx(language, "Kasadan otomatik al", "Take from the cash account", "Ji qaseyê bixweber bigire")}
+                <em>{money(current, "USD")}</em>
+              </label>
+              <label className="checkField">
+                <input type="radio" name="wsAmountMode" checked={mode === "manual"} onChange={() => setMode("manual")} />
+                {tx(language, "Elle gir", "Enter manually", "Bi destî binivîse")}
+              </label>
+            </div>
+            {mode === "manual" && (
+              <div className="listInlineForm" style={{ width: "100%" }}>
+                <input inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <button type="button" className="light compact" onClick={() => setAmount(String(current))} disabled={kasaId === ""}>
+                  {tx(language, "Kasadaki tutarı getir", "Fetch the cash account amount", "Mîqdara qaseyê bîne")}
+                </button>
+              </div>
+            )}
+          </div>
+          <label className="wide">
+            {tx(language, "Not", "Note", "Nîşe")}
+            <textarea rows={2} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+        </div>
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+          <button className="primary" disabled={saving || kasaId === "" || (mode === "manual" && !amount.trim())}>
+            {workspace ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Çalışma Alanını Kaydet", "Save Workspace", "Qada Xebatê Tomar Bike")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function WorkspaceView({
   language,
   ws,
@@ -517,11 +644,13 @@ function WorkspaceView({
   onDeleteRecipient,
   onSaveAllocations,
   onShowResult,
+  onEditWorkspace,
 }: {
   language: Language;
   ws: Workspace;
   busy: boolean;
   onShowResult: () => void;
+  onEditWorkspace: () => void;
   onBack: () => void;
   onSaveAllocations: (listId: number, allocations: { recipientId: number; amount: number }[]) => Promise<boolean>;
   onOpenList: (id: number) => void;
@@ -546,9 +675,11 @@ function WorkspaceView({
           <button className="light compact" onClick={onBack}>← {tx(language, "Listeler", "Lists", "Lîste")}</button>
           <span className="listWsLabel">{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</span>
           <span className="listWsName">{ws.name}</span>
-          <small className="listMuted">{ws.ownerName || "—"} · {c}</small>
+          <small className="listMuted">{ws.kasaName !== ws.name ? `${tx(language, "Kasa", "Cash", "Qase")}: ${ws.kasaName} · ` : ""}{ws.ownerName || "—"} · {c}</small>
+          {ws.note && <small className="listWsNote" title={ws.note}>📝 {ws.note}</small>}
         </div>
         <div className="listWsActions">
+          {ws.canWrite && <button className="light" onClick={onEditWorkspace}>✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}</button>}
           <button className="light" onClick={onShowResult}>📊 {tx(language, "Sonuçları Görüntüle", "View Results", "Encaman Nîşan Bide")}</button>
           {ws.canWrite && <button className="primary" onClick={onNewList}>＋ {tx(language, "Yeni Liste", "New List", "Lîsteya Nû")}</button>}
         </div>

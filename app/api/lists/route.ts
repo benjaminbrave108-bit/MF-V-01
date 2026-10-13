@@ -2,7 +2,7 @@ import { getDb } from "../../../db";
 import { lists } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
-import { buildWorkspaces, workspaceAccess, writableKasas, writeAllocations } from "../_lib/lists";
+import { buildWorkspaces, ensureWorkspace, workspaceAccess, writableKasas, writeAllocations } from "../_lib/lists";
 import { listInputSchema, parseBody } from "../_lib/validate";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -37,6 +37,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   const db = getDb();
   const access = await workspaceAccess(payload.cashAccountId, session.user, db);
   if (!access.canWrite) return json({ error: "Forbidden" }, { status: 403 });
+  await ensureWorkspace(payload.cashAccountId, db);
   let allocationError: string | null = null;
   try {
     const result = await db.transaction(async (tx) => {

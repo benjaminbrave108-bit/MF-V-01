@@ -4077,3 +4077,9 @@ main { min-width: 0; overflow-x: hidden; }
 .listToolsTab em { font-style: normal; font-weight: 600; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #eef3f5; color: #5d7580; }
 .listToolsTab.active em { background: rgba(255, 255, 255, 0.2); color: #fff; }
 .listToolsBody { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #c9d6db; display: flex; flex-direction: column; gap: 8px; }
+
+/* Listeler: çalışma alanı formu ve notu */
+.listWsNote { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5d7580; background: #f3f7f8; border-radius: 6px; padding: 2px 8px; }
+.listAmountMode { display: flex; flex-direction: column; gap: 6px; }
+.listAmountMode label { display: flex; align-items: center; gap: 8px; }
+.listAmountMode em { font-style: normal; font-weight: 700; color: #123f52; background: #eef3f5; border-radius: 999px; padding: 1px 10px; font-size: 11px; }
