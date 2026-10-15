@@ -31,7 +31,7 @@ export async function parseBody<T extends ZodType>(
 }
 
 const kindSchema = z.enum(["cash", "income", "expense"]);
-const currencySchema = z.enum(["USD", "IQD", "TRY", "EUR"]);
+const currencySchema = z.enum(["USD", "IQD", "TRY", "EUR", "SYP"]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (expected YYYY-MM-DD)");
 const amountSchema = z.number().finite().min(0).max(999_999_999_999.99);
 const shortText = (max: number) => z.string().max(max).optional().default("");
@@ -129,6 +129,31 @@ export const recordUpdateSchema = z.object({
 const importDateSchema = z.union([z.literal(""), dateSchema]);
 export const recordImportSchema = z.object({
   items: z.array(recordInputSchema.partial({ date: true }).extend({ date: importDateSchema.optional().default("") })).min(1).max(2000),
+});
+
+// Excel aktarımı (sihirbaz): gelir/gider kayıtları, isteğe bağlı detay tablosu; importKey çift aktarımı engeller.
+export const excelImportSchema = z.object({
+  batchId: z.string().min(6).max(64),
+  kasaName: z.string().trim().min(1).max(200),
+  listKasa: z.boolean().optional().default(false),
+  items: z
+    .array(
+      z.object({
+        kind: z.enum(["income", "expense"]),
+        date: dateSchema,
+        source: shortText(200),
+        detail: shortText(2000),
+        note: shortText(2000),
+        person: shortText(200),
+        amount: amountSchema,
+        currency: currencySchema.optional().default("USD"),
+        project: shortText(200),
+        detailTable: detailTableSchema.optional().default([]),
+        importKey: z.string().max(240).optional().default(""),
+      }),
+    )
+    .min(1)
+    .max(500),
 });
 
 export const cashTransferInputSchema = z.object({

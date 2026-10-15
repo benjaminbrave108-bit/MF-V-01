@@ -944,6 +944,7 @@ export default function Home() {
               onEdit={(item) => setModal({ kind: item.kind, item })}
               onDelete={removeRecord}
               onImport={importRecords}
+              onRefreshData={() => { refreshRecords(); refreshCashAccounts(); }}
               checkPassword={checkPassword}
               cashAccounts={contextCashAccounts}
               users={users}

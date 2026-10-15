@@ -279,6 +279,7 @@ export function Settings({
               <select>
                 <option>USD</option>
                 <option>IQD</option>
+              <option>SYP</option>
                 <option>TRY</option>
                 <option>EUR</option>
               </select>

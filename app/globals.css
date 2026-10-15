@@ -4140,3 +4140,17 @@ main { min-width: 0; overflow-x: hidden; }
 .listFilters select { padding: 6px 8px; border: 1px solid #d8e2e5; border-radius: 8px; font-size: 12px; background: #fff; max-width: 200px; }
 .lgListTag { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #e8f3f6; color: #176b87; font-size: 11px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .listKasaHint { display: block; margin-top: 4px; font-size: 10px; line-height: 1.35; color: #176b87; background: #e8f3f6; border-radius: 6px; padding: 4px 8px; }
+
+/* Excel'den Kasa Aktar sihirbazı */
+.xiModal { width: min(960px, 96vw); }
+.xiOptions { display: flex; flex-direction: column; gap: 6px; }
+.xiBlocks { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow: auto; }
+.xiBlock { border: 1px solid #d8e2e5; border-radius: 10px; padding: 8px 12px; background: #fff; }
+.xiBlock.off { opacity: 0.6; background: #f7fafb; }
+.xiBlockHead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.xiBlockHead select { padding: 4px 6px; font-size: 12px; }
+.xiStats { color: #176b87; font-weight: 600; }
+.xiTag { font-style: normal; font-size: 10px; background: #eef3f5; color: #5d7580; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+.xiMapping { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d8e2e5; }
+.xiMapping label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #5d7580; }
+.xiMapping select { padding: 3px 6px; font-size: 12px; }

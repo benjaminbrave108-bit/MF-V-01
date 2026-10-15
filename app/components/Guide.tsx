@@ -190,6 +190,56 @@ export function Guide({ language }: { language: Language }) {
       ),
     },
     {
+      id: "excelImport",
+      title: tx(language, "Excel'den Kasa Aktar", "Import a Cash Account from Excel", "Qaseyekê ji Excelê Têxe"),
+      body: (
+        <>
+          <p>
+            {tx(
+              language,
+              "Kasalar sayfasındaki \"⇧ Excel'den Kasa Aktar\" düğmesi, gelir ve gider sayfaları olan bir Excel dosyasını (Kürtçe başlıklar dahil) seçtiğiniz kasaya aktarır. Dosya tarayıcıda okunur; onaylamadan hiçbir şey kaydedilmez.",
+              "The \"⇧ Import Cash from Excel\" button on the Kasalar page imports an Excel file with income and expense sheets (Kurdish headers included) into the cash account you choose. The file is read in the browser; nothing is saved until you confirm.",
+              "Bişkoka \"⇧ Qase ji Excelê Têxe\" a di rûpela Qase de pelê Excel yê bi rûpelên dahat û mesrefê (sernavên Kurdî jî) têxe qaseya hilbijartî. Pel di gerokê de tê xwendin; heta hûn erê nekin tu tişt nayê tomarkirin.",
+            )}
+          </p>
+          <ul>
+            <li>
+              {tx(
+                language,
+                "1) Dosya ve kasa: .xlsx dosyasını seçin, hedef kasayı seçin ya da yeni kasa adı yazın. İsterseniz kasayı Liste Kasası yapın.",
+                "1) File and cash account: choose the .xlsx file, then pick the target cash account or type a new name. You can also make it a List cash account.",
+                "1) Pel û qase: pela .xlsx hilbijêrin, qaseya armanc hilbijêrin an navekî nû binivîsin. Her wiha dikarin wê bikin Qaseya Lîsteyê.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "2) Sayfalar ve sütunlar: her tablo (yan yana gelir/gider tabloları dahil) Gelir, Gider veya Yok say olarak tahmin edilir; sütunlar Kürtçe başlıklardan eşleşir ve \"Sütunlar\" ile elle değiştirilebilir. Gizli sayfalar varsayılan olarak aktarılmaz. Özet sayfalarındaki sayılar kontrol için gösterilir.",
+                "2) Sheets and columns: each table (including side-by-side income/expense tables) is guessed as Income, Expense or Ignore; columns are matched from Kurdish headers and can be changed by hand under \"Columns\". Hidden sheets are not imported by default. Numbers from summary sheets are shown for checking.",
+                "2) Rûpel û stûn: her tablo (tabloyên dahat/mesrefê yên li kêleka hev jî) wekî Dahat, Mesref an Paşguh bike tê texmînkirin; stûn ji sernavên Kurdî têne hevber kirin û bi \"Stûn\" bi destî dikarin werin guhertin. Rûpelên veşartî bi gelemperî nayên barkirin. Hejmarên rûpelên kurte ji bo kontrolê têne nîşandan.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "3) Önizleme ve aktarım: kayıt sayısı, gelir ve gider toplamı ve ilk kayıtlar görünür. Aynı fatura numaralı satırlar tek kayıtta toplanır (ürün satırları \"Detay\" tablosuna girer); sayfa adı Proje olarak yazılabilir; ay/gün ters okunmuş şüpheli tarihler düzeltilebilir.",
+                "3) Preview and import: record count, income and expense totals and the first records are shown. Rows with the same invoice number are combined into one record (item rows go to the \"Detail\" table); the sheet name can be written as Project; suspicious day/month-swapped dates can be fixed.",
+                "3) Pêşdîtin û barkirin: hejmara qeydan, hejmara dahat û mesrefê û qeydên yekem têne nîşandan. Rêzên bi heman hejmara fatûreyê di yek qeydê de têne civandin (berhem diçin tabloya \"Hûrgulî\"); navê rûpelê dikare wekî Proje were nivîsandin; dîrokên bi guman ên roj/meh berevajî dikarin werin rastkirin.",
+              )}
+            </li>
+            <li>
+              {tx(
+                language,
+                "Güvenlik: aynı dosya tekrar yüklenirse daha önce aktarılan satırlar atlanır; aktarım bittiğinde \"Geri al\" ile tüm aktarım silinebilir. Suriye lirası (SYP) para birimi desteklenir.",
+                "Safety: if the same file is uploaded again, rows already imported are skipped; when the import finishes you can remove the whole import with \"Undo\". The Syrian pound (SYP) currency is supported.",
+                "Ewlehî: heke heman pel dîsa were barkirin, rêzên berê hatine barkirin têne bihurandin; piştî barkirinê bi \"Vegerîne\" hemû barkirin dikare were jêbirin. Dirava lîreya Sûriyê (SYP) tê piştgirîkirin.",
+              )}
+            </li>
+          </ul>
+        </>
+      ),
+    },
+    {
       id: "expenseDetail",
       title: tx(language, "Gider Detay Tablosu", "Expense Detail Table", "Tabloya Hûrguliyên Mesrefê"),
       body: (

@@ -215,6 +215,10 @@ export const records = pgTable("records", {
   // Proje Aşaması 2: kaydın bağlı olduğu liste (listName, listenin adının
   // kopyası olarak kalır — eski ekranlar ve raporlar onu kullanmaya devam eder).
   listId: integer("list_id").references(() => lists.id, { onDelete: "set null" }),
+  // Excel aktarımı: aynı aktarımdaki kayıtlar tek tıkla geri alınabilsin (importBatch) ve aynı satırlar ikinci
+  // yüklemede çift kayıt oluşturmasın (importKey).
+  importBatch: text("import_batch"),
+  importKey: text("import_key"),
   // Bir kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
   // avatar/logo ile aynı desen: her biri base64 data URL olarak doğrudan
   // saklanır (ayrı bir dosya depolama/S3 entegrasyonu yok). Dizi elemanı:
@@ -234,6 +238,8 @@ export const records = pgTable("records", {
   index("records_date_idx").on(table.date),
   index("records_cash_account_id_idx").on(table.cashAccountId),
   index("records_cash_account_idx").on(table.cashAccount),
+  index("records_import_key_idx").on(table.importKey),
+  index("records_import_batch_idx").on(table.importBatch),
   check("records_kind_check", sql`${table.kind} IN ('cash', 'income', 'expense')`),
 ]);
 

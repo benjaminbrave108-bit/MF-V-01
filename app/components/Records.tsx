@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
+import { ExcelImportModal } from "./ExcelImport";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
 import type { CashAccountSummary, CashTransfer, FinanceNote, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
@@ -898,6 +899,7 @@ export function Records({
   onCommentsRead,
   readOnly,
   notes,
+  onRefreshData,
 }: {
   language: Language;
   kind: Kind;
@@ -918,7 +920,9 @@ export function Records({
   onCommentsRead?: () => void;
   readOnly: boolean;
   notes: FinanceNote[];
+  onRefreshData?: () => void;
 }) {
+  const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
   const [commentTarget, setCommentTarget] = useState<RecordItem | null>(null);
   // Satırdaki "Detay" göstergesine basınca açılan, yapıştırılmış gider
@@ -2005,6 +2009,11 @@ export function Records({
           <button className="light" onClick={exportExcel}>
             ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
           </button>
+          {kind === "cash" && !readOnly && (
+            <button className="light" onClick={() => setExcelImportOpen(true)} title={tx(language, "Excel dosyasındaki gelir/gider/detayı bir kasaya aktar", "Import income/expense/detail from an Excel file into a cash account", "Dahat/mesref/hûrguliyan ji pelê Excel têxe qaseyekê")}>
+              ⇧ {tx(language, "Excel'den Kasa Aktar", "Import Cash from Excel", "Qase ji Excelê Têxe")}
+            </button>
+          )}
           {kasaSplitActive && (
             <button className="light" onClick={() => setKasaResultOpen(true)}>
               📊 {tx(language, "Sonuç Oluştur", "Create Result", "Encamê Biafirîne")}
@@ -2026,6 +2035,14 @@ export function Records({
             "Ev daneyên bikarhênerek din in ku hatine parvekirin — hûn tenê dikarin bibînin.",
           )}
         </div>
+      )}
+      {excelImportOpen && (
+        <ExcelImportModal
+          language={language}
+          kasaOptions={[...new Set([...cashAccounts.map((a) => a.name), ...records.filter((x) => x.kind === "cash").map((x) => x.source)].filter(Boolean))].sort((a, b) => a.localeCompare(b))}
+          onClose={() => setExcelImportOpen(false)}
+          onDone={() => onRefreshData?.()}
+        />
       )}
       <div className="groups">
         <button
@@ -3209,6 +3226,7 @@ export function RecordModal({
             >
               <option>USD</option>
               <option>IQD</option>
+              <option>SYP</option>
               <option>TRY</option>
               <option>EUR</option>
             </select>
@@ -3813,6 +3831,7 @@ function KasaTransferSection({
               <select value={tCurrency} onChange={(e) => setTCurrency(e.target.value)}>
                 <option>USD</option>
                 <option>IQD</option>
+              <option>SYP</option>
                 <option>TRY</option>
                 <option>EUR</option>
               </select>
