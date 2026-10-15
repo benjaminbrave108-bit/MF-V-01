@@ -6,6 +6,7 @@ import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
 import { ExcelImportModal } from "./ExcelImport";
+import { KasaDeleteModal, KasaEditModal } from "./KasaManage";
 import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
@@ -1252,6 +1253,20 @@ export function Records({
     Record<number, { count: number; lastText: string; lastUserName: string; hasAttention: boolean; hasUnread: boolean }>
   >({});
   const [shareTarget, setShareTarget] = useState<CashAccountSummary | null>(null);
+  const [kasaEditTarget, setKasaEditTarget] = useState<CashAccountSummary | null>(null);
+  const [kasaDeleteTarget, setKasaDeleteTarget] = useState<CashAccountSummary | null>(null);
+  // Seçili kasa kartında "Kasayı Düzenle" ve "Kasayı Sil" (şifreli onay) düğmeleri.
+  const kasaActions = (name: string, selected: boolean) => {
+    if (!selected || readOnly) return null;
+    const account = cashAccounts.find((a) => a.name === name);
+    if (!account) return null;
+    return (
+      <span className="kasaActions">
+        <button type="button" title={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} aria-label={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} onClick={() => setKasaEditTarget(account)}>✎</button>
+        <button type="button" className="danger" title={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} aria-label={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} onClick={() => setKasaDeleteTarget(account)}>🗑</button>
+      </span>
+    );
+  };
   const [shareBusyKey, setShareBusyKey] = useState<string | null>(null);
   const [dashboardShareBusy, setDashboardShareBusy] = useState(false);
   const [approvingId, setApprovingId] = useState<number | null>(null);
@@ -2106,6 +2121,33 @@ export function Records({
           )}
         </div>
       )}
+      {kasaEditTarget && (
+        <KasaEditModal
+          language={language}
+          account={kasaEditTarget}
+          sections={sections}
+          onClose={() => setKasaEditTarget(null)}
+          onDone={() => {
+            setSource("Tümü");
+            setActiveKasa("");
+            onRefreshData?.();
+          }}
+        />
+      )}
+      {kasaDeleteTarget && (
+        <KasaDeleteModal
+          language={language}
+          account={kasaDeleteTarget}
+          recordCount={allRecords.filter((x) => (x.kind === "cash" ? x.source : x.cashAccount) === kasaDeleteTarget.name).length}
+          onClose={() => setKasaDeleteTarget(null)}
+          onDone={() => {
+            setSource("Tümü");
+            setActiveKasa("");
+            setShowAllLists(false);
+            onRefreshData?.();
+          }}
+        />
+      )}
       {excelImportOpen && (
         <ExcelImportModal
           language={language}
@@ -2191,6 +2233,7 @@ export function Records({
                   🔗
                 </button>
               )}
+            {kind === "cash" && kasaActions(g.name, source === g.name && !showAllLists)}
             {renderGroupTooltip(g, matchingAccount)}
           </div>
           );
@@ -2219,6 +2262,7 @@ export function Records({
                   <em className="groupKasaTag">▣ {tx(language, "Kasa", "Cash account", "Qase")}</em>
                   <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
                 </button>
+                {kasaActions(k.name, activeKasa === k.name && !showAllLists)}
               </div>
             ))}
             {sectionBoxes.map(({ section, count, totalByCurrency }) => (
@@ -2343,6 +2387,7 @@ export function Records({
                   </em>
                   <strong>{moneyBreakdown(b.totalByCurrency)}</strong>
                 </button>
+                {kasaActions(b.name, activeKasa === b.name && showAllLists)}
               </div>
             ))}
         </div>
@@ -2371,6 +2416,7 @@ export function Records({
                     <strong style={{ color: section.color }}>{moneyBreakdown(combineByCurrency([{ rows: g.directRows }, { rows: g.inc }, { rows: g.exp, sign: -1 }]))}</strong>
                     <span className="groupInOut"><span className="in">↗ {moneyBreakdown(combineByCurrency([{ rows: g.directRows }, { rows: g.inc }]))}</span><span className="out">↘ {moneyBreakdown(combineByCurrency([{ rows: g.exp }]))}</span></span>
                   </button>
+                  {kasaActions(g.name, source === g.name)}
                 </div>
               ))}
             </div>
@@ -2401,6 +2447,7 @@ export function Records({
                   <span className="out">↘ {moneyBreakdown(g.totalOutByCurrency)}</span>
                 </span>
               </button>
+              {kasaActions(g.name, source === g.name)}
             </div>
           ))}
         </div>

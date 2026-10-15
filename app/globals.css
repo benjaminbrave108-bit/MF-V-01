@@ -4198,3 +4198,20 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .sectionColors { display: inline-flex; gap: 4px; }
 .sectionColors button { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .sectionColors button.active { border-color: #1b2733; }
+
+
+/* Seçili kasa kartı: düzenle / sil düğmeleri */
+.groupCard { position: relative; }
+.kasaActions { position: absolute; top: 5px; right: 6px; display: flex; gap: 4px; z-index: 2; }
+.kasaActions button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid #c8dfe5; border-radius: 7px; background: #fff; color: #287b98; font-size: 12px; cursor: pointer; }
+.kasaActions button:hover { background: #dff1f5; }
+.kasaActions button.danger { border-color: #ebcccc; color: #a84848; }
+.kasaActions button.danger:hover { background: #fdeeee; }
+.kasaManageModal { width: min(460px, 94vw); }
+.kasaManageBody { display: grid; gap: 12px; padding: 4px 2px 10px; }
+.kasaManageBody label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; }
+.kasaManageBody label.checkRow { display: flex; align-items: center; gap: 8px; }
+.kasaManageWarn { margin: 0; padding: 9px 11px; border-radius: 8px; background: #fff4f4; border: 1px solid #ebcccc; color: #8a3a3a; font-size: 12px; line-height: 1.45; }
+.kasaManageError { margin: 0; color: #b03a3a; font-size: 12px; font-weight: 700; }
+
+.kasaManageBody input[type=text], .kasaManageBody input:not([type]), .kasaManageBody input[type=password], .kasaManageBody select { padding: 8px 10px; border: 1px solid #c8dfe5; border-radius: 8px; font-size: 13px; }
