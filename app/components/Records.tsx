@@ -2079,7 +2079,7 @@ export function Records({
           <button className="light" onClick={exportExcel}>
             ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
           </button>
-          {kind === "cash" && !readOnly && (
+          {!readOnly && (
             <button className="light" onClick={() => setExcelImportOpen(true)} title={tx(language, "Excel dosyasındaki gelir/gider/detayı bir kasaya aktar", "Import income/expense/detail from an Excel file into a cash account", "Dahat/mesref/hûrguliyan ji pelê Excel têxe qaseyekê")}>
               ⇧ {tx(language, "Excel'den Kasa Aktar", "Import Cash from Excel", "Qase ji Excelê Têxe")}
             </button>
