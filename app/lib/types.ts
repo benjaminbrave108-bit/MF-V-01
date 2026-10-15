@@ -29,6 +29,8 @@ export type RecordItem = {
   listId?: number | null;
   // Kasa kaydı gönderilirken "Liste Kasası" işareti (sunucu kasayı çalışma alanı yapar).
   listKasa?: boolean;
+  // Excel aktarımıyla gelen kayıtların aktarım numarası (kasa kutusunda toplanır, başlık kutusu oluşturmaz).
+  importBatch?: string | null;
   // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
   // avatar/logo ile aynı desen, her biri base64 data URL. Boş dizi = dosya
   // eklenmemiş.

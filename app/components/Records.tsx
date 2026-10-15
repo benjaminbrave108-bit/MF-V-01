@@ -1386,10 +1386,11 @@ export function Records({
     () =>
       // Gelir sayfasında kasanın kendi adıyla açılan kayıt kutuları (ör. "Ana -Kasa") ayrı kasa kutusunda (ör. "Ana -Kasa Gelirleri")
       // zaten toplandığı için burada tekrar edilmez.
-      [...new Set(records.filter((x) => !listOf(x)).map((x) => x.source))]
+      // Excel aktarımıyla gelen kayıtlar (yüzlerce ürün/kalem başlığı olabilir) tek tek kutu oluşturmaz; kasa kutusunda toplanır.
+      [...new Set(records.filter((x) => !listOf(x) && !(kind !== "cash" && x.importBatch)).map((x) => x.source))]
         .filter((name) => !(kind !== "cash" && cashAccounts.some((a) => a.name === name)))
         .map((name) => {
-        const directRows = records.filter((x) => x.source === name && !listOf(x));
+        const directRows = records.filter((x) => x.source === name && !listOf(x) && !(kind !== "cash" && x.importBatch));
         const linkedIncomeRows =
           kind === "cash"
             ? allRecords.filter((x) => x.kind === "income" && x.cashAccount === name)
