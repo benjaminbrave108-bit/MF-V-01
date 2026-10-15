@@ -1353,6 +1353,9 @@ export function Records({
   // "Liste Kasası" işaretli kasalar (Listeler ile ilişkili): üstteki kasa kartlarında değil, yalnızca "Tüm Liste Kasaları"
   // bölümünde görünür; kasanın kendi kayıtları listeli kayıt sayılır.
   const kasaListNames = new Set(cashAccounts.filter((a) => a.isListWorkspace).map((a) => a.name));
+  // "RJ-Kasaları": üstteki kasa kartlarında değil, kendi renkli bölümlerinde görünür (Liste Kasaları gibi ayrı tutulur).
+  const kasaRjNames = new Set(cashAccounts.filter((a) => a.isRjKasa).map((a) => a.name));
+  const kasaSeparateNames = new Set([...kasaListNames, ...kasaRjNames]);
   const listOf = (x: RecordItem) => x.listName || (x.kind === "cash" && kasaListNames.has(x.source) ? x.source : "");
   const isListLinked = (x: RecordItem) => !!x.listName || kasaListNames.has(x.cashAccount);
   const filterSourceOptions = [...new Set(records.map((x) => x.source).filter(Boolean))];
@@ -1387,7 +1390,7 @@ export function Records({
       // Gelir sayfasında kasanın kendi adıyla açılan kayıt kutuları (ör. "Ana -Kasa") ayrı kasa kutusunda (ör. "Ana -Kasa Gelirleri")
       // zaten toplandığı için burada tekrar edilmez.
       // Excel aktarımıyla gelen kayıtlar (yüzlerce ürün/kalem başlığı olabilir) tek tek kutu oluşturmaz; kasa kutusunda toplanır.
-      [...new Set(records.filter((x) => !listOf(x) && !(kind !== "cash" && x.importBatch)).map((x) => x.source))]
+      [...new Set(records.filter((x) => !listOf(x) && !(kind !== "cash" && x.importBatch) && !(kind === "cash" && kasaRjNames.has(x.source))).map((x) => x.source))]
         .filter((name) => !(kind !== "cash" && cashAccounts.some((a) => a.name === name)))
         .map((name) => {
         const directRows = records.filter((x) => x.source === name && !listOf(x) && !(kind !== "cash" && x.importBatch));
@@ -1470,13 +1473,13 @@ export function Records({
   // arrays (not by summing groups' already-blended totals) so mixed
   // currencies show as separate amounts instead of one wrong number.
   // "Tüm Kasalar" toplamı: Listeler ile ilişkili (Liste Kasası) kasalar burada değil, "Tüm Liste Kasaları"nda sayılır.
-  const plainRecords = kind === "cash" ? records.filter((x) => !kasaListNames.has(x.source)) : records;
+  const plainRecords = kind === "cash" ? records.filter((x) => !kasaSeparateNames.has(x.source)) : records;
   const overallByCurrency = useMemo(
     () =>
       combineByCurrency([
         { rows: plainRecords },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [] },
-        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [], sign: -1 },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [] },
+        { rows: kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [], sign: -1 },
       ]),
     [plainRecords, allRecords, kind, cashAccounts],
   );
@@ -1533,8 +1536,8 @@ export function Records({
   );
   // "Tüm Kasalar" / "Tüm Liste Kasaları" kutuları da tek tek kasa kartları gibi gelir ↗ ve gider ↘ satırını gösterir.
   const overallInOut = useMemo(() => {
-    const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [];
-    const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [];
+    const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [];
+    const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [];
     return { inBy: combineByCurrency([{ rows: plainRecords }, { rows: incomeRows }]), outBy: combineByCurrency([{ rows: expenseRows }]) };
   }, [plainRecords, allRecords, kind, cashAccounts]);
   // Gelir/Gider sayfalarında liste kayıtları, genel yönteme uygun olarak liste adına göre değil bağlı oldukları (Liste)
@@ -1558,6 +1561,34 @@ export function Records({
       .filter((b) => Math.abs(b.amount) > 0.004)
       .sort((a, b) => b.amount - a.amount);
   }, [records, kind, cashAccounts]);
+  // RJ-Kasaları bölümü: işaretli her kasa için kart (kasa kaydı + bağlı gelir/gider) ve "Tüm RJ-Kasaları" özeti.
+  const rjGroups = useMemo(() => {
+    if (kind !== "cash") return [];
+    return [...kasaRjNames].map((name) => {
+      const directRows = records.filter((x) => x.source === name);
+      const linkedIncomeRows = allRecords.filter((x) => x.kind === "income" && x.cashAccount === name);
+      const linkedExpenseRows = allRecords.filter((x) => x.kind === "expense" && x.cashAccount === name);
+      return {
+        name,
+        count: directRows.length + linkedIncomeRows.length + linkedExpenseRows.length,
+        totalInByCurrency: combineByCurrency([{ rows: directRows }, { rows: linkedIncomeRows }]),
+        totalOutByCurrency: combineByCurrency([{ rows: linkedExpenseRows }]),
+        totalByCurrency: combineByCurrency([{ rows: directRows }, { rows: linkedIncomeRows }, { rows: linkedExpenseRows, sign: -1 }]),
+        directRows,
+        linkedIncomeRows,
+        linkedExpenseRows,
+      };
+    });
+  }, [records, allRecords, kind, cashAccounts]);
+  const rjAll = useMemo(
+    () => ({
+      count: rjGroups.reduce((a, g) => a + g.count, 0),
+      inBy: combineByCurrency(rjGroups.flatMap((g) => [{ rows: g.directRows }, { rows: g.linkedIncomeRows }])),
+      outBy: combineByCurrency(rjGroups.map((g) => ({ rows: g.linkedExpenseRows }))),
+      totalBy: combineByCurrency(rjGroups.flatMap((g) => [{ rows: g.directRows }, { rows: g.linkedIncomeRows }, { rows: g.linkedExpenseRows, sign: -1 }])),
+    }),
+    [rjGroups],
+  );
   const overallListInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [];
@@ -1583,10 +1614,11 @@ export function Records({
       : [];
   const rows = [...records, ...linkedRowsForSelectedKasa].filter(
     (x) =>
-      (source === "Tümü" || x.source === source || x.cashAccount === source) &&
+      (source === "Tümü" || source === "__RJ" || x.source === source || x.cashAccount === source) &&
       (!showAllLists || listOf(x) || isListLinked(x)) &&
       (!activeKasa || x.cashAccount === activeKasa) &&
-      (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaListNames.has(x.cashAccount || x.source))) &&
+      (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaSeparateNames.has(x.cashAccount || x.source))) &&
+      (source !== "__RJ" || kasaRjNames.has(x.cashAccount || x.source)) &&
       (!filterFrom || x.date >= filterFrom) &&
       (!filterTo || x.date <= filterTo) &&
       (!filterSource || x.source === filterSource) &&
@@ -2256,6 +2288,35 @@ export function Records({
                 </button>
               </div>
             ))}
+        </div>
+      )}
+      {kind === "cash" && rjGroups.length > 0 && (
+        <div className="groups rjGroups">
+          <button className={source === "__RJ" ? "selected" : ""} onClick={() => { setSource("__RJ"); setSearch(""); setActiveList(""); setActiveKasa(""); setShowAllLists(false); }}>
+            <b>
+              {tx(language, "Tüm RJ-Kasaları", "All RJ Cash Accounts", "Hemû Qaseyên RJ")} <span className="groupCount">({rjAll.count})</span>
+            </b>
+            <strong>{moneyBreakdown(rjAll.totalBy)}</strong>
+            <span className="groupInOut">
+              <span className="in">↗ {moneyBreakdown(rjAll.inBy)}</span>
+              <span className="out">↘ {moneyBreakdown(rjAll.outBy)}</span>
+            </span>
+          </button>
+          {rjGroups.map((g) => (
+            <div className="groupCard" key={g.name}>
+              <button
+                className={source === g.name ? "selected" : ""}
+                onClick={() => { setSource(g.name); setSearch(""); setActiveList(""); setActiveKasa(""); setShowAllLists(false); }}
+              >
+                <b>{localizeData(g.name, language)} <span className="groupCount">({g.count})</span></b>
+                <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
+                <span className="groupInOut">
+                  <span className="in">↗ {moneyBreakdown(g.totalInByCurrency)}</span>
+                  <span className="out">↘ {moneyBreakdown(g.totalOutByCurrency)}</span>
+                </span>
+              </button>
+            </div>
+          ))}
         </div>
       )}
       <div className="search">
@@ -2977,6 +3038,7 @@ export function RecordModal({
   // başta işaretli açılır.
   const [hasListRecord, setHasListRecord] = useState(!!base.listName);
   // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
+  const [rjKasa, setRjKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa));
   const [listKasa, setListKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace));
   // "Gider Detaylarını Görüntüle" bölümü kayıt penceresi her açıldığında
   // kapalı başlar (detay kayıtlıysa bile); açılınca tablonun tamamı görünür.
@@ -3112,7 +3174,7 @@ export function RecordModal({
         assignedUserIds: [],
       });
     }
-    onSave(kind === "cash" ? { ...form, listKasa } : form, initial?.id);
+    onSave(kind === "cash" ? { ...form, listKasa, rjKasa } : form, initial?.id);
   }
   return (
     <div className="overlay overlayScrollThrough">
@@ -3276,6 +3338,15 @@ export function RecordModal({
           </label>
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
+            {kind === "cash" && (
+              <label>
+                {tx(language, "RJ-Kasası", "RJ Cash Account", "Qaseya RJ")}
+                <span className="checkField">
+                  <input type="checkbox" checked={rjKasa} onChange={(e) => setRjKasa(e.target.checked)} />
+                  {tx(language, "Evet, bu kasa bir RJ-Kasasıdır — Kasalar sayfasında ayrı “RJ-Kasaları” bölümünde görünsün", "Yes, this is an RJ cash account — show it in the separate “RJ Cash Accounts” section on the Kasalar page", "Erê, ev qaseyek RJ ye — li rûpela Qase di beşa cuda ya “Qaseyên RJ” de xuya bibe")}
+                </span>
+              </label>
+            )}
             {kind === "cash" && (
               <label>
                 {tx(language, "Liste Kasası (Çalışma Alanı)", "List Cash Account (Workspace)", "Qaseya Lîsteyê (Qada Xebatê)")}

@@ -89,6 +89,7 @@ export const recordInputSchema = z.object({
   listId: z.number().int().positive().nullable().optional(),
   // Kasa kaydında "Liste Kasası" işareti: kasa Listeler sayfasında çalışma alanı olur.
   listKasa: z.boolean().optional(),
+  rjKasa: z.boolean().optional(),
   attachments: attachmentsSchema,
   detailTable: detailTableSchema.optional().default([]),
   detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),
@@ -114,6 +115,7 @@ export const recordUpdateSchema = z.object({
   listName: z.string().max(200).optional(),
   listId: z.number().int().positive().nullable().optional(),
   listKasa: z.boolean().optional(),
+  rjKasa: z.boolean().optional(),
   attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional(),
   detailTable: detailTableSchema.optional(),
   detailTableLayout: detailTableLayoutSchema.optional(),
@@ -136,6 +138,7 @@ export const excelImportSchema = z.object({
   batchId: z.string().min(6).max(64),
   kasaName: z.string().trim().min(1).max(200),
   listKasa: z.boolean().optional().default(false),
+  rjKasa: z.boolean().optional().default(false),
   items: z
     .array(
       z.object({

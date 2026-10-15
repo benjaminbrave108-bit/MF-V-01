@@ -253,6 +253,13 @@
       "when": 1792073341265,
       "tag": "0035_useful_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792076473640,
+      "tag": "0036_clean_karnak",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "cash_accounts" ADD COLUMN "is_rj_kasa" boolean DEFAULT false NOT NULL;

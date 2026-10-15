@@ -5,7 +5,7 @@ import { requireSession } from "../_lib/auth";
 import { accessibleCashAccountIds } from "../_lib/cash-access";
 import { json, withErrorHandling } from "../_lib/http";
 import { ensureCashAccountLink, fallbackKasaNameFor } from "../_lib/records";
-import { markListKasa, resolveRecordList } from "../_lib/lists";
+import { markListKasa, resolveRecordList, setRjKasa } from "../_lib/lists";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
 
@@ -67,6 +67,7 @@ export const POST = withErrorHandling(async (request: Request) => {
     if (link.forbidden) return { forbidden: true as const };
     // "Liste Kasası" işaretli kasa kaydı: kasa Listeler sayfasında otomatik çalışma alanı olur.
     if (payload.kind === "cash" && payload.listKasa && link.cashAccountId != null) await markListKasa(link.cashAccountId, tx);
+    if (payload.kind === "cash" && payload.rjKasa !== undefined && link.cashAccountId != null) await setRjKasa(link.cashAccountId, payload.rjKasa, tx);
 
     const [insertedRecord] = await tx
       .insert(records)

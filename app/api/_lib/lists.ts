@@ -297,3 +297,8 @@ export async function markListKasa(cashAccountId: number, db: DbClient = getDb()
   await db.update(cashAccounts).set({ isListWorkspace: true, updatedAt: new Date() }).where(eq(cashAccounts.id, cashAccountId));
   await ensureWorkspace(cashAccountId, db);
 }
+
+// Kasa "RJ-Kasası" olarak işaretlenir / işareti kaldırılır.
+export async function setRjKasa(cashAccountId: number, value: boolean, db: DbClient = getDb()): Promise<void> {
+  await db.update(cashAccounts).set({ isRjKasa: value, updatedAt: new Date() }).where(eq(cashAccounts.id, cashAccountId));
+}

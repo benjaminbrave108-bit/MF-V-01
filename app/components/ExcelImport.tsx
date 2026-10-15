@@ -43,6 +43,7 @@ export function ExcelImportModal({
   const [kasaChoice, setKasaChoice] = useState<string>("");
   const [newKasa, setNewKasa] = useState("");
   const [listKasa, setListKasa] = useState(false);
+  const [rjKasa, setRjKasa] = useState(false);
   const [groupInvoices, setGroupInvoices] = useState(true);
   const [projectFromSheet, setProjectFromSheet] = useState(true);
   const [fixDates, setFixDates] = useState(true);
@@ -117,7 +118,7 @@ export function ExcelImportModal({
         const response = await fetch("/api/records/import-excel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ batchId, kasaName, listKasa, items: chunk }),
+          body: JSON.stringify({ batchId, kasaName, listKasa, rjKasa, items: chunk }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
@@ -203,6 +204,7 @@ export function ExcelImportModal({
             </label>
             <div className="wide xiOptions">
               <label className="checkField"><input type="checkbox" checked={listKasa} onChange={(e) => setListKasa(e.target.checked)} /> {tx(language, "Bu kasa bir Liste Kasasıdır (Listeler'de çalışma alanı olsun)", "This is a List cash account (make it a workspace on Lists)", "Ev qaseyek Lîsteyê ye (li Lîste bibe qada xebatê)")}</label>
+              <label className="checkField"><input type="checkbox" checked={rjKasa} onChange={(e) => setRjKasa(e.target.checked)} /> {tx(language, "Bu kasa bir RJ-Kasasıdır (Kasalar sayfasında “RJ-Kasaları” bölümünde görünsün)", "This is an RJ cash account (show under “RJ Cash Accounts” on Kasalar)", "Ev qaseyek RJ ye (li Qase di “Qaseyên RJ” de xuya bibe)")}</label>
               <label className="checkField"><input type="checkbox" checked={groupInvoices} onChange={(e) => setGroupInvoices(e.target.checked)} /> {tx(language, "Aynı fatura numaralı satırları tek kayıtta topla (ürün satırları Detay tablosuna girer)", "Combine rows with the same invoice number into one record (items go to the Detail table)", "Rêzên bi heman hejmara fatûreyê di yek qeydê de bicivîne (berhem diçin tabloya Hûrgulî)")}</label>
               <label className="checkField"><input type="checkbox" checked={projectFromSheet} onChange={(e) => setProjectFromSheet(e.target.checked)} /> {tx(language, "Sayfa adını “Proje” olarak yaz (alt birimler/bölgeler için)", "Use the sheet name as “Project” (for sub-units/regions)", "Navê rûpelê wekî “Proje” binivîse (ji bo binbirim/herêman)")}</label>
               <label className="checkField"><input type="checkbox" checked={fixDates} onChange={(e) => setFixDates(e.target.checked)} /> {tx(language, "Ay/gün ters okunmuş şüpheli tarihleri düzelt", "Fix suspicious day/month-swapped dates", "Dîrokên bi guman ên roj/meh berevajî bi cih bike")}</label>

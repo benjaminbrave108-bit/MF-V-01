@@ -74,6 +74,8 @@ export const cashAccounts = pgTable("cash_accounts", {
   dashboardShareEnabled: boolean("dashboard_share_enabled").notNull().default(false),
   // "Liste Kasası": Gelir/Kasa kaydında işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur.
   isListWorkspace: boolean("is_list_workspace").notNull().default(false),
+  // "RJ-Kasası": Kasalar sayfasında üstteki kasa kartlarında değil, ayrı "RJ-Kasaları" bölümünde görünür.
+  isRjKasa: boolean("is_rj_kasa").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

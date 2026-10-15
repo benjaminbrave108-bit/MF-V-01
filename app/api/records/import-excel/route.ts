@@ -4,7 +4,7 @@ import { records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { json, withErrorHandling } from "../../_lib/http";
-import { markListKasa } from "../../_lib/lists";
+import { markListKasa, setRjKasa } from "../../_lib/lists";
 import { ensureCashAccountLink } from "../../_lib/records";
 import { excelImportSchema, parseBody } from "../../_lib/validate";
 
@@ -48,6 +48,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       });
     }
     if (payload.listKasa) await markListKasa(link.cashAccountId, tx);
+    if (payload.rjKasa) await setRjKasa(link.cashAccountId, true, tx);
 
     const keys = payload.items.map((i) => i.importKey).filter(Boolean);
     const existing = keys.length

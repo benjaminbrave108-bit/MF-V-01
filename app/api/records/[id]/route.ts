@@ -5,7 +5,7 @@ import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { ensureCashAccountLink } from "../../_lib/records";
-import { markListKasa, resolveRecordList } from "../../_lib/lists";
+import { markListKasa, resolveRecordList, setRjKasa } from "../../_lib/lists";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
@@ -63,6 +63,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
     const link = await ensureCashAccountLink({ name: linkName, kind, user: session.user }, tx);
     if (link.forbidden) return { forbidden: true as const };
     if (kind === "cash" && payload.listKasa && link.cashAccountId != null) await markListKasa(link.cashAccountId, tx);
+    if (kind === "cash" && payload.rjKasa !== undefined && link.cashAccountId != null) await setRjKasa(link.cashAccountId, payload.rjKasa, tx);
     const cashAccount = kind === "cash" ? source : (cashAccountName || "");
 
     const [updatedRecord] = await tx

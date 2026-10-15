@@ -29,6 +29,7 @@ export type RecordItem = {
   listId?: number | null;
   // Kasa kaydı gönderilirken "Liste Kasası" işareti (sunucu kasayı çalışma alanı yapar).
   listKasa?: boolean;
+  rjKasa?: boolean;
   // Excel aktarımıyla gelen kayıtların aktarım numarası (kasa kutusunda toplanır, başlık kutusu oluşturmaz).
   importBatch?: string | null;
   // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
@@ -130,6 +131,7 @@ export type CashAccountSummary = {
   sharedWithUserIds: number[];
   // "Liste Kasası" işaretli kasa — Listeler sayfasında otomatik çalışma alanıdır.
   isListWorkspace?: boolean;
+  isRjKasa?: boolean;
   // Owner-controlled opt-in (Kasalar > Paylaş or Ayarlar > Paylaşım): lets a
   // super admin fold this kasa into their own Ana Sayfa via Görüntüle.
   dashboardShareEnabled: boolean;

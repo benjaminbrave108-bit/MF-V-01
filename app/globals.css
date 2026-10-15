@@ -4154,3 +4154,11 @@ main { min-width: 0; overflow-x: hidden; }
 .xiMapping { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d8e2e5; }
 .xiMapping label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #5d7580; }
 .xiMapping select { padding: 3px 6px; font-size: 12px; }
+
+/* RJ-Kasaları: Kasalar sayfasında Liste Kasaları'nın altında, mor tonlu ayrı bölüm */
+.rjGroups > button,
+.rjGroups .groupCard > button:first-child { background: #f7f2fd; border-color: #d9c8ef; }
+.rjGroups > button.selected,
+.rjGroups .groupCard > button.selected { border-color: #7b52bf; background: #ece0fa; box-shadow: 0 0 0 2px #7b52bf15; }
+.rjGroups .groupCount { color: #7b52bf; }
+.rjGroups strong { color: #4b2a85; }
