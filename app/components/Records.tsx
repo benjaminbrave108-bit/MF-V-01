@@ -1532,6 +1532,27 @@ export function Records({
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaListNames.has(x.cashAccount)) : [];
     return { inBy: combineByCurrency([{ rows: plainRecords }, { rows: incomeRows }]), outBy: combineByCurrency([{ rows: expenseRows }]) };
   }, [plainRecords, allRecords, kind, cashAccounts]);
+  // Gelir/Gider sayfalarında liste kayıtları, genel yönteme uygun olarak liste adına göre değil bağlı oldukları (Liste)
+  // kasaya göre kutulanır: "DL-2026 Giderleri" gibi; kutuda o kasanın listeleri etiket olarak görünür.
+  const listKasaBoxes = useMemo(() => {
+    if (kind === "cash") return [];
+    const byKasa = new Map<string, RecordItem[]>();
+    for (const x of records) {
+      if (!(listOf(x) || isListLinked(x))) continue;
+      const k = x.cashAccount || x.source;
+      byKasa.set(k, [...(byKasa.get(k) ?? []), x]);
+    }
+    return [...byKasa.entries()]
+      .map(([name, rows]) => ({
+        name,
+        count: rows.length,
+        amount: total(rows),
+        totalByCurrency: combineByCurrency([{ rows }]),
+        lists: [...new Set(rows.map((r) => r.listName).filter(Boolean))],
+      }))
+      .filter((b) => Math.abs(b.amount) > 0.004)
+      .sort((a, b) => b.amount - a.amount);
+  }, [records, kind, cashAccounts]);
   const overallListInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [];
@@ -2146,7 +2167,7 @@ export function Records({
               </span>
             )}
           </button>
-          {listGroups.filter((g) => kind === "cash" || Math.abs(g.total) > 0.004).map((g) => (
+          {(kind === "cash" ? listGroups : []).map((g) => (
             <div className="groupCard" key={g.name}>
               <button
                 className={activeList === g.name ? "selected" : ""}
@@ -2189,6 +2210,34 @@ export function Records({
               )}
             </div>
           ))}
+          {kind !== "cash" &&
+            listKasaBoxes.map((b) => (
+              <div className="groupCard" key={b.name}>
+                <button
+                  className={activeKasa === b.name && showAllLists ? "selected" : ""}
+                  onClick={() => {
+                    const same = activeKasa === b.name && showAllLists;
+                    setActiveKasa(same ? "" : b.name);
+                    setSource("Tümü");
+                    setSearch("");
+                    setActiveList("");
+                    setShowAllLists(true);
+                  }}
+                >
+                  <b>
+                    {localizeData(b.name, language)}
+                    {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(b.name)
+                      ? ""
+                      : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}{" "}
+                    <span className="groupCount">({b.count})</span>
+                  </b>
+                  <em className="groupKasaTag" title={b.lists.join(", ")}>
+                    ▣ {b.lists.length ? b.lists.join(", ") : tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}
+                  </em>
+                  <strong>{moneyBreakdown(b.totalByCurrency)}</strong>
+                </button>
+              </div>
+            ))}
         </div>
       )}
       <div className="search">
