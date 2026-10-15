@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
-import { cashAccounts, listAllocations, listItems, listWorkspaces, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
+import { cashAccounts, expenseAllocations, listAllocations, listItems, listWorkspaces, lists, records, users, workspaceDistributions, workspaceRecipients } from "../../../db/schema";
 import type { SessionUser } from "./auth";
 import { accessibleCashAccountIds, canWriteCashAccount } from "./cash-access";
 
@@ -49,7 +49,8 @@ export async function writableKasas(user: Actor, db: DbClient = getDb()) {
   }));
 }
 
-// Listesi, alıcısı veya dağıtımı olan çalışma alanlarının tam ekran verisi.
+// Çalışma alanlarının (Liste Kasası) tam ekran verisi: kasa geliri, kasanın Gider kayıtları (her biri alıcılara
+// dağıtılabilir), alıcı harcamaları ve kasada kalan. Alıcıya yazılan tutar, o alıcının o giderdeki harcamasıdır.
 export async function buildWorkspaces(user: Actor, only: number[] | null = null, db: DbClient = getDb()) {
   const accessible = await accessibleCashAccountIds(user, db);
   const wsRows = await db.select().from(listWorkspaces);
@@ -58,56 +59,55 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
   if (only) kasaIds = kasaIds.filter((id) => only.includes(id));
   if (!kasaIds.length) return [];
 
-  const [kasaRows, listRows, recipientRows, incomeRows] = await Promise.all([
+  const [kasaRows, listRows, recipientRows, incomeRows, expenseRows] = await Promise.all([
     db
       .select({ id: cashAccounts.id, name: cashAccounts.name, ownerUserId: cashAccounts.ownerUserId, ownerName: users.name })
       .from(cashAccounts)
       .leftJoin(users, eq(users.id, cashAccounts.ownerUserId))
       .where(inArray(cashAccounts.id, kasaIds)),
-    db.select().from(lists).where(inArray(lists.cashAccountId, kasaIds)).orderBy(lists.date, lists.id),
+    db.select({ name: lists.name, cashAccountId: lists.cashAccountId }).from(lists).where(inArray(lists.cashAccountId, kasaIds)),
     db.select().from(workspaceRecipients).where(inArray(workspaceRecipients.cashAccountId, kasaIds)).orderBy(workspaceRecipients.id),
     db
       .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, amount: records.amount, currency: records.currency })
       .from(records)
       .where(and(inArray(records.cashAccountId, kasaIds), inArray(records.kind, ["cash", "income"]))),
+    db
+      .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, detail: records.detail, note: records.note, person: records.person, amount: records.amount, currency: records.currency })
+      .from(records)
+      .where(and(inArray(records.cashAccountId, kasaIds), eq(records.kind, "expense")))
+      .orderBy(records.date, records.id),
   ]);
-  // Kasalar'daki "Liste Kasası" kartlarıyla aynı toplam: listenin adıyla etiketlenmiş (Liste Kaydı) kasa/gelir
-  // kayıtları, başka bir kasada girilmiş olsalar bile çalışma alanının gelirine katılır (kayıt başına bir kez).
-  const listNames = [...new Set(listRows.map((l) => l.name).filter(Boolean))];
-  const taggedRows = listNames.length
+  // Eski "Liste Kaydı" etiketiyle başka kasada girilmiş gelirler de (kayıt başına bir kez) çalışma alanının gelirine katılır.
+  const legacyNames = [...new Set(listRows.map((l) => l.name).filter(Boolean))];
+  const taggedRows = legacyNames.length
     ? await db
         .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, amount: records.amount, currency: records.currency, listName: records.listName })
         .from(records)
-        .where(and(inArray(records.listName, listNames), inArray(records.kind, ["cash", "income"])))
+        .where(and(inArray(records.listName, legacyNames), inArray(records.kind, ["cash", "income"])))
     : [];
-  const listIds = listRows.map((l) => l.id);
-  const itemRows = listIds.length ? await db.select().from(listItems).where(inArray(listItems.listId, listIds)).orderBy(listItems.position, listItems.id) : [];
-  const allocRows = listIds.length ? await db.select().from(listAllocations).where(inArray(listAllocations.listId, listIds)) : [];
+  const expenseIds = expenseRows.map((r) => r.id);
+  const allocRows = expenseIds.length ? await db.select().from(expenseAllocations).where(inArray(expenseAllocations.recordId, expenseIds)) : [];
 
   const workspaces = await Promise.all(
     kasaRows.map(async (kasa) => {
       const recipients = recipientRows.filter((r) => r.cashAccountId === kasa.id);
-      const wsLists = listRows
-        .filter((l) => l.cashAccountId === kasa.id)
-        .map((l) => {
-          const items = itemRows.filter((i) => i.listId === l.id);
+      const wsExpenses = expenseRows
+        .filter((e) => e.cashAccountId === kasa.id)
+        .map((e) => {
           const byRecipient: Record<number, number> = {};
-          for (const al of allocRows.filter((x) => x.listId === l.id)) if (al.amount > 0) byRecipient[al.recipientId] = round2(al.amount);
+          for (const al of allocRows.filter((x) => x.recordId === e.id)) if (al.amount > 0) byRecipient[al.recipientId] = round2(al.amount);
           const allocated = round2(Object.values(byRecipient).reduce((x, y) => x + y, 0));
           return {
-            id: l.id,
-            code: l.code,
-            name: l.name,
-            date: l.date,
-            status: l.status as "open" | "closed",
-            note: l.note,
-            itemCount: items.length,
-            itemsTotal: round2(items.reduce((x, i) => x + i.amount, 0)),
-            total: round2(l.amount),
+            id: e.id,
+            date: e.date,
+            source: e.source,
+            detail: e.detail,
+            note: e.note,
+            amount: round2(e.amount),
+            currency: e.currency,
             byRecipient,
-            // Alıcılara dağıtılmamış kısım (liste gideri − dağıtılan).
-            unassigned: round2(l.amount - allocated),
-            items: items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, amount: i.amount, recipientId: i.recipientId, note: i.note })),
+            // Alıcılara dağıtılmamış kısım (gider − dağıtılan).
+            unassigned: round2(e.amount - allocated),
           };
         });
       const wsListNames = new Set(listRows.filter((l) => l.cashAccountId === kasa.id).map((l) => l.name));
@@ -120,16 +120,14 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       // Elle girilen tutar varsa o, yoksa kasadan otomatik (Kasalar'daki liste kasası toplamıyla aynı).
       const income = wsRow?.amount != null ? round2(wsRow.amount) : autoIncome;
       const currencyCount = new Map<string, number>();
-      for (const r of incomeRowsForKasa) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
+      for (const r of [...incomeRowsForKasa, ...wsExpenses]) currencyCount.set(r.currency, (currencyCount.get(r.currency) ?? 0) + 1);
       const currency = [...currencyCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
-      // Bir listede bir alıcıya yazılan tutar, o alıcının o liste giderindeki harcamasıdır (gider);
-      // "alıcılarda kalan" diye bir tutar yoktur — kasada kalan = kasa geliri − liste giderleri.
-      const expense = round2(wsLists.reduce((a, l) => a + l.total, 0));
+      const expense = round2(wsExpenses.reduce((a, e) => a + e.amount, 0));
       const balances = recipients.map((r) => {
-        const perList: Record<number, number> = {};
-        for (const l of wsLists) if (l.byRecipient[r.id]) perList[l.id] = l.byRecipient[r.id];
-        const spent = round2(Object.values(perList).reduce((a, v) => a + v, 0));
-        return { recipientId: r.id, name: r.name, spent, perList };
+        const perExpense: Record<number, number> = {};
+        for (const e of wsExpenses) if (e.byRecipient[r.id]) perExpense[e.id] = e.byRecipient[r.id];
+        const spent = round2(Object.values(perExpense).reduce((a, v) => a + v, 0));
+        return { recipientId: r.id, name: r.name, spent, perExpense };
       });
       const distributed = round2(balances.reduce((a, b) => a + b.spent, 0));
       return {
@@ -148,21 +146,43 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
         incomes: incomeRowsForKasa
           .map((r) => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, currency: r.currency }))
           .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
-        lists: wsLists,
+        expenses: wsExpenses,
         balances,
         totals: {
           income,
-          // Alıcılara dağıtılan = alıcıların liste giderlerindeki toplam harcaması.
+          // Alıcılara dağıtılan = alıcıların bu kasanın giderlerindeki toplam harcaması.
           distributed,
           expense,
           kasaRemaining: round2(income - expense),
-          unassigned: round2(wsLists.reduce((a, l) => a + l.unassigned, 0)),
+          unassigned: round2(expense - distributed),
         },
       };
     }),
   );
   workspaces.sort((a, b) => a.name.localeCompare(b.name));
   return workspaces;
+}
+
+// Bir Gider kaydının alıcı dağılımını (tamamını) yazar; toplam gider tutarını aşamaz. Hata mesajı döndürürse hiçbir şey yazılmamıştır.
+export async function writeExpenseAllocations(
+  tx: DbClient,
+  record: { id: number; cashAccountId: number | null; amount: number },
+  allocations: { recipientId: number; amount: number }[],
+): Promise<string | null> {
+  const rows = allocations.filter((a) => a.amount > 0);
+  if (new Set(rows.map((r) => r.recipientId)).size !== rows.length) return "Aynı alıcı birden çok kez girilemez";
+  const sum = round2(rows.reduce((a, r) => a + r.amount, 0));
+  if (sum > record.amount + 0.005) return "Alıcılara dağıtılan toplam, gider tutarını aşamaz";
+  if (rows.length) {
+    const valid = await tx
+      .select({ id: workspaceRecipients.id, cashAccountId: workspaceRecipients.cashAccountId })
+      .from(workspaceRecipients)
+      .where(inArray(workspaceRecipients.id, rows.map((r) => r.recipientId)));
+    if (valid.length !== rows.length || valid.some((v) => v.cashAccountId !== record.cashAccountId)) return "Alıcı bu çalışma alanında yok";
+  }
+  await tx.delete(expenseAllocations).where(eq(expenseAllocations.recordId, record.id));
+  if (rows.length) await tx.insert(expenseAllocations).values(rows.map((r) => ({ recordId: record.id, recipientId: r.recipientId, amount: r.amount })));
+  return null;
 }
 
 // Bir gelir/gider kaydı kaydedilirken liste bağlantısı (eski "Liste Kaydı" alanı):

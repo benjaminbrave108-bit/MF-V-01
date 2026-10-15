@@ -183,6 +183,17 @@ export const listItems = pgTable("list_items", {
   index("list_items_list_id_idx").on(table.listId),
 ]);
 
+// Liste kasasındaki (çalışma alanı) bir Gider kaydının alıcılara (kişilere) dağıtılan kısmı: alıcıya yazılan tutar,
+// o alıcının bu giderdeki harcamasıdır. Gider kaydı silinirse dağıtımı da silinir.
+export const expenseAllocations = pgTable("expense_allocations", {
+  id: serial("id").primaryKey(),
+  recordId: integer("record_id").notNull().references(() => records.id, { onDelete: "cascade" }),
+  recipientId: integer("recipient_id").notNull().references(() => workspaceRecipients.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+}, (table) => [
+  uniqueIndex("expense_allocations_record_recipient_idx").on(table.recordId, table.recipientId),
+]);
+
 export const records = pgTable("records", {
   id: serial("id").primaryKey(),
   kind: text("kind").notNull(),

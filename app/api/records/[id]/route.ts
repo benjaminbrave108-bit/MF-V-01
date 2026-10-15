@@ -5,7 +5,7 @@ import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { ensureCashAccountLink } from "../../_lib/records";
-import { listForExpenseRecord, markListKasa, resolveRecordList } from "../../_lib/lists";
+import { markListKasa, resolveRecordList } from "../../_lib/lists";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
@@ -36,11 +36,6 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   // the meantime — reject rather than silently overwrite their edit.
   if (payload.updatedAt && new Date(payload.updatedAt).getTime() !== old.updatedAt.getTime()) {
     return json({ error: "Bu kayıt başka bir kullanıcı tarafından değiştirildi" }, { status: 409 });
-  }
-
-  const generated = await listForExpenseRecord(id, db);
-  if (generated) {
-    return json({ error: `Bu gider "${generated.code} · ${generated.name}" listesinden otomatik oluşturuldu; Listeler sayfasından düzenleyin.`, locked: true }, { status: 423 });
   }
 
   const kind = payload.kind ?? old.kind;
@@ -132,10 +127,6 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   const old = existingRows[0];
   if (!old) return json({ error: "Record not found" }, { status: 404 });
 
-  const generated = await listForExpenseRecord(id, db);
-  if (generated) {
-    return json({ error: `Bu gider "${generated.code} · ${generated.name}" listesinden otomatik oluşturuldu; listeyi Listeler sayfasından silin.`, locked: true }, { status: 423 });
-  }
   if (!canAccessKind(session.user, old.kind)) {
     return json({ error: "Forbidden" }, { status: 403 });
   }
