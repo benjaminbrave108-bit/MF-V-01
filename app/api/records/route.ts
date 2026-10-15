@@ -6,6 +6,7 @@ import { accessibleCashAccountIds } from "../_lib/cash-access";
 import { json, withErrorHandling } from "../_lib/http";
 import { ensureCashAccountLink, fallbackKasaNameFor } from "../_lib/records";
 import { markListKasa, resolveRecordList, setRjKasa } from "../_lib/lists";
+import { cashAccounts } from "../../../db/schema";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
 
@@ -68,6 +69,8 @@ export const POST = withErrorHandling(async (request: Request) => {
     // "Liste Kasası" işaretli kasa kaydı: kasa Listeler sayfasında otomatik çalışma alanı olur.
     if (payload.kind === "cash" && payload.listKasa && link.cashAccountId != null) await markListKasa(link.cashAccountId, tx);
     if (payload.kind === "cash" && payload.rjKasa !== undefined && link.cashAccountId != null) await setRjKasa(link.cashAccountId, payload.rjKasa, tx);
+    // Kasa kaydında seçilen "kasa bölümü" kasaya yazılır (boş = Genel Kasa).
+    if (payload.kind === "cash" && payload.sectionId !== undefined && link.cashAccountId != null) await tx.update(cashAccounts).set({ sectionId: payload.sectionId }).where(eq(cashAccounts.id, link.cashAccountId));
 
     const [insertedRecord] = await tx
       .insert(records)
@@ -84,6 +87,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         tags: payload.tags,
         cashAccount: payload.kind === "cash" ? payload.source : (payload.cashAccount || fallbackKasaNameFor(payload.kind)),
         cashAccountId: link.cashAccountId,
+        sectionId: payload.kind === "cash" ? null : payload.sectionId ?? null,
         listName: listLink.listName ?? "",
         listId: listLink.listId ?? null,
         attachments: payload.attachments,

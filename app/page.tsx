@@ -33,6 +33,7 @@ import type {
   RecordItem,
   TypographySettings,
   UserAccount,
+  KasaSection,
 } from "./lib/types";
 
 export default function Home() {
@@ -68,6 +69,8 @@ export default function Home() {
   });
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [cashAccounts, setCashAccounts] = useState<CashAccountSummary[]>([]);
+  // Ayarlar > Bölümler: yönetici tanımlı kasa/gelir/gider bölümleri (her biri sayfalarda yeni bir kutu ekler).
+  const [sections, setSections] = useState<KasaSection[]>([]);
   const [cashTransfers, setCashTransfers] = useState<CashTransfer[]>([]);
   // Badge next to "Yorumlar" in the sidebar — comments on records this user
   // can see that they haven't opened yet (see app/api/comments/unread-count
@@ -294,6 +297,7 @@ export default function Home() {
         if (Array.isArray(data.preparedReports)) setPreparedReports(data.preparedReports);
         if (Array.isArray(data.users)) setUsers(data.users);
         refreshCashAccounts();
+        refreshSections();
         refreshCashTransfers();
         refreshNotes();
         if (data.settings) {
@@ -401,6 +405,14 @@ export default function Home() {
     } catch {
       alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
     }
+  }
+  async function refreshSections() {
+    try {
+      const response = await fetch("/api/sections");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.sections)) setSections(data.sections);
+    } catch {}
   }
   async function refreshCashAccounts() {
     try {
@@ -945,6 +957,7 @@ export default function Home() {
               onDelete={removeRecord}
               onImport={importRecords}
               onRefreshData={() => { refreshRecords(); refreshCashAccounts(); }}
+              sections={sections}
               checkPassword={checkPassword}
               cashAccounts={contextCashAccounts}
               users={users}
@@ -1013,6 +1026,8 @@ export default function Home() {
               sharedOwners={dashboardShareableOwners}
               dashboardIncludedUserIds={profile.dashboardIncludedUserIds}
               onDashboardIncludedUserIdsChange={updateDashboardScope}
+              sections={sections}
+              onSectionsChanged={() => { refreshSections(); refreshCashAccounts(); refreshRecords(); }}
             />
           )}
           {page === "guide" && <Guide language={language} />}
@@ -1029,6 +1044,7 @@ export default function Home() {
           onClose={() => setModal(null)}
           onSave={saveRecord}
           cashAccounts={cashAccounts}
+          sections={sections}
           users={users}
           onTransfersChanged={refreshAfterCashTransfer}
         />

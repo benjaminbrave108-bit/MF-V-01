@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { date as formatDate, money } from "../lib/finance";
 import { tx } from "../lib/i18n";
+import { TableTools } from "./TableTools";
 import type { Language } from "../lib/types";
 
 // Liste Kasaları (çalışma alanları): bir kasanın geliri, giderleri ve giderlerin kişilere dağılımı. Kasanın Gider
@@ -865,7 +866,7 @@ function ExpensesGrid({
     (open ? ws.recipients.reduce((a, r) => a + colW(`r${r.id}`, D.recipient), 0) : 0) + colW("alloc", D.alloc) + colW("left", D.left);
 
   return (
-    <div className="listMatrixScroll">
+    <TableTools id="lists-expenses" language={language} className="listMatrixScroll" resize={false}>
       <div className="listFilters">
         <input
           type="search"
@@ -1030,6 +1031,6 @@ function ExpensesGrid({
           ? tx(language, "Tutarı doğrudan kişinin hücresine yazın (o kişinin bu giderdeki harcaması); Enter ile kaydedilir.", "Type amounts straight into a person's cell (their spending in this expense); Enter saves.", "Mîqdarê rasterast di şaneya kesî de binivîse (lêçûna wî/wê di vê mesrefê de); Enter tomar dike.")
           : tx(language, "Kişilere göre dağılımı görmek ve düzenlemek için “Kişiler” düğmesiyle sütunları sağa doğru açın.", "Use the “People” button to expand the per-person columns to the right.", "Ji bo dîtina dabeşkirina li gorî kesan bi bişkoka “Kes” stûnan ber bi rastê veke.")}
       </p>
-    </div>
+    </TableTools>
   );
 }

@@ -6,9 +6,10 @@ import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
 import { ExcelImportModal } from "./ExcelImport";
+import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
-import type { CashAccountSummary, CashTransfer, FinanceNote, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
+import type { CashAccountSummary, CashTransfer, FinanceNote, KasaSection, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
 
 // Gider detay tablosu sınırları — sunucudaki detailTableSchema ile aynı olmalı
 // (app/api/_lib/validate.ts); istemci bunlara göre kırpar, böylece kayıt 400 ile
@@ -900,6 +901,7 @@ export function Records({
   readOnly,
   notes,
   onRefreshData,
+  sections = [],
 }: {
   language: Language;
   kind: Kind;
@@ -921,6 +923,7 @@ export function Records({
   readOnly: boolean;
   notes: FinanceNote[];
   onRefreshData?: () => void;
+  sections?: KasaSection[];
 }) {
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
@@ -1333,6 +1336,8 @@ export function Records({
   const [activeList, setActiveList] = useState("");
   // Gelir/Gider sayfalarında kasa kutusuyla (ör. "Ana Kasa Giderleri") süzülen kasa adı.
   const [activeKasa, setActiveKasa] = useState("");
+  // Gelir/Gider sayfalarında bölüm kutusuyla süzülen bölüm (Ayarlar > Bölümler).
+  const [activeSection, setActiveSection] = useState<number | null>(null);
   const [showAllLists, setShowAllLists] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState("");
@@ -1355,7 +1360,9 @@ export function Records({
   const kasaListNames = new Set(cashAccounts.filter((a) => a.isListWorkspace).map((a) => a.name));
   // "RJ-Kasaları": üstteki kasa kartlarında değil, kendi renkli bölümlerinde görünür (Liste Kasaları gibi ayrı tutulur).
   const kasaRjNames = new Set(cashAccounts.filter((a) => a.isRjKasa).map((a) => a.name));
-  const kasaSeparateNames = new Set([...kasaListNames, ...kasaRjNames]);
+  const cashSections = sections.filter((x) => x.scope === "cash");
+  const kasaSectionNames = new Set(cashAccounts.filter((a) => a.sectionId != null && cashSections.some((x) => x.id === a.sectionId)).map((a) => a.name));
+  const kasaSeparateNames = new Set([...kasaListNames, ...kasaRjNames, ...kasaSectionNames]);
   const listOf = (x: RecordItem) => x.listName || (x.kind === "cash" && kasaListNames.has(x.source) ? x.source : "");
   const isListLinked = (x: RecordItem) => !!x.listName || kasaListNames.has(x.cashAccount);
   const filterSourceOptions = [...new Set(records.map((x) => x.source).filter(Boolean))];
@@ -1390,7 +1397,7 @@ export function Records({
       // Gelir sayfasında kasanın kendi adıyla açılan kayıt kutuları (ör. "Ana -Kasa") ayrı kasa kutusunda (ör. "Ana -Kasa Gelirleri")
       // zaten toplandığı için burada tekrar edilmez.
       // Excel aktarımıyla gelen kayıtlar (yüzlerce ürün/kalem başlığı olabilir) tek tek kutu oluşturmaz; kasa kutusunda toplanır.
-      [...new Set(records.filter((x) => !listOf(x) && !(kind !== "cash" && x.importBatch) && !(kind === "cash" && kasaRjNames.has(x.source))).map((x) => x.source))]
+      [...new Set(records.filter((x) => !listOf(x) && !(kind !== "cash" && x.importBatch) && !(kind === "cash" && (kasaRjNames.has(x.source) || kasaSectionNames.has(x.source)))).map((x) => x.source))]
         .filter((name) => !(kind !== "cash" && cashAccounts.some((a) => a.name === name)))
         .map((name) => {
         const directRows = records.filter((x) => x.source === name && !listOf(x) && !(kind !== "cash" && x.importBatch));
@@ -1580,6 +1587,35 @@ export function Records({
       };
     });
   }, [records, allRecords, kind, cashAccounts]);
+  // Kasa bölümleri: her bölüm için kendi renginde bir satır (Tüm <bölüm> + o bölümdeki kasa kartları).
+  const sectionRows = useMemo(() => {
+    if (kind !== "cash") return [];
+    return cashSections
+      .map((section) => {
+        const names = cashAccounts.filter((a) => a.sectionId === section.id).map((a) => a.name);
+        const groups = names.map((name) => {
+          const directRows = records.filter((x) => x.source === name);
+          const inc = allRecords.filter((x) => x.kind === "income" && x.cashAccount === name);
+          const exp = allRecords.filter((x) => x.kind === "expense" && x.cashAccount === name);
+          return { name, count: directRows.length + inc.length + exp.length, directRows, inc, exp };
+        });
+        return { section, groups };
+      })
+      .filter((r) => r.groups.length > 0);
+  }, [records, allRecords, kind, cashAccounts, sections]);
+  // Gelir/Gider bölüm kutuları: her bölüm için bir kutu (o bölümdeki kayıtların toplamı).
+  const sectionBoxes = useMemo(
+    () =>
+      kind === "cash"
+        ? []
+        : sections
+            .filter((x) => x.scope === kind)
+            .map((section) => {
+              const rows = records.filter((x) => x.sectionId === section.id);
+              return { section, count: rows.length, totalByCurrency: combineByCurrency([{ rows }]) };
+            }),
+    [records, kind, sections],
+  );
   const rjAll = useMemo(
     () => ({
       count: rjGroups.reduce((a, g) => a + g.count, 0),
@@ -1617,6 +1653,7 @@ export function Records({
       (source === "Tümü" || source === "__RJ" || x.source === source || x.cashAccount === source) &&
       (!showAllLists || listOf(x) || isListLinked(x)) &&
       (!activeKasa || x.cashAccount === activeKasa) &&
+      (activeSection === null || x.sectionId === activeSection) &&
       (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaSeparateNames.has(x.cashAccount || x.source))) &&
       (source !== "__RJ" || kasaRjNames.has(x.cashAccount || x.source)) &&
       (!filterFrom || x.date >= filterFrom) &&
@@ -1910,7 +1947,7 @@ export function Records({
   // yeniden kullanılıyor, tek bir birleşik tabloda da.
   function renderRecordsTable(tableRows: RecordItem[]) {
     return (
-      <div className="recordsTable resizableTable">
+      <TableTools id={`records-${kind}`} language={language} className="recordsTable resizableTable" resize={false}>
         <table>
           <colgroup>
             {columnOrder.map((id) => (
@@ -1983,7 +2020,7 @@ export function Records({
             })}
           </tbody>
         </table>
-      </div>
+      </TableTools>
     );
   }
   // Bir kasa seçildiğinde (source !== "Tümü"), Gelir ve Gider kayıtları aynı
@@ -2184,6 +2221,26 @@ export function Records({
                 </button>
               </div>
             ))}
+            {sectionBoxes.map(({ section, count, totalByCurrency }) => (
+              <div className="groupCard sectionBox" key={`sec-${section.id}`}>
+                <button
+                  className={activeSection === section.id ? "selected" : ""}
+                  style={{ background: `${section.color}14`, borderColor: activeSection === section.id ? section.color : `${section.color}66` }}
+                  onClick={() => {
+                    setActiveSection(activeSection === section.id ? null : section.id);
+                    setActiveKasa("");
+                    setSource("Tümü");
+                    setSearch("");
+                    setActiveList("");
+                    setShowAllLists(false);
+                  }}
+                >
+                  <b>{section.name} <span className="groupCount" style={{ color: section.color }}>({count})</span></b>
+                  <em className="groupKasaTag" style={{ background: `${section.color}22`, color: section.color }}>◆ {kind === "income" ? tx(language, "Gelir bölümü", "Income section", "Beşa dahatê") : tx(language, "Gider bölümü", "Expense section", "Beşa mesrefê")}</em>
+                  <strong style={{ color: section.color }}>{moneyBreakdown(totalByCurrency)}</strong>
+                </button>
+              </div>
+            ))}
           </>
         )}
       </div>
@@ -2290,6 +2347,35 @@ export function Records({
             ))}
         </div>
       )}
+      {kind === "cash" &&
+        sectionRows.map(({ section, groups }) => {
+          const allIn = combineByCurrency(groups.flatMap((g) => [{ rows: g.directRows }, { rows: g.inc }]));
+          const allOut = combineByCurrency(groups.map((g) => ({ rows: g.exp })));
+          const allNet = combineByCurrency(groups.flatMap((g) => [{ rows: g.directRows }, { rows: g.inc }, { rows: g.exp, sign: -1 }]));
+          const tone = { background: `${section.color}14`, borderColor: `${section.color}66` };
+          return (
+            <div className="groups sectionGroups" key={`secrow-${section.id}`}>
+              <button style={tone} onClick={() => { setSource("Tümü"); setSearch(groups.length === 1 ? groups[0].name : ""); setActiveList(""); setActiveKasa(""); setShowAllLists(false); }}>
+                <b>{section.name} <span className="groupCount" style={{ color: section.color }}>({groups.reduce((a, g) => a + g.count, 0)})</span></b>
+                <strong style={{ color: section.color }}>{moneyBreakdown(allNet)}</strong>
+                <span className="groupInOut"><span className="in">↗ {moneyBreakdown(allIn)}</span><span className="out">↘ {moneyBreakdown(allOut)}</span></span>
+              </button>
+              {groups.map((g) => (
+                <div className="groupCard" key={g.name}>
+                  <button
+                    className={source === g.name ? "selected" : ""}
+                    style={tone}
+                    onClick={() => { setSource(g.name); setSearch(""); setActiveList(""); setActiveKasa(""); setShowAllLists(false); }}
+                  >
+                    <b>{localizeData(g.name, language)} <span className="groupCount" style={{ color: section.color }}>({g.count})</span></b>
+                    <strong style={{ color: section.color }}>{moneyBreakdown(combineByCurrency([{ rows: g.directRows }, { rows: g.inc }, { rows: g.exp, sign: -1 }]))}</strong>
+                    <span className="groupInOut"><span className="in">↗ {moneyBreakdown(combineByCurrency([{ rows: g.directRows }, { rows: g.inc }]))}</span><span className="out">↘ {moneyBreakdown(combineByCurrency([{ rows: g.exp }]))}</span></span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       {kind === "cash" && rjGroups.length > 0 && (
         <div className="groups rjGroups">
           <button className={source === "__RJ" ? "selected" : ""} onClick={() => { setSource("__RJ"); setSearch(""); setActiveList(""); setActiveKasa(""); setShowAllLists(false); }}>
@@ -2969,10 +3055,12 @@ export function RecordModal({
   cashAccounts,
   users,
   onTransfersChanged,
+  sections = [],
 }: {
   language: Language;
   kind: Kind;
   initial?: RecordItem;
+  sections?: KasaSection[];
   records: RecordItem[];
   onCreateNote: (input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt" | "isArchived" | "archivedAt">) => void;
   onClose: () => void;
@@ -3038,6 +3126,7 @@ export function RecordModal({
   // başta işaretli açılır.
   const [hasListRecord, setHasListRecord] = useState(!!base.listName);
   // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
+  const [sectionId, setSectionId] = useState<number | null>(() => (kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
   const [rjKasa, setRjKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa));
   const [listKasa, setListKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace));
   // "Gider Detaylarını Görüntüle" bölümü kayıt penceresi her açıldığında
@@ -3174,7 +3263,7 @@ export function RecordModal({
         assignedUserIds: [],
       });
     }
-    onSave(kind === "cash" ? { ...form, listKasa, rjKasa } : form, initial?.id);
+    onSave(kind === "cash" ? { ...form, listKasa, rjKasa, sectionId } : { ...form, sectionId }, initial?.id);
   }
   return (
     <div className="overlay overlayScrollThrough">
@@ -3315,6 +3404,15 @@ export function RecordModal({
               )}
             </label>
           )}
+          {kind !== "cash" && sections.some((x) => x.scope === kind) && (
+            <label>
+              {tx(language, "Bölüm", "Section", "Beş")}
+              <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{tx(language, "Bölümsüz", "No section", "Bê beş")}</option>
+                {sections.filter((x) => x.scope === kind).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+              </select>
+            </label>
+          )}
           <label>
             {tx(language, "Detay", "Detail", "Hûragahî")}
             <input
@@ -3338,6 +3436,15 @@ export function RecordModal({
           </label>
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
+            {kind === "cash" && sections.some((x) => x.scope === "cash") && (
+              <label>
+                {tx(language, "Kasa bölümü", "Cash section", "Beşa qaseyê")}
+                <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">{tx(language, "Genel Kasa (bölümsüz)", "Main cash account (no section)", "Qaseya Giştî (bê beş)")}</option>
+                  {sections.filter((x) => x.scope === "cash").map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+                </select>
+              </label>
+            )}
             {kind === "cash" && (
               <label>
                 {tx(language, "RJ-Kasası", "RJ Cash Account", "Qaseya RJ")}

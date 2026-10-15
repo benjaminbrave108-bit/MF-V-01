@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Title } from "./shared";
 import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
-import type { BlockedIp, Language, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
+import type { BlockedIp, KasaSection, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
 
-type SettingsTab = "general" | "typography" | "users" | "view" | "database";
+type SettingsTab = "general" | "typography" | "sections" | "users" | "view" | "database";
 
 export function Settings({
   language,
@@ -22,6 +22,8 @@ export function Settings({
   sharedOwners,
   dashboardIncludedUserIds,
   onDashboardIncludedUserIdsChange,
+  sections,
+  onSectionsChanged,
 }: {
   language: Language;
   company: string;
@@ -33,6 +35,8 @@ export function Settings({
   setTypography: (value: TypographySettings) => void;
   checkPassword: (password: string) => Promise<boolean>;
   isSuperAdmin: boolean;
+  sections: KasaSection[];
+  onSectionsChanged: () => void;
   sharedOwners: { id: number; name: string }[];
   dashboardIncludedUserIds: number[];
   onDashboardIncludedUserIdsChange: (ids: number[]) => void;
@@ -179,6 +183,9 @@ export function Settings({
         </button>
         <button type="button" role="tab" aria-selected={tab === "typography"} className={tab === "typography" ? "active" : ""} onClick={() => setTab("typography")}>
           {tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "sections"} className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")}>
+          {tx(language, "Bölümler", "Sections", "Beş")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
@@ -335,6 +342,7 @@ export function Settings({
         </div>
       )}
 
+      {tab === "sections" && <SectionsPanel language={language} sections={sections} onChanged={onSectionsChanged} />}
       {tab === "users" && (
         <div className="settings">
           <div className="panel">
@@ -479,3 +487,86 @@ function TypographyControl({ language, typeKey, value, onChange }: { language: L
   </section>;
 }
 
+
+// Ayarlar > Bölümler: Genel Kasa / Liste Kasası / RJ-Kasası eksenlerine ek olarak yöneticinin kasa, gelir ve gider
+// bölümleri oluşturması. Her bölüm ilgili sayfadaki kutu düzenine yeni bir kutu (satır) ekler.
+const SECTION_COLORS = ["#7b52bf", "#1d9e75", "#d85a30", "#378add", "#ba7517", "#d4537e", "#0f6e56", "#5f5e5a"];
+
+function SectionsPanel({ language, sections, onChanged }: { language: Language; sections: KasaSection[]; onChanged: () => void }) {
+  const [drafts, setDrafts] = useState<Record<SectionScope, { name: string; color: string }>>({
+    cash: { name: "", color: SECTION_COLORS[0] },
+    income: { name: "", color: SECTION_COLORS[1] },
+    expense: { name: "", color: SECTION_COLORS[2] },
+  });
+  const [error, setError] = useState("");
+  const groups: [SectionScope, string, string][] = [
+    ["cash", tx(language, "Kasa bölümleri", "Cash sections", "Beşên qaseyê"), tx(language, "Kasalar sayfasına yeni bir kutu satırı ekler; kasa kaydında “Kasa bölümü” ile seçilir.", "Adds a new box row to the Kasalar page; chosen with “Cash section” on a cash record.", "Rêzeke qutiyê ya nû li rûpela Qase zêde dike; di tomara qaseyê de bi “Beşa qaseyê” tê hilbijartin.")],
+    ["income", tx(language, "Gelir bölümleri", "Income sections", "Beşên dahatê"), tx(language, "Gelir sayfasına yeni bir kutu ekler; gelir kaydında “Bölüm” ile seçilir.", "Adds a new box to the Income page; chosen with “Section” on an income record.", "Qutiyeke nû li rûpela Dahat zêde dike; di tomara dahatê de bi “Beş” tê hilbijartin.")],
+    ["expense", tx(language, "Gider bölümleri", "Expense sections", "Beşên mesrefê"), tx(language, "Gider sayfasına yeni bir kutu ekler; gider kaydında “Bölüm” ile seçilir.", "Adds a new box to the Expense page; chosen with “Section” on an expense record.", "Qutiyeke nû li rûpela Mesref zêde dike; di tomara mesrefê de bi “Beş” tê hilbijartin.")],
+  ];
+  async function call(url: string, method: string, body?: unknown) {
+    const response = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setError(data?.error || "Hata");
+      return false;
+    }
+    setError("");
+    onChanged();
+    return true;
+  }
+  return (
+    <div className="panel sectionsPanel">
+      <Title
+        title={tx(language, "Bölümler", "Sections", "Beş")}
+        sub={tx(language, "Genel Kasa, Liste Kasası ve RJ-Kasası eksenlerine ek bölümler oluşturun; her bölüm kutu sistemine yeni bir kutu ekler.", "Create sections in addition to the Main, List and RJ cash axes; each section adds a new box to the box system.", "Ji bilî tevgerên Qaseya Giştî, Lîste û RJ beşan çêkin; her beş qutiyeke nû li pergala qutiyan zêde dike.")}
+      />
+      {error && <p className="listsError">{error}</p>}
+      {groups.map(([scope, title, hint]) => (
+        <div key={scope} className="sectionGroup">
+          <h4>{title}</h4>
+          <small className="listMuted">{hint}</small>
+          <div className="sectionChips">
+            {sections.filter((x) => x.scope === scope).map((x) => (
+              <span key={x.id} className="sectionChip" style={{ borderColor: x.color, background: `${x.color}18` }}>
+                <i style={{ background: x.color }} />
+                {x.name}
+                <button
+                  type="button"
+                  title={tx(language, "Yeniden adlandır", "Rename", "Nav biguherîne")}
+                  onClick={() => {
+                    const next = prompt(tx(language, "Bölüm adı", "Section name", "Navê beşê"), x.name);
+                    if (next && next.trim() && next.trim() !== x.name) call(`/api/sections/${x.id}`, "PUT", { name: next.trim() });
+                  }}
+                >✎</button>
+                <button
+                  type="button"
+                  title={tx(language, "Sil", "Delete", "Jê bibe")}
+                  onClick={() => confirm(tx(language, `“${x.name}” silinsin mi? Kasa/kayıtlar silinmez, bölümsüz kalır.`, `Delete “${x.name}”? Cash accounts/records are kept without a section.`, `“${x.name}” were jêbirin? Qase/tomar namînin, bê beş dimînin.`)) && call(`/api/sections/${x.id}`, "DELETE")}
+                >×</button>
+              </span>
+            ))}
+            {sections.filter((x) => x.scope === scope).length === 0 && <small className="listMuted">—</small>}
+          </div>
+          <form
+            className="sectionForm"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const d = drafts[scope];
+              if (!d.name.trim()) return;
+              if (await call("/api/sections", "POST", { scope, name: d.name.trim(), color: d.color })) setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], name: "" } }));
+            }}
+          >
+            <input value={drafts[scope].name} maxLength={80} placeholder={tx(language, "Yeni bölüm adı", "New section name", "Navê beşa nû")} onChange={(e) => setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], name: e.target.value } }))} />
+            <span className="sectionColors">
+              {SECTION_COLORS.map((c) => (
+                <button key={c} type="button" className={drafts[scope].color === c ? "active" : ""} style={{ background: c }} aria-label={c} onClick={() => setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], color: c } }))} />
+              ))}
+            </span>
+            <button className="primary compact" disabled={!drafts[scope].name.trim()}>＋ {tx(language, "Bölüm ekle", "Add section", "Beş zêde bike")}</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  );
+}

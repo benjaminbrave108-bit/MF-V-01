@@ -4162,3 +4162,39 @@ main { min-width: 0; overflow-x: hidden; }
 .rjGroups .groupCard > button.selected { border-color: #7b52bf; background: #ece0fa; box-shadow: 0 0 0 2px #7b52bf15; }
 .rjGroups .groupCount { color: #7b52bf; }
 .rjGroups strong { color: #4b2a85; }
+
+/* Tablo araçları: sütun tutamacı ve Excel benzeri hücre hesabı */
+.tbGrip { position: absolute; top: 0; right: -3px; width: 8px; height: 100%; cursor: col-resize; z-index: 3; }
+.tbGrip::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: #b9c7cd; opacity: 0; transition: opacity 0.12s; }
+th:hover > .tbGrip::after, .tbGrip:hover::after { opacity: 1; }
+td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; outline-offset: -1px; }
+.tableCalcBar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; display: flex; align-items: center; gap: 16px; padding: 8px 14px; background: #123f52; color: #fff; border-radius: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); font-size: 12px; max-width: 96vw; flex-wrap: wrap; }
+.tableCalcBar span { display: flex; flex-direction: column; gap: 1px; }
+.tableCalcBar small { font-size: 10px; opacity: 0.7; }
+.tableCalcBar b { font-size: 13px; font-weight: 700; }
+.tableCalcBar .tcbLabel { font-weight: 700; opacity: 0.9; }
+.tableCalcBar .tcbClose { background: rgba(255, 255, 255, 0.15); border: 0; color: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+
+/* Ana sayfa: Gelir–Gider Analizi kasa seçici */
+.analysisKasaPicker { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.analysisKasaMenu { position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px; min-width: 220px; max-height: 260px; overflow: auto; background: #fff; border: 1px solid #d8e2e5; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.analysisKasaTable { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; border-top: 1px solid #e6edef; padding-top: 8px; }
+.analysisKasaTable > div { display: grid; grid-template-columns: minmax(80px, 1.2fr) 1fr 1fr 1fr; gap: 8px; font-size: 11px; align-items: baseline; }
+.analysisKasaTable b { font-size: 12px; }
+.analysisKasaTable .in { color: #14795e; }
+.analysisKasaTable .out { color: #b33d3d; }
+.analysisKasaTable strong { text-align: right; color: #123f52; }
+
+/* Ayarlar > Bölümler */
+.sectionsPanel { grid-column: 1 / -1; }
+.sectionGroup { border-top: 1px solid #e6edef; padding: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.sectionGroup h4 { margin: 0; font-size: 13px; }
+.sectionChips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sectionChip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; font-weight: 600; }
+.sectionChip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.sectionChip button { border: 0; background: transparent; cursor: pointer; color: #5d7580; padding: 0 4px; font-size: 12px; }
+.sectionForm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sectionForm input { min-width: 180px; padding: 5px 8px; border: 1px solid #d8e2e5; border-radius: 8px; font-size: 12px; }
+.sectionColors { display: inline-flex; gap: 4px; }
+.sectionColors button { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.sectionColors button.active { border-color: #1b2733; }

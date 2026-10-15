@@ -190,6 +190,46 @@ export function Guide({ language }: { language: Language }) {
       ),
     },
     {
+      id: "sectionsTools",
+      title: tx(language, "Bölümler, Kasa Seçimi ve Tablo Araçları", "Sections, Cash Selection and Table Tools", "Beş, Hilbijartina Qaseyê û Amûrên Tabloyê"),
+      body: (
+        <ul>
+          <li>
+            {tx(
+              language,
+              "Bölümler: Genel Kasa, Liste Kasası ve RJ-Kasası ana eksenlerdir. Bunlara ek olarak Ayarlar > Bölümler'den kasa, gelir ve gider bölümleri oluşturabilirsiniz. Kasa bölümü Kasalar sayfasına yeni bir renkli kutu satırı ekler (kasa kaydında “Kasa bölümü” ile seçilir); gelir ve gider bölümleri Gelir/Gider sayfalarına birer kutu ekler (kayıtta “Bölüm” ile seçilir); kutuya tıklayınca o bölümün kayıtları listelenir. Bölümü silmek kasa ve kayıtları silmez.",
+              "Sections: Main cash, List cash and RJ cash are the main axes. Under Settings > Sections you can also create cash, income and expense sections. A cash section adds a new colored box row to the Kasalar page (chosen with “Cash section” on a cash record); income and expense sections add one box each to the Income/Expense pages (chosen with “Section” on a record); clicking a box lists that section's records. Deleting a section does not delete cash accounts or records.",
+              "Beş: Qaseya Giştî, Qaseya Lîsteyê û Qaseya RJ tevgerên sereke ne. Ji bilî van hûn dikarin di Mîheng > Beş de beşên qase, dahat û mesrefê çêkin. Beşa qaseyê rêzeke qutiyê ya rengîn li rûpela Qase zêde dike; beşên dahat û mesrefê her yek qutiyekê li rûpelên Dahat/Mesref zêde dikin; bi tikandina qutiyê tomarên wê beşê têne lîstekirin. Jêbirina beşê qase û tomaran jê nabe.",
+            )}
+          </li>
+          <li>
+            {tx(
+              language,
+              "Ana Sayfa kasa seçimi: “Gelir – Gider Analizi” bölümündeki “Kasa seç” düğmesiyle bir veya birden çok kasa seçin; gelir, gider ve net analizi ile kasa bazında sonuçlar seçime göre yenilenir. “Tümünü göster” seçimi temizler.",
+              "Home page cash selection: use the “Select cash accounts” button in “Income – Expense Analysis” to pick one or more cash accounts; the income, expense and net analysis and per-account results refresh to match. “Show all” clears the selection.",
+              "Hilbijartina qaseyê ya Rûpela Sereke: bi bişkoka “Qase hilbijêre” di “Analîza Dahat û Mesrefan” de qaseyek an çend qaseyan hilbijêrin; analîz û encamên li gorî qaseyê li gorî hilbijartinê têne nûkirin. “Hemûyan nîşan bide” hilbijartinê paqij dike.",
+            )}
+          </li>
+          <li>
+            {tx(
+              language,
+              "Sütun genişliği: Arşiv ve Rapor tablolarında, başlığın sağ kenarındaki tutamacı sürükleyerek sütunu daraltıp genişletebilirsiniz (çift tıklama sıfırlar, ayar hatırlanır). Kasalar/Gelir/Gider tablolarında sütunlar başlıktan sürüklenerek hem sıralanır hem genişletilir.",
+              "Column width: in the Archive and Report tables, drag the handle on a header's right edge to narrow or widen a column (double-click resets, settings are remembered). In the Kasalar/Income/Expense tables columns are reordered and resized by dragging the header.",
+              "Firehiya stûnê: di tabloyên Arşîv û Raporê de tutamaka li kêleka rastê ya sernavê bikişînin da stûn teng an fireh bibe (du caran bitikînin vedigere, mîheng tê bîranîn). Di tabloyên Qase/Dahat/Mesref de stûn bi kişandina sernavê tên rêzkirin û fireh kirin.",
+            )}
+          </li>
+          <li>
+            {tx(
+              language,
+              "Hücre hesabı (Excel gibi): Kasalar, Gelir, Gider, Listeler, Arşiv ve Rapor tablolarında, örneğin Miktar sütununda hücrelere tıklayıp aşağı doğru sürükleyerek seçin (Ctrl ile tek tek, Shift ile aralık). Altta Seçili, Toplam, Ortalama, Sayı, En az ve En çok görünür; Esc veya ✕ ile kapanır.",
+              "Cell calculations (like Excel): in the Kasalar, Income, Expense, Lists, Archive and Report tables, click and drag down over cells, e.g. in the Amount column (Ctrl for single cells, Shift for a range). A bar at the bottom shows Selected, Sum, Average, Count, Min and Max; close it with Esc or ✕.",
+              "Hesaba şaneyan (wekî Excel): di tabloyên Qase, Dahat, Mesref, Lîste, Arşîv û Raporê de, mînak di stûna Mîqdar de bi tikandin û kişandina ber bi jêr şaneyan hilbijêrin (Ctrl ji bo yek bi yek, Shift ji bo navber). Li jêr Hilbijartî, Giştî, Navîn, Hejmar, Kêmtirîn û Zêdetirîn tê dîtin; bi Esc an ✕ tê girtin.",
+            )}
+          </li>
+        </ul>
+      ),
+    },
+    {
       id: "excelImport",
       title: tx(language, "Excel'den Kasa Aktar", "Import a Cash Account from Excel", "Qaseyekê ji Excelê Têxe"),
       body: (

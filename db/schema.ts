@@ -57,6 +57,19 @@ export const sessions = pgTable("sessions", {
   index("sessions_expires_at_idx").on(table.expiresAt),
 ]);
 
+// Bölümler (Ayarlar > Bölümler): Genel Kasa / Liste Kasası / RJ-Kasası dışında yöneticinin oluşturduğu ek kasa,
+// gelir ve gider bölümleri. Her bölüm Kasalar/Gelir/Gider sayfalarındaki kutu düzenine yeni bir kutu (satır) ekler.
+export const kasaSections = pgTable("kasa_sections", {
+  id: serial("id").primaryKey(),
+  scope: text("scope").notNull(),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#7b52bf"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("kasa_sections_scope_check", sql`${table.scope} IN ('cash', 'income', 'expense')`),
+  uniqueIndex("kasa_sections_scope_name_idx").on(table.scope, table.name),
+]);
+
 // A kasa (cash account) as a first-class entity, decoupled from the
 // `records.source` string match the app used to rely on exclusively. The
 // `records` row with kind='cash' is still what carries the kasa's own
@@ -76,6 +89,8 @@ export const cashAccounts = pgTable("cash_accounts", {
   isListWorkspace: boolean("is_list_workspace").notNull().default(false),
   // "RJ-Kasası": Kasalar sayfasında üstteki kasa kartlarında değil, ayrı "RJ-Kasaları" bölümünde görünür.
   isRjKasa: boolean("is_rj_kasa").notNull().default(false),
+  // Yönetici tanımlı "kasa bölümü" (kasa_sections, scope=cash); boşsa Genel Kasa.
+  sectionId: integer("section_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -219,6 +234,8 @@ export const records = pgTable("records", {
   listId: integer("list_id").references(() => lists.id, { onDelete: "set null" }),
   // Excel aktarımı: aynı aktarımdaki kayıtlar tek tıkla geri alınabilsin (importBatch) ve aynı satırlar ikinci
   // yüklemede çift kayıt oluşturmasın (importKey).
+  // Gelir/Gider bölümü (kasa_sections, scope=income/expense).
+  sectionId: integer("section_id"),
   importBatch: text("import_batch"),
   importKey: text("import_key"),
   // Bir kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —

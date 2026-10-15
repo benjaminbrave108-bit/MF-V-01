@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import ExcelJS from "exceljs";
 import { Title, DeleteConfirmModal } from "./shared";
+import { TableTools } from "./TableTools";
 import { tx, localizeData } from "../lib/i18n";
 import { date, money, total } from "../lib/finance";
 import type { Language, PreparedReport, Profile, RecordItem, ReportLine } from "../lib/types";
@@ -449,12 +450,12 @@ async function downloadPreparedReport(report: PreparedReport, language: Language
 function TemplateTable({ title, kind, lines, total, language }: { title: string; kind: "income" | "expense"; lines: ReportLine[]; total: number; language: Language }) {
   return <section className="templateSection">
     <h3>{title}</h3>
-    <div className="templateTableScroll"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{kind === "income" ? tx(language, "Gelir", "Income", "Dahat") : tx(language, "Gider", "Expense", "Mesref")}</th><th>{tx(language, "Detay", "Detail", "Hûrgulî")}</th><th>{tx(language, "Not", "Note", "Nîşe")}</th><th>{tx(language, "Miktar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || ""}</td><td>{line.note || ""}</td><td className="amount">{money(line.amount)}</td></tr>)}{!lines.length && <tr><td colSpan={5}>—</td></tr>}<tr className="templateSubtotal"><td colSpan={3}></td><td>{kind === "income" ? tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî") : tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî")}</td><td className="amount">{money(total)}</td></tr></tbody></table></div>
+    <TableTools id="report-template" language={language} className="templateTableScroll"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{kind === "income" ? tx(language, "Gelir", "Income", "Dahat") : tx(language, "Gider", "Expense", "Mesref")}</th><th>{tx(language, "Detay", "Detail", "Hûrgulî")}</th><th>{tx(language, "Not", "Note", "Nîşe")}</th><th>{tx(language, "Miktar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || ""}</td><td>{line.note || ""}</td><td className="amount">{money(line.amount)}</td></tr>)}{!lines.length && <tr><td colSpan={5}>—</td></tr>}<tr className="templateSubtotal"><td colSpan={3}></td><td>{kind === "income" ? tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî") : tx(language, "Toplam Gider", "Total Expense", "Mesrefa Giştî")}</td><td className="amount">{money(total)}</td></tr></tbody></table></TableTools>
   </section>;
 }
 
 function ReportLines({ lines, language }: { lines: ReportLine[]; language: Language }) {
-  return <div className="recordsTable compactReportTable"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Başlık", "Category", "Sernav")}</th><th>{tx(language, "Detay / Not", "Detail / Note", "Hûrgulî / Nîşe")}</th><th>{tx(language, "Tutar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || line.note || "—"}</td><td className="amount">{money(line.amount)}</td></tr>)}</tbody></table></div>;
+  return <TableTools id="report-compact" language={language} className="recordsTable compactReportTable"><table><thead><tr><th>{tx(language, "Tarih", "Date", "Dîrok")}</th><th>{tx(language, "Başlık", "Category", "Sernav")}</th><th>{tx(language, "Detay / Not", "Detail / Note", "Hûrgulî / Nîşe")}</th><th>{tx(language, "Tutar", "Amount", "Meblağ")}</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.title}-${index}`}><td>{date(line.date, language)}</td><td>{line.title}</td><td>{line.detail || line.note || "—"}</td><td className="amount">{money(line.amount)}</td></tr>)}</tbody></table></TableTools>;
 }
 
 export function AnnualReports({

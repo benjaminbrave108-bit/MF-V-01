@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Title } from "./shared";
-import { localizeData } from "../lib/i18n";
+import { localizeData, tx } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, total } from "../lib/finance";
 import type { Language, Page, RecordItem } from "../lib/types";
 
@@ -37,17 +38,19 @@ function Bar({
   value,
   max,
   expense,
+  display,
 }: {
   label: string;
   value: number;
   max: number;
   expense?: boolean;
+  display?: string;
 }) {
   return (
     <div>
       <span>
         <b>{label}</b>
-        <strong>{money(value)}</strong>
+        <strong>{display ?? money(value)}</strong>
       </span>
       <i>
         <em
@@ -88,6 +91,21 @@ export function Dashboard({
     { rows: linkedIncomeRows },
     { rows: linkedExpenseRows, sign: -1 },
   ]);
+  // Gelir – Gider Analizi için kasa seçimi: boş = tüm kasalar; seçilen kasalara göre analiz yenilenir.
+  const kasaOf = (x: RecordItem) => (x.kind === "cash" ? x.source : x.cashAccount);
+  const kasaNames = [...new Set(records.map(kasaOf).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const [picked, setPicked] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const analysisRecords = picked.length ? records.filter((x) => picked.includes(kasaOf(x))) : records;
+  const aCash = analysisRecords.filter((x) => x.kind === "cash");
+  const aIncome = analysisRecords.filter((x) => x.kind === "income");
+  const aExpense = analysisRecords.filter((x) => x.kind === "expense");
+  const aIncomeTotal = total(aIncome) + total(aCash);
+  const aExpenseTotal = total(aExpense);
+  const aIncomeBy = combineByCurrency([{ rows: aIncome }, { rows: aCash }]);
+  const aExpenseBy = combineByCurrency([{ rows: aExpense }]);
+  const aNetBy = combineByCurrency([{ rows: aIncome }, { rows: aCash }, { rows: aExpense, sign: -1 }]);
+  const shownKasas = picked.length ? picked : kasaNames;
   const recent = [...records]
     .filter((x) => x.kind !== "cash")
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -176,24 +194,52 @@ export function Dashboard({
       <div className="twoCols">
         <div className="panel">
           <Title title={labels.analysis} sub={labels.analysisSub} />
-          <div className="bars">
-            <Bar
-              label={labels.barIncome}
-              value={income}
-              max={Math.max(income, expense)}
-            />
-            <Bar
-              label={labels.barExpense}
-              value={expense}
-              max={Math.max(income, expense)}
-              expense
-            />
-            <Bar
-              label={labels.barNet}
-              value={income - expense}
-              max={Math.max(income, expense)}
-            />
+          <div className="analysisKasaPicker">
+            <button type="button" className="light compact" onClick={() => setPickerOpen((v) => !v)}>
+              ▣ {tx(language, "Kasa seç", "Select cash accounts", "Qase hilbijêre")} ({picked.length ? picked.length : tx(language, "Tümü", "All", "Hemû")}) {pickerOpen ? "▴" : "▾"}
+            </button>
+            {picked.length > 0 && (
+              <button type="button" className="light compact" onClick={() => setPicked([])}>✕ {tx(language, "Tümünü göster", "Show all", "Hemûyan nîşan bide")}</button>
+            )}
+            {pickerOpen && (
+              <div className="analysisKasaMenu">
+                {kasaNames.length === 0 && <small>—</small>}
+                {kasaNames.map((name) => (
+                  <label key={name} className="checkField">
+                    <input
+                      type="checkbox"
+                      checked={picked.includes(name)}
+                      onChange={(e) => setPicked((prev) => (e.target.checked ? [...prev, name] : prev.filter((n) => n !== name)))}
+                    />
+                    {localizeData(name, language)}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
+          <div className="bars">
+            <Bar label={labels.barIncome} value={aIncomeTotal} max={Math.max(aIncomeTotal, aExpenseTotal, 1)} display={moneyBreakdown(aIncomeBy)} />
+            <Bar label={labels.barExpense} value={aExpenseTotal} max={Math.max(aIncomeTotal, aExpenseTotal, 1)} expense display={moneyBreakdown(aExpenseBy)} />
+            <Bar label={labels.barNet} value={aIncomeTotal - aExpenseTotal} max={Math.max(aIncomeTotal, aExpenseTotal, 1)} display={moneyBreakdown(aNetBy)} />
+          </div>
+          {shownKasas.length > 0 && (
+            <div className="analysisKasaTable">
+              {shownKasas.map((name) => {
+                const rows = records.filter((x) => kasaOf(x) === name);
+                const inc = combineByCurrency([{ rows: rows.filter((x) => x.kind === "income" || x.kind === "cash") }]);
+                const exp = combineByCurrency([{ rows: rows.filter((x) => x.kind === "expense") }]);
+                const net = combineByCurrency([{ rows: rows.filter((x) => x.kind !== "expense") }, { rows: rows.filter((x) => x.kind === "expense"), sign: -1 }]);
+                return (
+                  <div key={name}>
+                    <b>{localizeData(name, language)}</b>
+                    <span className="in">↗ {moneyBreakdown(inc)}</span>
+                    <span className="out">↘ {moneyBreakdown(exp)}</span>
+                    <strong>{moneyBreakdown(net)}</strong>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="panel">
           <Title title={labels.recent} sub={labels.recentSub} />

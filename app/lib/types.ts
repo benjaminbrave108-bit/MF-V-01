@@ -30,6 +30,8 @@ export type RecordItem = {
   // Kasa kaydı gönderilirken "Liste Kasası" işareti (sunucu kasayı çalışma alanı yapar).
   listKasa?: boolean;
   rjKasa?: boolean;
+  // Gelir/Gider bölümü (Ayarlar > Bölümler); kasa kaydında seçilen kasa bölümü kasaya yazılır.
+  sectionId?: number | null;
   // Excel aktarımıyla gelen kayıtların aktarım numarası (kasa kutusunda toplanır, başlık kutusu oluşturmaz).
   importBatch?: string | null;
   // Kayda eklenen Excel/Office/PDF dosyaları (birden fazla olabilir) —
@@ -132,6 +134,7 @@ export type CashAccountSummary = {
   // "Liste Kasası" işaretli kasa — Listeler sayfasında otomatik çalışma alanıdır.
   isListWorkspace?: boolean;
   isRjKasa?: boolean;
+  sectionId?: number | null;
   // Owner-controlled opt-in (Kasalar > Paylaş or Ayarlar > Paylaşım): lets a
   // super admin fold this kasa into their own Ana Sayfa via Görüntüle.
   dashboardShareEnabled: boolean;
@@ -202,3 +205,7 @@ export type PreparedReport = {
 export type TypographyKey = "pageTitle" | "sectionTitle" | "cardTitle" | "body" | "tableHeader" | "formText";
 export type TypographyRule = { size: number; font: string; color: string };
 export type TypographySettings = Record<TypographyKey, TypographyRule>;
+
+// Ayarlar > Bölümler: yönetici tanımlı kasa / gelir / gider bölümleri (her biri sayfalarda yeni bir kutu ekler).
+export type SectionScope = "cash" | "income" | "expense";
+export type KasaSection = { id: number; scope: SectionScope; name: string; color: string };

@@ -90,6 +90,7 @@ export const recordInputSchema = z.object({
   // Kasa kaydında "Liste Kasası" işareti: kasa Listeler sayfasında çalışma alanı olur.
   listKasa: z.boolean().optional(),
   rjKasa: z.boolean().optional(),
+  sectionId: z.number().int().positive().nullable().optional(),
   attachments: attachmentsSchema,
   detailTable: detailTableSchema.optional().default([]),
   detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),
@@ -116,6 +117,7 @@ export const recordUpdateSchema = z.object({
   listId: z.number().int().positive().nullable().optional(),
   listKasa: z.boolean().optional(),
   rjKasa: z.boolean().optional(),
+  sectionId: z.number().int().positive().nullable().optional(),
   attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS, `En fazla ${MAX_ATTACHMENTS} dosya eklenebilir`).optional(),
   detailTable: detailTableSchema.optional(),
   detailTableLayout: detailTableLayoutSchema.optional(),
@@ -157,6 +159,16 @@ export const excelImportSchema = z.object({
     )
     .min(1)
     .max(500),
+});
+
+export const sectionInputSchema = z.object({
+  scope: z.enum(["cash", "income", "expense"]),
+  name: z.string().trim().min(1, "Ad gerekli").max(80),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().default("#7b52bf"),
+});
+export const sectionUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 
 export const cashTransferInputSchema = z.object({

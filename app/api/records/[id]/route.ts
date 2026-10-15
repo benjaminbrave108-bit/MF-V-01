@@ -6,6 +6,7 @@ import { json, withErrorHandling } from "../../_lib/http";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { ensureCashAccountLink } from "../../_lib/records";
 import { markListKasa, resolveRecordList, setRjKasa } from "../../_lib/lists";
+import { cashAccounts } from "../../../../db/schema";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
@@ -64,6 +65,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
     if (link.forbidden) return { forbidden: true as const };
     if (kind === "cash" && payload.listKasa && link.cashAccountId != null) await markListKasa(link.cashAccountId, tx);
     if (kind === "cash" && payload.rjKasa !== undefined && link.cashAccountId != null) await setRjKasa(link.cashAccountId, payload.rjKasa, tx);
+    if (kind === "cash" && payload.sectionId !== undefined && link.cashAccountId != null) await tx.update(cashAccounts).set({ sectionId: payload.sectionId }).where(eq(cashAccounts.id, link.cashAccountId));
     const cashAccount = kind === "cash" ? source : (cashAccountName || "");
 
     const [updatedRecord] = await tx
@@ -81,6 +83,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
         tags: payload.tags ?? old.tags,
         cashAccount,
         cashAccountId: link.cashAccountId,
+        sectionId: kind === "cash" ? null : payload.sectionId === undefined ? old.sectionId : payload.sectionId,
         listName: listLink.listName ?? old.listName,
         listId: listLink.listId === undefined ? old.listId : listLink.listId,
         attachments: payload.attachments ?? old.attachments,

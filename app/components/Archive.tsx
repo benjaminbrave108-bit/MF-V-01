@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Title } from "./shared";
+import { TableTools } from "./TableTools";
 import { tx, localizeData, kindName } from "../lib/i18n";
 import { date, money } from "../lib/finance";
 import type { ArchivedCommentThread, ArchiveItem, FinanceNote, Language, PreparedReport } from "../lib/types";
@@ -10,7 +11,7 @@ import type { ArchivedCommentThread, ArchiveItem, FinanceNote, Language, Prepare
 // kullanıyor — tek yerden render edip iki kez çağırıyoruz.
 function ArchiveRecordsTable({ language, rows }: { language: Language; rows: ArchiveItem[] }) {
   return (
-    <div className="recordsTable">
+    <TableTools id="archive-records" language={language} className="recordsTable">
       <table>
         <thead>
           <tr>
@@ -61,7 +62,7 @@ function ArchiveRecordsTable({ language, rows }: { language: Language; rows: Arc
           )}
         </tbody>
       </table>
-    </div>
+    </TableTools>
   );
 }
 
