@@ -15,6 +15,8 @@ type Expense = {
   source: string;
   detail: string;
   note: string;
+  person: string;
+  listName: string;
   amount: number;
   currency: string;
   byRecipient: Record<string, number>;
@@ -758,6 +760,10 @@ function ExpensesGrid({
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // Arama ve süzme: serbest metin (gider, kişi, liste, kasa, not), kişi (dağıtım yapılan) ve liste adı.
+  const [q, setQ] = useState("");
+  const [fPerson, setFPerson] = useState<number | "">("");
+  const [fList, setFList] = useState("");
   // Kişi sütunları soldan sağa açılıp kapanır; tercih tarayıcıda hatırlanır.
   const [open, setOpen] = useState(() => {
     try {
@@ -838,21 +844,57 @@ function ExpensesGrid({
     await onSaveAllocations(expense.id, allocations);
   }
 
-  const sumRecipient = (id: number) => r2(ws.expenses.reduce((a, e) => a + (e.byRecipient[id] ?? 0), 0));
+  const sumRecipient = (id: number) => r2(shown.reduce((a, e) => a + (e.byRecipient[id] ?? 0), 0));
   const allocatedTotal = (e: Expense) => r2(Object.values(e.byRecipient).reduce((a, v) => a + v, 0));
-  const grandAllocated = r2(ws.expenses.reduce((a, e) => a + allocatedTotal(e), 0));
   const money0 = (v: number) => (Math.abs(v) < 0.005 ? "—" : money(v, c));
-  const D = { date: 104, name: 200, note: 150, amount: 126, recipient: 116, alloc: open ? 116 : 150, left: 150 };
+  const D = { date: 104, name: 200, kasa: 120, person: 120, list: 120, note: 150, amount: 126, recipient: 116, alloc: open ? 116 : 150, left: 150 };
+  const listNames = [...new Set(ws.expenses.map((e) => e.listName).filter(Boolean))];
+  const shown = ws.expenses.filter((e) => {
+    if (fPerson !== "" && !((e.byRecipient[fPerson] ?? 0) > 0)) return false;
+    if (fList && e.listName !== fList) return false;
+    const needle = q.trim().toLowerCase();
+    if (!needle) return true;
+    const people = ws.recipients.filter((r) => (e.byRecipient[r.id] ?? 0) > 0).map((r) => r.name);
+    return [e.date, formatDate(e.date, language), e.source, e.detail, e.note, e.person, e.listName, ws.kasaName, ws.name, ...people].join(" ").toLowerCase().includes(needle);
+  });
+  const filtered = shown.length !== ws.expenses.length;
+  const expenseTotal = r2(shown.reduce((a, e) => a + e.amount, 0));
+  const grandAllocated = r2(shown.reduce((a, e) => a + allocatedTotal(e), 0));
   const minWidth =
-    colW("date", D.date) + colW("name", D.name) + colW("note", D.note) + colW("amount", D.amount) +
+    colW("date", D.date) + colW("name", D.name) + colW("kasa", D.kasa) + colW("person", D.person) + colW("list", D.list) + colW("note", D.note) + colW("amount", D.amount) +
     (open ? ws.recipients.reduce((a, r) => a + colW(`r${r.id}`, D.recipient), 0) : 0) + colW("alloc", D.alloc) + colW("left", D.left);
 
   return (
     <div className="listMatrixScroll">
+      <div className="listFilters">
+        <input
+          type="search"
+          value={q}
+          placeholder={tx(language, "Ara: gider, kişi, liste, kasa, not…", "Search: expense, person, list, cash account, note…", "Lêgerîn: mesref, kes, lîste, qase, nîşe…")}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select value={fPerson} onChange={(e) => setFPerson(e.target.value ? Number(e.target.value) : "")} aria-label={tx(language, "Kişi", "Person", "Kes")}>
+          <option value="">{tx(language, "Tüm kişiler", "All people", "Hemû kes")}</option>
+          {ws.recipients.map((r) => (<option key={r.id} value={r.id}>{r.name}</option>))}
+        </select>
+        <select value={fList} onChange={(e) => setFList(e.target.value)} aria-label={tx(language, "Liste", "List", "Lîste")} disabled={listNames.length === 0}>
+          <option value="">{tx(language, "Tüm listeler", "All lists", "Hemû lîste")}</option>
+          {listNames.map((n) => (<option key={n} value={n}>{n}</option>))}
+        </select>
+        {(q || fPerson !== "" || fList) && (
+          <button type="button" className="light compact" onClick={() => { setQ(""); setFPerson(""); setFList(""); }}>
+            ✕ {tx(language, "Temizle", "Clear", "Paqij bike")}
+          </button>
+        )}
+        <small className="listMuted">{shown.length}/{ws.expenses.length}</small>
+      </div>
       <table className="listTable listsGrid" style={{ minWidth }}>
         <colgroup>
           <col style={{ width: colW("date", D.date) }} />
           <col style={{ width: colW("name", D.name) }} />
+          <col style={{ width: colW("kasa", D.kasa) }} />
+          <col style={{ width: colW("person", D.person) }} />
+          <col style={{ width: colW("list", D.list) }} />
           <col style={{ width: colW("note", D.note) }} />
           <col style={{ width: colW("amount", D.amount) }} />
           {open && ws.recipients.map((r) => <col key={r.id} style={{ width: colW(`r${r.id}`, D.recipient) }} />)}
@@ -864,6 +906,9 @@ function ExpensesGrid({
           <tr>
             <th className="lgH1">{tx(language, "Tarih", "Date", "Dîrok")}{grip("date", D.date)}</th>
             <th className="lgH1">{tx(language, "Gider", "Expense", "Mesref")}{grip("name", D.name)}</th>
+            <th className="lgH1">{tx(language, "Kasa", "Cash account", "Qase")}{grip("kasa", D.kasa)}</th>
+            <th className="lgH1">{tx(language, "Kişi", "Person", "Kes")}{grip("person", D.person)}</th>
+            <th className="lgH1">{tx(language, "Liste", "List", "Lîste")}{grip("list", D.list)}</th>
             <th className="lgH1 lgCenter">{tx(language, "Not", "Note", "Nîşe")}{grip("note", D.note)}</th>
             <th className="lgH1">{tx(language, "Gider tutarı", "Expense amount", "Mîqdara mesrefê")}{grip("amount", D.amount)}</th>
             {open &&
@@ -923,12 +968,18 @@ function ExpensesGrid({
           </tr>
         </thead>
         <tbody>
-          {ws.expenses.map((e) => {
+          {shown.length === 0 && (
+            <tr><td colSpan={12} className="lgMuted" style={{ textAlign: "center", padding: 18 }}>{tx(language, "Aramanıza uyan gider yok.", "No expenses match your search.", "Mesrefa li gorî lêgerîna we tune.")}</td></tr>
+          )}
+          {shown.map((e) => {
             const left = r2(e.amount - allocatedTotal(e));
             return (
               <tr key={e.id}>
                 <td className="lgMuted">{formatDate(e.date, language)}</td>
                 <td><span className="listNameLink">{e.source}</span></td>
+                <td className="lgMuted">{ws.kasaName}</td>
+                <td>{e.person || "—"}</td>
+                <td>{e.listName ? <span className="lgListTag">{e.listName}</span> : "—"}</td>
                 <td className="listGridNote lgMuted lgCenter" title={e.note || e.detail}>{e.note || e.detail || "—"}</td>
                 <td className="listsGridAmount lgT1">{money(e.amount, e.currency)}</td>
                 {open &&
@@ -965,11 +1016,11 @@ function ExpensesGrid({
             );
           })}
           <tr className="listTotalRow">
-            <td colSpan={3} className="lgTot1">{tx(language, "Toplam", "Total", "Giştî")}</td>
-            <td className="lgTot1">{money(ws.totals.expense, c)}</td>
+            <td colSpan={6} className="lgTot1">{filtered ? `${tx(language, "Toplam (süzülmüş)", "Total (filtered)", "Giştî (parzûnkirî)")} · ${shown.length}/${ws.expenses.length}` : tx(language, "Toplam", "Total", "Giştî")}</td>
+            <td className="lgTot1">{money(expenseTotal, c)}</td>
             {open && ws.recipients.map((r) => (<td key={r.id} className="lgTot2 r">{money0(sumRecipient(r.id))}</td>))}
             <td className="lgTot2 r">{money0(grandAllocated)}</td>
-            <td className="lgTot3 r">{money0(r2(ws.totals.expense - grandAllocated))}</td>
+            <td className="lgTot3 r">{money0(r2(expenseTotal - grandAllocated))}</td>
             <td className="lgFill" />
           </tr>
         </tbody>

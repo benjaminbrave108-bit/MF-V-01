@@ -72,7 +72,7 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
       .from(records)
       .where(and(inArray(records.cashAccountId, kasaIds), inArray(records.kind, ["cash", "income"]))),
     db
-      .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, detail: records.detail, note: records.note, person: records.person, amount: records.amount, currency: records.currency })
+      .select({ id: records.id, cashAccountId: records.cashAccountId, date: records.date, source: records.source, detail: records.detail, note: records.note, person: records.person, listName: records.listName, amount: records.amount, currency: records.currency })
       .from(records)
       .where(and(inArray(records.cashAccountId, kasaIds), eq(records.kind, "expense")))
       .orderBy(records.date, records.id),
@@ -103,6 +103,8 @@ export async function buildWorkspaces(user: Actor, only: number[] | null = null,
             source: e.source,
             detail: e.detail,
             note: e.note,
+            person: e.person,
+            listName: e.listName,
             amount: round2(e.amount),
             currency: e.currency,
             byRecipient,

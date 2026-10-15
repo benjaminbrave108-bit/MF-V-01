@@ -3225,8 +3225,13 @@ export function RecordModal({
                     ? tx(language, "Seçilmezse: Diğer Giderler", "If unset: Other Expenses", "Heke neyê hilbijartin: Mesrefên Din")
                     : tx(language, "Seçilmezse: Diğer", "If unset: Other", "Heke neyê hilbijartin: Yên Din")}
                 </option>
-                {[...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))].map((name) => <option key={name} value={name}>{localizeData(name, language)}</option>)}
+                {[...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))].map((name) => <option key={name} value={name}>{localizeData(name, language)}{cashAccounts.some((a) => a.name === name && a.isListWorkspace) ? `  ▣ ${tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}` : ""}</option>)}
               </select>
+              {kind === "expense" && cashAccounts.some((a) => a.name === form.cashAccount && a.isListWorkspace) && (
+                <small className="listKasaHint">
+                  ▣ {tx(language, "Liste Kasası seçili: bu gider Listeler sayfasında kasa geliri/gideri sonuçlarıyla ve kişilere dağıtılabilir şekilde görünür.", "List cash account selected: this expense shows on the Lists page with the account's income/expense results and can be allocated to people.", "Qaseya Lîsteyê hatiye hilbijartin: ev mesref di rûpela Lîste de bi encamên dahat/mesrefa qaseyê tê xuyakirin û dikare ji kesan re were dabeşkirin.")}
+                </small>
+              )}
             </label>
           )}
           <label>

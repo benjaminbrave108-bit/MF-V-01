@@ -4133,3 +4133,10 @@ main { min-width: 0; overflow-x: hidden; }
 .listsGrid thead th:nth-last-child(2) { border-top-right-radius: 8px; }
 .listsGrid tr.listTotalRow td:last-child.lgFill { border-bottom-right-radius: 0; }
 .listsGrid tr.listTotalRow td:nth-last-child(2) { border-bottom-right-radius: 8px; }
+
+/* Liste kasası gider tablosu: arama/süzme çubuğu ve liste etiketi */
+.listFilters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.listFilters input[type="search"] { flex: 1 1 260px; min-width: 200px; max-width: 420px; padding: 6px 10px; border: 1px solid #d8e2e5; border-radius: 8px; font-size: 12px; background: #fff; }
+.listFilters select { padding: 6px 8px; border: 1px solid #d8e2e5; border-radius: 8px; font-size: 12px; background: #fff; max-width: 200px; }
+.lgListTag { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #e8f3f6; color: #176b87; font-size: 11px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listKasaHint { display: block; margin-top: 4px; font-size: 10px; line-height: 1.35; color: #176b87; background: #e8f3f6; border-radius: 6px; padding: 4px 8px; }
