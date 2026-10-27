@@ -1353,6 +1353,8 @@ export function Records({
   const [activeKasa, setActiveKasa] = useState("");
   // Gelir/Gider sayfalarında bölüm kutusuyla süzülen bölüm (Ayarlar > Bölümler).
   const [activeSection, setActiveSection] = useState<number | null>(null);
+  // Gelir/Gider sayfalarında çalışma alanı (cash bölümü) kutusuyla süzülen alan: alana bağlı kasaların kayıtları.
+  const [activeWorkspace, setActiveWorkspace] = useState<number | null>(null);
   const [showAllLists, setShowAllLists] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState("");
@@ -1618,6 +1620,27 @@ export function Records({
       })
       .filter((r) => r.groups.length > 0);
   }, [records, allRecords, kind, cashAccounts, sections]);
+  // Çalışma alanı kutuları (Gelir/Gider): alana bağlı kasaların gelir/gider kayıtları.
+  const workspaceKasaNames = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const section of sections.filter((x) => x.scope === "cash")) {
+      map.set(section.id, cashAccounts.filter((a) => a.sectionId === section.id).map((a) => a.name));
+    }
+    return map;
+  }, [sections, cashAccounts]);
+  const workspaceBoxes = useMemo(
+    () =>
+      kind === "cash"
+        ? []
+        : sections
+            .filter((x) => x.scope === "cash" && (workspaceKasaNames.get(x.id)?.length ?? 0) > 0)
+            .map((section) => {
+              const names = workspaceKasaNames.get(section.id) ?? [];
+              const rows = records.filter((x) => names.includes(x.cashAccount));
+              return { section, kasaCount: names.length, count: rows.length, totalByCurrency: combineByCurrency([{ rows }]) };
+            }),
+    [records, kind, sections, workspaceKasaNames],
+  );
   // Gelir/Gider bölüm kutuları: her bölüm için bir kutu (o bölümdeki kayıtların toplamı).
   const sectionBoxes = useMemo(
     () =>
@@ -1669,6 +1692,7 @@ export function Records({
       (!showAllLists || listOf(x) || isListLinked(x)) &&
       (!activeKasa || x.cashAccount === activeKasa) &&
       (activeSection === null || x.sectionId === activeSection) &&
+      (activeWorkspace === null || kind === "cash" || (workspaceKasaNames.get(activeWorkspace) ?? []).includes(x.cashAccount)) &&
       (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaSeparateNames.has(x.cashAccount || x.source))) &&
       (source !== "__RJ" || kasaRjNames.has(x.cashAccount || x.source)) &&
       (!filterFrom || x.date >= filterFrom) &&
@@ -2265,6 +2289,27 @@ export function Records({
                 {kasaActions(k.name, activeKasa === k.name && !showAllLists)}
               </div>
             ))}
+            {workspaceBoxes.map(({ section, kasaCount, count, totalByCurrency }) => (
+              <div className="groupCard sectionBox" key={`ws-${section.id}`}>
+                <button
+                  className={activeWorkspace === section.id ? "selected" : ""}
+                  style={{ background: `${section.color}14`, borderColor: activeWorkspace === section.id ? section.color : `${section.color}66` }}
+                  onClick={() => {
+                    setActiveWorkspace(activeWorkspace === section.id ? null : section.id);
+                    setActiveSection(null);
+                    setActiveKasa("");
+                    setSource("Tümü");
+                    setSearch("");
+                    setActiveList("");
+                    setShowAllLists(false);
+                  }}
+                >
+                  <b>{section.name} <span className="groupCount" style={{ color: section.color }}>({count})</span></b>
+                  <em className="groupKasaTag" style={{ background: `${section.color}22`, color: section.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {kasaCount} {tx(language, "kasa", "accounts", "qase")}</em>
+                  <strong style={{ color: section.color }}>{moneyBreakdown(totalByCurrency)}</strong>
+                </button>
+              </div>
+            ))}
             {sectionBoxes.map(({ section, count, totalByCurrency }) => (
               <div className="groupCard sectionBox" key={`sec-${section.id}`}>
                 <button
@@ -2272,6 +2317,7 @@ export function Records({
                   style={{ background: `${section.color}14`, borderColor: activeSection === section.id ? section.color : `${section.color}66` }}
                   onClick={() => {
                     setActiveSection(activeSection === section.id ? null : section.id);
+                    setActiveWorkspace(null);
                     setActiveKasa("");
                     setSource("Tümü");
                     setSearch("");
@@ -3444,6 +3490,13 @@ export function RecordModal({
                 </option>
                 {[...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))].map((name) => <option key={name} value={name}>{localizeData(name, language)}{cashAccounts.some((a) => a.name === name && a.isListWorkspace) ? `  ▣ ${tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}` : ""}</option>)}
               </select>
+              {(() => {
+                const acc = cashAccounts.find((a) => a.name === form.cashAccount);
+                const ws = acc?.sectionId != null ? sections.find((x) => x.id === acc.sectionId && x.scope === "cash") : undefined;
+                return ws ? (
+                  <small className="listKasaHint">◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}: {ws.name}</small>
+                ) : null;
+              })()}
               {kind === "expense" && cashAccounts.some((a) => a.name === form.cashAccount && a.isListWorkspace) && (
                 <small className="listKasaHint">
                   ▣ {tx(language, "Liste Kasası seçili: bu gider Listeler sayfasında kasa geliri/gideri sonuçlarıyla ve kişilere dağıtılabilir şekilde görünür.", "List cash account selected: this expense shows on the Lists page with the account's income/expense results and can be allocated to people.", "Qaseya Lîsteyê hatiye hilbijartin: ev mesref di rûpela Lîste de bi encamên dahat/mesrefa qaseyê tê xuyakirin û dikare ji kesan re were dabeşkirin.")}
@@ -3485,9 +3538,9 @@ export function RecordModal({
             <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
             {kind === "cash" && sections.some((x) => x.scope === "cash") && (
               <label>
-                {tx(language, "Kasa bölümü", "Cash section", "Beşa qaseyê")}
+                {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}
                 <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">{tx(language, "Genel Kasa (bölümsüz)", "Main cash account (no section)", "Qaseya Giştî (bê beş)")}</option>
+                  <option value="">{tx(language, "Çalışma alanı yok (Genel Kasa)", "No workspace (main cash account)", "Bê qada xebatê (Qaseya Giştî)")}</option>
                   {sections.filter((x) => x.scope === "cash").map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
                 </select>
               </label>
