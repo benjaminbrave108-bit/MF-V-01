@@ -179,7 +179,7 @@ export function Settings({
           {tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "sections"} className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")}>
-          {tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}
+          {tx(language, "Bölümler", "Sections", "Beş")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
@@ -444,7 +444,7 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
   });
   const [error, setError] = useState("");
   const groups: [SectionScope, string, string][] = [
-    ["cash", tx(language, "Çalışma alanları (ör. Projeler)", "Workspaces (e.g. Projects)", "Qadên xebatê (mînak Proje)"), tx(language, "Birden fazla kasayı bir başlık altında toplar: Kasalar sayfasına yeni bir kutu satırı, Gelir ve Gider sayfalarına birer çalışma alanı kutusu ekler. Kasa kaydında “Çalışma alanı” ile seçilir.", "Groups several cash accounts under one heading: adds a box row to the Kasalar page and a workspace box to the Income and Expense pages. Chosen with “Workspace” on a cash record.", "Çend qaseyan di bin yek sernavê de kom dike: li rûpela Qase rêzeke qutiyê û li rûpelên Dahat û Mesref qutiyeke qada xebatê zêde dike. Di tomara qaseyê de bi “Qada xebatê” tê hilbijartin.")],
+    ["cash", tx(language, "Kasa bölümleri", "Cash sections", "Beşên qaseyê"), tx(language, "Kasalar sayfasına yeni bir kutu satırı ekler; kasa kaydında “Kasa bölümü” ile seçilir.", "Adds a new box row to the Kasalar page; chosen with “Cash section” on a cash record.", "Rêzeke qutiyê ya nû li rûpela Qase zêde dike; di tomara qaseyê de bi “Beşa qaseyê” tê hilbijartin.")],
     ["income", tx(language, "Gelir bölümleri", "Income sections", "Beşên dahatê"), tx(language, "Gelir sayfasına yeni bir kutu ekler; gelir kaydında “Bölüm” ile seçilir.", "Adds a new box to the Income page; chosen with “Section” on an income record.", "Qutiyeke nû li rûpela Dahat zêde dike; di tomara dahatê de bi “Beş” tê hilbijartin.")],
     ["expense", tx(language, "Gider bölümleri", "Expense sections", "Beşên mesrefê"), tx(language, "Gider sayfasına yeni bir kutu ekler; gider kaydında “Bölüm” ile seçilir.", "Adds a new box to the Expense page; chosen with “Section” on an expense record.", "Qutiyeke nû li rûpela Mesref zêde dike; di tomara mesrefê de bi “Beş” tê hilbijartin.")],
   ];
@@ -462,7 +462,7 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
   return (
     <div className="panel sectionsPanel">
       <Title
-        title={tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}
+        title={tx(language, "Bölümler", "Sections", "Beş")}
         sub={tx(language, "Genel Kasa, Liste Kasası ve RJ-Kasası eksenlerine ek bölümler oluşturun; her bölüm kutu sistemine yeni bir kutu ekler.", "Create sections in addition to the Main, List and RJ cash axes; each section adds a new box to the box system.", "Ji bilî tevgerên Qaseya Giştî, Lîste û RJ beşan çêkin; her beş qutiyeke nû li pergala qutiyan zêde dike.")}
       />
       {error && <p className="listsError">{error}</p>}
