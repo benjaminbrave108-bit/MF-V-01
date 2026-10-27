@@ -6,7 +6,7 @@ import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
 import type { BlockedIp, KasaSection, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
 
-type SettingsTab = "general" | "typography" | "sections" | "users" | "view" | "database";
+type SettingsTab = "general" | "typography" | "sections" | "users" | "access" | "database";
 
 export function Settings({
   language,
@@ -19,9 +19,6 @@ export function Settings({
   setTypography,
   checkPassword,
   isSuperAdmin,
-  sharedOwners,
-  dashboardIncludedUserIds,
-  onDashboardIncludedUserIdsChange,
   sections,
   onSectionsChanged,
 }: {
@@ -37,9 +34,6 @@ export function Settings({
   isSuperAdmin: boolean;
   sections: KasaSection[];
   onSectionsChanged: () => void;
-  sharedOwners: { id: number; name: string }[];
-  dashboardIncludedUserIds: number[];
-  onDashboardIncludedUserIdsChange: (ids: number[]) => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
@@ -191,8 +185,8 @@ export function Settings({
           {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
         </button>
         {isSuperAdmin && (
-          <button type="button" role="tab" aria-selected={tab === "view"} className={tab === "view" ? "active" : ""} onClick={() => setTab("view")}>
-            {tx(language, "Görüntüle", "View", "Nîşandan")}
+          <button type="button" role="tab" aria-selected={tab === "access"} className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}>
+            {tx(language, "Kasa Erişimi", "Cash Access", "Gihîştina Qaseyê")}
           </button>
         )}
         <button type="button" role="tab" aria-selected={tab === "database"} className={tab === "database" ? "active" : ""} onClick={() => setTab("database")}>
@@ -378,57 +372,7 @@ export function Settings({
         </div>
       )}
 
-      {tab === "view" && isSuperAdmin && (
-        <div className="settings">
-          <div className="panel">
-            <Title
-              title={tx(language, "Görüntüle", "View", "Nîşandan")}
-              sub={tx(
-                language,
-                "Ana Sayfa'daki Toplam Gelir/Gider/Net/Bakiye sonuçlarına, işaretlediğiniz kullanıcıların kasa verileri de dahil edilir. İşaretlemezseniz Ana Sayfa yalnızca kendi verilerinizle sınırlı kalır.",
-                "The Ana Sayfa Total Income/Expense/Net/Balance figures also include the kasa data of any users you check below. If you check none, Ana Sayfa stays limited to your own data.",
-                "Encamên Ana Sayfayê yên Dahat/Mesref/Paqij/Bakiye ya Giştî, daneyên qaseyê yên bikarhênerên ku we nîşan kirine jî digire nav xwe. Heke hûn tu kesî nîşan nekin, Ana Sayfa tenê bi daneyên we yên xwe ve tê sînorkirin.",
-              )}
-            />
-            {sharedOwners.length === 0 ? (
-              <small className="viewTabEmptyNote">
-                {tx(
-                  language,
-                  "Henüz sizinle veri paylaşan başka bir kullanıcı yok. Bir kullanıcının burada çıkması için, önce o kullanıcının kendi kasasında Kasalar sayfasında \"Paylaş\" düğmesini açıp \"Süper Admin'in Ana Sayfa'sında göster\" seçeneğini işaretlemesi gerekir — bu onayı vermeden bir kasa burada listelenmez.",
-                  "No other user has shared data with you yet. For a user to appear here, they first need to open \"Paylaş\" on their own kasa in the Kasalar page and check \"Show in Super Admin's Ana Sayfa\" — without that consent, a kasa won't be listed here.",
-                  "Hîn tu bikarhênerê din daneyên xwe bi we re parve nekiriye. Ji bo ku bikarhênerek li vir xuya bibe, divê ew pêşî li ser qaseya xwe ya di rûpela Kasalar de \"Paylaş\" veke û vebijarka \"Nîşandana li Ana Sayfaya Super Admin\" nîşan bike — bêyî vê destûrê, qase li vir nayê rêzkirin.",
-                )}
-              </small>
-            ) : (
-              <div className="userPermissionOptions">
-                {sharedOwners.map((owner) => {
-                  const checked = dashboardIncludedUserIds.includes(owner.id);
-                  return (
-                    <label key={owner.id} className="userPermissionOption">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...dashboardIncludedUserIds, owner.id]
-                            : dashboardIncludedUserIds.filter((id) => id !== owner.id);
-                          onDashboardIncludedUserIdsChange(next);
-                        }}
-                      />
-                      {tx(
-                        language,
-                        `${owner.name}'nin sonuçlarını da göster`,
-                        `Also show ${owner.name}'s results`,
-                        `Encamên ${owner.name} jî nîşan bide`,
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {tab === "access" && isSuperAdmin && <KasaAccessPanel language={language} />}
 
       {tab === "database" && (
         <div className="settings">
@@ -567,6 +511,146 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
           </form>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Süper yönetici: her kullanıcının hangi kasaları görebileceğini belirler.
+function KasaAccessPanel({ language }: { language: Language }) {
+  type AccessUser = { id: number; name: string; username: string; isSuperAdmin: boolean };
+  type AccessKasa = { id: number; name: string; ownerUserId: number | null; ownerName?: string | null };
+  const [users, setUsers] = useState<AccessUser[]>([]);
+  const [kasas, setKasas] = useState<AccessKasa[]>([]);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/users").then((r) => (r.ok ? r.json() : { users: [] })),
+      fetch("/api/cash-accounts").then((r) => (r.ok ? r.json() : { cashAccounts: [] })),
+    ]).then(([u, k]) => {
+      if (cancelled) return;
+      const list = (u.users as AccessUser[]).filter((x) => !x.isSuperAdmin);
+      setUsers(list);
+      setKasas(k.cashAccounts as AccessKasa[]);
+      if (list[0]) setUserId(list[0].id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (userId === null) return;
+    let cancelled = false;
+    setMessage("");
+    fetch(`/api/users/${userId}/cash-access`)
+      .then((r) => (r.ok ? r.json() : { cashAccountIds: [] }))
+      .then((d) => {
+        if (!cancelled) setSelected(new Set(d.cashAccountIds as number[]));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const ownedByUser = (k: AccessKasa) => k.ownerUserId === userId;
+  const toggle = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function save() {
+    if (userId === null) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/users/${userId}/cash-access`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cashAccountIds: [...selected] }),
+      });
+      setMessage(
+        response.ok
+          ? tx(language, "Kaydedildi.", "Saved.", "Hate tomarkirin.")
+          : tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."),
+      );
+    } catch {
+      setMessage(tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const visibleCount = kasas.filter((k) => selected.has(k.id) || ownedByUser(k)).length;
+
+  return (
+    <div className="settings">
+      <div className="panel kasaAccessPanel">
+        <Title
+          title={tx(language, "Kasa Erişimi", "Cash Access", "Gihîştina Qaseyê")}
+          sub={tx(
+            language,
+            "Her kullanıcının hangi kasaları görebileceğini belirleyin. Süper yöneticiler her şeyi görür; kullanıcı kendi oluşturduğu kasayı her zaman görür.",
+            "Choose which cash accounts each user can see. Super admins see everything; a user always sees the cash accounts they created.",
+            "Diyar bikin ku her bikarhêner kîjan qaseyan dibîne. Super admin her tiştî dibînin; bikarhêner qaseya ku çêkiriye her tim dibîne.",
+          )}
+        />
+        {users.length === 0 ? (
+          <small>{tx(language, "Kasa erişimi ayarlanacak başka kullanıcı yok.", "There are no other users to configure.", "Bikarhênerek din tune ye.")}</small>
+        ) : (
+          <>
+            <label className="kasaAccessUser">
+              {tx(language, "Kullanıcı", "User", "Bikarhêner")}
+              <select value={userId ?? ""} onChange={(e) => setUserId(Number(e.target.value))}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.username})</option>
+                ))}
+              </select>
+            </label>
+            <div className="kasaAccessBox">
+              <div className="kasaAccessHead">
+                <span>
+                  👁 <b>{tx(language, "Hangi kasaları görebilir", "Which cash accounts can be seen", "Kîjan qaseyan dibîne")}</b>
+                  <em className="kasaAccessCount">{visibleCount} / {kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+                </span>
+                <span className="kasaAccessBtns">
+                  <button type="button" className="light compact" onClick={() => setSelected(new Set(kasas.map((k) => k.id)))}>
+                    {tx(language, "Tümünü işaretle", "Select all", "Hemûyan nîşan bike")}
+                  </button>
+                  <button type="button" className="light compact" onClick={() => setSelected(new Set())}>
+                    {tx(language, "Tümünü kaldır", "Clear all", "Hemûyan rake")}
+                  </button>
+                </span>
+              </div>
+              <div className="kasaAccessGrid">
+                {kasas.map((k) => {
+                  const owned = ownedByUser(k);
+                  return (
+                    <label key={k.id} className={`kasaAccessItem${selected.has(k.id) || owned ? " on" : ""}`}>
+                      <input type="checkbox" checked={selected.has(k.id) || owned} disabled={owned} onChange={() => toggle(k.id)} />
+                      <b>{k.name}</b>
+                      {k.ownerName && <small>{k.ownerName}</small>}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="kasaAccessFoot">
+              {message && <small>{message}</small>}
+              <button type="button" className="primary" disabled={busy} onClick={save}>
+                {tx(language, "Değişiklikleri kaydet", "Save changes", "Guhertinan tomar bike")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

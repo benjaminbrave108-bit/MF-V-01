@@ -129,86 +129,11 @@ export default function Home() {
     const interval = setInterval(refreshOnlineUsers, 45000);
     return () => clearInterval(interval);
   }, [signedIn]);
-  // Which "workspace" Kasa/Gelir/Gider/Ana Sayfa currently show: null is the
-  // signed-in user's own data, otherwise the id of a user who shared kasas
-  // with them (read-only — see the Ana Sayfa sidebar submenu below).
-  const [viewingUserId, setViewingUserId] = useState<number | null>(null);
-  // Distinguishes the "Ana Sayfa" top-level nav click (home — merges in every
-  // opted-in shared kasa the super admin has selected via Görüntüle) from the
-  // "Kendi Verilerim" submenu entry (own-only — same viewingUserId===null as
-  // home, but should show ONLY the signed-in user's own data, not the merge).
-  // Reset to false whenever leaving the own-only view.
-  const [dashboardOwnOnly, setDashboardOwnOnly] = useState(false);
-  // One entry per person (other than yourself) who owns at least one kasa
-  // you can see — populates the "R Verileri" / "S Verileri" rows.
-  const sharedOwners = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const a of cashAccounts) {
-      if (!a.isOwner && a.ownerUserId != null) byId.set(a.ownerUserId, a.ownerName || "");
-    }
-    return [...byId.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [cashAccounts]);
-  // Same as sharedOwners, but narrowed to owners who have opted at least one
-  // kasa in for dashboard sharing (Kasalar/Ayarlar > Paylaş's "Süper Admin'in
-  // Ana Sayfa'sında göster" toggle) — this is what powers the Ayarlar >
-  // Görüntüle checkbox list, since checking a user there is meaningless
-  // unless they've actually consented to be merged.
-  const dashboardShareableOwners = useMemo(
-    () => sharedOwners.filter((owner) => cashAccounts.some((a) => a.ownerUserId === owner.id && a.dashboardShareEnabled)),
-    [sharedOwners, cashAccounts],
-  );
-  // Kasa ids that belong to whichever workspace is active — "own" means
-  // owned by the signed-in user, otherwise owned by the selected user.
-  const contextCashAccountIds = useMemo(() => {
-    const ownerId = viewingUserId;
-    return new Set(
-      cashAccounts.filter((a) => (ownerId === null ? a.isOwner : a.ownerUserId === ownerId)).map((a) => a.id),
-    );
-  }, [cashAccounts, viewingUserId]);
-  // Records scoped to the active workspace: a record with no kasa link at
-  // all only ever belongs to your own workspace, never a shared one.
-  const contextRecords = useMemo(
-    () =>
-      records.filter((x) =>
-        x.cashAccountId === null || x.cashAccountId === undefined
-          ? viewingUserId === null
-          : contextCashAccountIds.has(x.cashAccountId),
-      ),
-    [records, contextCashAccountIds, viewingUserId],
-  );
-  const contextCashAccounts = useMemo(
-    () => cashAccounts.filter((a) => contextCashAccountIds.has(a.id)),
-    [cashAccounts, contextCashAccountIds],
-  );
-  // Ana Sayfa's own totals, separate from contextRecords above: a super
-  // admin can opt (Ayarlar > Görüntüle) to merge specific other users'
-  // kasas into their own home totals — Kasa/Gelir/Gider stay per-workspace
-  // as usual, only the dashboard aggregate reflects this. Browsing someone
-  // else's workspace (viewingUserId set) shows just that person, same as
-  // everywhere else — the merge only ever applies to "my own" Ana Sayfa.
-  const dashboardCashAccountIds = useMemo(() => {
-    if (viewingUserId !== null || dashboardOwnOnly) return contextCashAccountIds;
-    const included = new Set(profile.dashboardIncludedUserIds);
-    return new Set(
-      cashAccounts
-        .filter(
-          (a) =>
-            a.isOwner || (a.ownerUserId != null && included.has(a.ownerUserId) && a.dashboardShareEnabled),
-        )
-        .map((a) => a.id),
-    );
-  }, [cashAccounts, viewingUserId, dashboardOwnOnly, contextCashAccountIds, profile.dashboardIncludedUserIds]);
-  const dashboardRecords = useMemo(
-    () =>
-      records.filter((x) =>
-        x.cashAccountId === null || x.cashAccountId === undefined
-          ? viewingUserId === null
-          : dashboardCashAccountIds.has(x.cashAccountId),
-      ),
-    [records, dashboardCashAccountIds, viewingUserId],
-  );
+  // Kasa/Gelir/Gider/Ana Sayfa, kullanıcının görebildiği tüm kasaları birlikte gösterir
+  // (kullanıcı başına hangi kasaların görüneceği Ayarlar > Kasa Erişimi'nden belirlenir).
+  const contextRecords = records;
+  const contextCashAccounts = cashAccounts;
+  const dashboardRecords = records;
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
   const [preparedReports, setPreparedReports] = useState<PreparedReport[]>([]);
@@ -476,29 +401,6 @@ export default function Home() {
     }, 20000);
     return () => clearInterval(interval);
   }, [signedIn]);
-  async function updateDashboardScope(includedUserIds: number[]) {
-    const previous = profile.dashboardIncludedUserIds;
-    setProfile((p) => ({ ...p, dashboardIncludedUserIds: includedUserIds }));
-    try {
-      const response = await fetch("/api/profile/dashboard-scope", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ includedUserIds }),
-      });
-      if (!response.ok) {
-        setProfile((p) => ({ ...p, dashboardIncludedUserIds: previous }));
-        alert(tx(language, "Görüntüle ayarı kaydedilemedi.", "The view setting could not be saved.", "Mîhenga dîtinê nehat tomarkirin."));
-        return;
-      }
-      const data = await response.json();
-      if (Array.isArray(data.dashboardIncludedUserIds)) {
-        setProfile((p) => ({ ...p, dashboardIncludedUserIds: data.dashboardIncludedUserIds }));
-      }
-    } catch {
-      setProfile((p) => ({ ...p, dashboardIncludedUserIds: previous }));
-      alert(tx(language, "Görüntüle ayarı kaydedilemedi.", "The view setting could not be saved.", "Mîhenga dîtinê nehat tomarkirin."));
-    }
-  }
   async function checkPassword(password: string) {
     try {
       const response = await fetch("/api/auth/verify-password", {
@@ -731,13 +633,7 @@ export default function Home() {
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
-                onClick={() => {
-                  setPage(n.id);
-                  if (n.id === "dashboard") {
-                    setViewingUserId(null);
-                    setDashboardOwnOnly(false);
-                  }
-                }}
+                onClick={() => setPage(n.id)}
               >
                 <i>{n.icon}</i>
                 <span>{n.label[language]}</span>
@@ -748,39 +644,6 @@ export default function Home() {
                   <b className="navBadge">{unreadNotesCount}</b>
                 )}
               </button>
-              {n.id === "dashboard" && sharedOwners.length > 0 && (
-                <div className="navSubmenu">
-                  <button
-                    type="button"
-                    className={viewingUserId === null && dashboardOwnOnly ? "active" : ""}
-                    onClick={() => {
-                      setViewingUserId(null);
-                      setDashboardOwnOnly(true);
-                      setPage("dashboard");
-                    }}
-                  >
-                    <i>◎</i>
-                    <span>{tx(language, "Kendi Verilerim", "My Own Data", "Daneyên Min ên Xwe")}</span>
-                  </button>
-                  {sharedOwners.map((owner) => (
-                    <button
-                      type="button"
-                      key={owner.id}
-                      className={viewingUserId === owner.id ? "active" : ""}
-                      onClick={() => {
-                        setViewingUserId(owner.id);
-                        setDashboardOwnOnly(false);
-                        setPage("dashboard");
-                      }}
-                    >
-                      <i>◈</i>
-                      <span>
-                        {tx(language, `${owner.name} Verileri`, `${owner.name}'s Data`, `Daneyên ${owner.name}`)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           ))}
         </nav>
@@ -802,21 +665,6 @@ export default function Home() {
             <h1>
               {nav.find((n) => n.id === page)?.label[language]}
             </h1>
-            {viewingUserId !== null &&
-              ["dashboard", "cash", "income", "expense"].includes(page) &&
-              (() => {
-                const owner = sharedOwners.find((o) => o.id === viewingUserId);
-                return owner ? (
-                  <span className="workspaceBadge">
-                    👁 {tx(language, `${owner.name} Verileri`, `${owner.name}'s Data`, `Daneyên ${owner.name}`)}
-                  </span>
-                ) : null;
-              })()}
-            {viewingUserId === null && dashboardOwnOnly && page === "dashboard" && (
-              <span className="workspaceBadge">
-                ◎ {tx(language, "Kendi Verilerim", "My Own Data", "Daneyên Min ên Xwe")}
-              </span>
-            )}
             {(page === "income" || page === "expense") && (
               <div className="headerSearch">
                 <span>⌕</span>
@@ -967,7 +815,7 @@ export default function Home() {
               cashTransfers={cashTransfers}
               onTransfersChanged={refreshAfterCashTransfer}
               onCommentsRead={refreshUnreadCommentsCount}
-              readOnly={viewingUserId !== null}
+              readOnly={false}
               notes={notes}
             />
           )}
@@ -1023,9 +871,6 @@ export default function Home() {
               setTypography={setTypography}
               checkPassword={checkPassword}
               isSuperAdmin={profile.isSuperAdmin}
-              sharedOwners={dashboardShareableOwners}
-              dashboardIncludedUserIds={profile.dashboardIncludedUserIds}
-              onDashboardIncludedUserIdsChange={updateDashboardScope}
               sections={sections}
               onSectionsChanged={() => { refreshSections(); refreshCashAccounts(); refreshRecords(); }}
             />

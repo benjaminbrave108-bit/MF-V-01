@@ -4215,3 +4215,16 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .kasaManageError { margin: 0; color: #b03a3a; font-size: 12px; font-weight: 700; }
 
 .kasaManageBody input[type=text], .kasaManageBody input:not([type]), .kasaManageBody input[type=password], .kasaManageBody select { padding: 8px 10px; border: 1px solid #c8dfe5; border-radius: 8px; font-size: 13px; }
+
+
+/* Ayarlar > Kasa Erişimi */
+.kasaAccessUser { display: grid; gap: 5px; max-width: 360px; font-size: 12px; font-weight: 700; margin: 8px 0 12px; }
+.kasaAccessBox { border: 1px solid #d9e6ea; border-radius: 12px; background: #f7fafb; padding: 12px; }
+.kasaAccessHead { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.kasaAccessCount { margin-left: 8px; font-style: normal; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: #e4e8fb; color: #4452a8; }
+.kasaAccessBtns { display: flex; gap: 6px; }
+.kasaAccessGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.kasaAccessItem { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid #d9e6ea; border-radius: 10px; background: #eef2f4; color: #8a98a0; cursor: pointer; }
+.kasaAccessItem.on { background: #fff; color: #1f2d33; }
+.kasaAccessItem small { color: #8a98a0; font-size: 11px; }
+.kasaAccessFoot { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 12px; }
