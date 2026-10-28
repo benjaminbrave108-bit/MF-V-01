@@ -1690,7 +1690,7 @@ export function Records({
     type Card = CardGroup & { direct: RecordItem[]; inc: RecordItem[]; exp: RecordItem[] };
     type Ws = { key: string; name: string; color: string; kasas: Card[] };
     const buckets: Ws[] = [
-      { key: "genel", name: tx(language, "Genel Kasalar", "General Cash Accounts", "Qaseyên Giştî"), color: "#287b98", kasas: [] },
+      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#287b98", kasas: [] },
       { key: "liste", name: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê"), color: "#b9951c", kasas: [] },
       { key: "rj", name: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ"), color: "#7b52bf", kasas: [] },
       ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, kasas: [] as Card[] })),
@@ -2209,6 +2209,11 @@ export function Records({
               📊 {tx(language, "Sonuç Oluştur", "Create Result", "Encamê Biafirîne")}
             </button>
           )}
+          {kind === "cash" && !readOnly && (
+            <button className="light" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
+              ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
+            </button>
+          )}
           {!readOnly && (
             <button className="primary" onClick={onAdd}>
               ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")}
@@ -2362,11 +2367,6 @@ export function Records({
             </button>
           );
         })}
-        {kind === "cash" && !readOnly && (
-          <button type="button" className="light compact workspaceAdd" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
-            ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
-          </button>
-        )}
         {(kind === "cash" ? [] : groups).map((g) => {
           const matchingAccount = g.kind === "cash" ? cashAccounts.find((a) => a.name === g.name) : undefined;
           return (

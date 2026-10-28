@@ -8,7 +8,7 @@ import { tx } from "../lib/i18n";
 // Her kasa mutlaka tek bir alana bağlıdır; "alansız" seçenek yoktur (varsayılan Genel Kasalar).
 export function workspaceOptions(sections: KasaSection[], language: Language): { key: string; label: string }[] {
   return [
-    { key: "genel", label: tx(language, "Genel Kasalar", "General Cash Accounts", "Qaseyên Giştî") },
+    { key: "genel", label: tx(language, "Diğer", "Other", "Yên din") },
     { key: "liste", label: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê") },
     { key: "rj", label: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ") },
     ...sections.filter((x) => x.scope === "cash").map((x) => ({ key: `sec-${x.id}`, label: x.name })),
