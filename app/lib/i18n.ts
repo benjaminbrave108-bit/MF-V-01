@@ -33,9 +33,9 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
   {
     id: "reportBuilder",
     label: {
-      tr: "Rapor Hazırla",
-      en: "Prepare Report",
-      ku: "Raporê Amade Bike",
+      tr: "Rapor Hazırla / Yükle",
+      en: "Prepare / Upload Report",
+      ku: "Raporê Amade Bike / Barke",
     },
     icon: "▥",
   },

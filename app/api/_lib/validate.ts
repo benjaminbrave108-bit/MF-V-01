@@ -141,6 +141,7 @@ export const excelImportSchema = z.object({
   kasaName: z.string().trim().min(1).max(200),
   listKasa: z.boolean().optional().default(false),
   rjKasa: z.boolean().optional().default(false),
+  sectionId: z.number().int().positive().nullable().optional(),
   items: z
     .array(
       z.object({

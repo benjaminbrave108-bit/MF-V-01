@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
-import { ExcelImportModal } from "./ExcelImport";
 import { KasaDeleteModal, KasaEditModal, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import { WorkspaceAccessModal, type AccessKasa } from "./WorkspaceAccess";
 import { TableTools } from "./TableTools";
@@ -915,6 +914,7 @@ export function Records({
   onRefreshData,
   sections = [],
   isSuperAdmin = false,
+  onGoUpload,
 }: {
   language: Language;
   kind: Kind;
@@ -938,8 +938,8 @@ export function Records({
   onRefreshData?: () => void;
   sections?: KasaSection[];
   isSuperAdmin?: boolean;
+  onGoUpload?: () => void;
 }) {
-  const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
   const [commentTarget, setCommentTarget] = useState<RecordItem | null>(null);
   // Satırdaki "Detay" göstergesine basınca açılan, yapıştırılmış gider
@@ -2244,8 +2244,8 @@ export function Records({
             ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
           </button>
           {!readOnly && (
-            <button className="light" onClick={() => setExcelImportOpen(true)} title={tx(language, "Excel dosyasındaki gelir/gider/detayı bir kasaya aktar", "Import income/expense/detail from an Excel file into a cash account", "Dahat/mesref/hûrguliyan ji pelê Excel têxe qaseyekê")}>
-              ⇧ {tx(language, "Excel'den Kasa Aktar", "Import Cash from Excel", "Qase ji Excelê Têxe")}
+            <button className="light" onClick={onGoUpload} title={tx(language, "Excel raporunu çalışma alanı ve kasa seçerek yükleyin (Rapor Hazırla / Yükle sayfası)", "Upload an Excel report into a workspace and cash account (Prepare / Upload Report page)", "Raporeke Excel bi hilbijartina qada xebatê û qaseyê barke (rûpela Amadekirin / Barkirina Raporê)")}>
+              ⇧ {tx(language, "Rapor Yükle", "Upload Report", "Raporê Barke")}
             </button>
           )}
           {kasaSplitActive && (
@@ -2357,14 +2357,6 @@ export function Records({
             setShowAllLists(false);
             onRefreshData?.();
           }}
-        />
-      )}
-      {excelImportOpen && (
-        <ExcelImportModal
-          language={language}
-          kasaOptions={[...new Set([...cashAccounts.map((a) => a.name), ...records.filter((x) => x.kind === "cash").map((x) => x.source)].filter(Boolean))].sort((a, b) => a.localeCompare(b))}
-          onClose={() => setExcelImportOpen(false)}
-          onDone={() => onRefreshData?.()}
         />
       )}
       <div className="groups">

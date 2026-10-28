@@ -6,7 +6,8 @@ import { Title, DeleteConfirmModal } from "./shared";
 import { TableTools } from "./TableTools";
 import { tx, localizeData } from "../lib/i18n";
 import { date, money, total } from "../lib/finance";
-import type { Language, PreparedReport, Profile, RecordItem, ReportLine } from "../lib/types";
+import type { CashAccountSummary, KasaSection, Language, PreparedReport, Profile, RecordItem, ReportLine } from "../lib/types";
+import { ExcelImportModal } from "./ExcelImport";
 
 export function ReportBuilder({
   language,
@@ -17,6 +18,11 @@ export function ReportBuilder({
   onDeleteReport,
   profile,
   checkPassword,
+  cashAccounts,
+  sections,
+  tab,
+  onTabChange,
+  onDataChanged,
 }: {
   language: Language;
   records: RecordItem[];
@@ -26,14 +32,50 @@ export function ReportBuilder({
   onDeleteReport: (id: string) => void;
   profile: Profile;
   checkPassword: (password: string) => Promise<boolean>;
+  cashAccounts: CashAccountSummary[];
+  sections: KasaSection[];
+  tab: "prepare" | "upload";
+  onTabChange: (tab: "prepare" | "upload") => void;
+  onDataChanged: () => void;
 }) {
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editingReport, setEditingReport] = useState<PreparedReport | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PreparedReport | null>(null);
   const sorted = [...preparedReports].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (tab === "upload") {
+    return (
+      <div className="panel reportBuilderPage">
+        <div className="reportTabs">
+          <button type="button" onClick={() => onTabChange("prepare")}>{tx(language, "Rapor Hazırla", "Prepare Report", "Raporê Amade Bike")}</button>
+          <button type="button" className="active">{tx(language, "Rapor Yükle", "Upload Report", "Raporê Barke")}</button>
+        </div>
+        <div className="toolbar">
+          <Title
+            title={tx(language, "Rapor Yükle", "Upload Report", "Raporê Barke")}
+            sub={tx(language, "Excel raporunu bir çalışma alanı ve kasaya yükleyin; aylık gelir/gider olarak işlenir", "Upload an Excel report into a workspace and cash account; it is booked as monthly income/expense", "Raporeke Excel li qada xebatê û qaseyekê barke; wekî dahat/mesrefa mehane tê tomarkirin")}
+          />
+          <button className="primary" onClick={() => setUploadOpen(true)}>⇧ {tx(language, "Excel Yükle", "Upload Excel", "Excel Barke")}</button>
+        </div>
+        <ol className="reportUploadSteps">
+          <li>{tx(language, "Excel dosyasını seçin.", "Choose the Excel file.", "Pela Excel hilbijêre.")}</li>
+          <li>{tx(language, "Hangi çalışma alanına ve kasaya ekleneceğini seçin (kasa zorunludur).", "Choose which workspace and cash account it goes to (a cash account is required).", "Hilbijêre ku biçe kîjan qada xebatê û qaseyê (qase mecbûrî ye).")}</li>
+          <li>{tx(language, "Aylık tek kalem mi, her satır ayrı mı; Excel detayı eklensin mi — seçin.", "Choose monthly single item or one record per row, and whether to attach the Excel detail.", "Hilbijêre yek kalemê mehane an her rêz cuda, û detaya Excel were zêdekirin an na.")}</li>
+          <li>{tx(language, "Her ay Gelir veya Gider sayfasında ve seçtiğiniz kasada tek kalem olarak görünür; kayıttaki Detay'a basınca Excel verisinin özeti açılır.", "Each month appears as a single item on the Income or Expense page and in the chosen cash account; opening the record's Detail shows a summary of the Excel data.", "Her meh li rûpela Dahat an Mesref û di qaseya hilbijartî de wekî yek kalem xuya dibe; bi tikandina Hûrguliyê kurteya daneyên Excel vedibe.")}</li>
+        </ol>
+        {uploadOpen && (
+          <ExcelImportModal language={language} cashAccounts={cashAccounts} sections={sections} onClose={() => setUploadOpen(false)} onDone={onDataChanged} />
+        )}
+      </div>
+    );
+  }
   return (
     <div className="panel reportBuilderPage">
+      <div className="reportTabs">
+        <button type="button" className="active">{tx(language, "Rapor Hazırla", "Prepare Report", "Raporê Amade Bike")}</button>
+        <button type="button" onClick={() => onTabChange("upload")}>{tx(language, "Rapor Yükle", "Upload Report", "Raporê Barke")}</button>
+      </div>
       <div className="toolbar">
         <Title
           title={tx(language, "Rapor Hazırla", "Prepare Report", "Raporê Amade Bike")}

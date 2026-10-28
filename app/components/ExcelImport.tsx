@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { money } from "../lib/finance";
 import { tx } from "../lib/i18n";
-import type { Language } from "../lib/types";
+import type { CashAccountSummary, KasaSection, Language } from "../lib/types";
+import { workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import {
+  aggregateMonthly,
   analyzeSheets,
   buildRecords,
   FIELD_LABELS,
@@ -17,19 +19,21 @@ import {
   type SheetData,
 } from "../lib/excelImport";
 
-// "Excel'den Kasa Aktar" sihirbazı: dosya → kasa → sayfalar/sütunlar → önizleme → aktar. Dosya tarayıcıda okunur;
+// "Rapor Yükle" (Excel) sihirbazı: dosya → çalışma alanı + kasa → sayfalar/sütunlar → önizleme → aktar. Dosya tarayıcıda okunur;
 // onaydan önce hiçbir şey kaydedilmez. Aktarım bir numara taşır ve tek tıkla geri alınabilir.
 const CURRENCIES = ["USD", "SYP", "IQD", "TRY", "EUR"];
 const FIELD_ORDER: FieldKey[] = ["date", "title", "qty", "unit", "amount", "amountSyp", "currency", "invoice", "person", "project", "note"];
 
 export function ExcelImportModal({
   language,
-  kasaOptions,
+  cashAccounts,
+  sections,
   onClose,
   onDone,
 }: {
   language: Language;
-  kasaOptions: string[];
+  cashAccounts: CashAccountSummary[];
+  sections: KasaSection[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -42,8 +46,9 @@ export function ExcelImportModal({
   const [loading, setLoading] = useState(false);
   const [kasaChoice, setKasaChoice] = useState<string>("");
   const [newKasa, setNewKasa] = useState("");
-  const [listKasa, setListKasa] = useState(false);
-  const [rjKasa, setRjKasa] = useState(false);
+  const [wsKey, setWsKey] = useState("genel");
+  const [mode, setMode] = useState<"monthly" | "rows">("monthly");
+  const [withDetail, setWithDetail] = useState(true);
   const [groupInvoices, setGroupInvoices] = useState(true);
   const [projectFromSheet, setProjectFromSheet] = useState(true);
   const [fixDates, setFixDates] = useState(true);
@@ -54,6 +59,12 @@ export function ExcelImportModal({
   const [undone, setUndone] = useState(false);
 
   const kasaName = (kasaChoice === "__new" ? newKasa : kasaChoice).trim();
+  const wsOptions = workspaceOptions(sections, language);
+  const kasaOptions = cashAccounts
+    .filter((a) => workspaceKeyOf({ sectionId: a.sectionId ?? null, rjKasa: !!a.isRjKasa, listKasa: !!a.isListWorkspace }, sections) === wsKey)
+    .map((a) => a.name)
+    .sort((a, b) => a.localeCompare(b));
+  const isNewKasa = kasaChoice === "__new";
   const options: BuildOptions = { defaultCurrency, projectFromSheet, groupInvoices, fixDates, kasaName };
 
   const built = useMemo(() => {
@@ -67,10 +78,15 @@ export function ExcelImportModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocks, sheets, defaultCurrency, projectFromSheet, groupInvoices, fixDates, kasaName]);
 
-  const allRecords: ImportRecord[] = useMemo(() => [...built.values()].flatMap((b) => b.records), [built]);
+  const rawRecords: ImportRecord[] = useMemo(() => [...built.values()].flatMap((b) => b.records), [built]);
+  // "Aylık tek kalem": satırlar ay + para birimine göre tek kayıtta toplanır, Excel özeti Detay'a girer.
+  const allRecords: ImportRecord[] = useMemo(
+    () => (mode === "monthly" ? aggregateMonthly(rawRecords, fileName.replace(/\.xlsx$/i, "").trim() || "Excel", kasaName, withDetail) : withDetail ? rawRecords : rawRecords.map((r) => ({ ...r, detailTable: [] }))),
+    [rawRecords, mode, fileName, kasaName, withDetail],
+  );
   const totalsBy = (kind: "income" | "expense") => {
     const t: Record<string, number> = {};
-    for (const r of allRecords) if (r.kind === kind) t[r.currency] = Math.round(((t[r.currency] ?? 0) + r.amount) * 100) / 100;
+    for (const r of rawRecords) if (r.kind === kind) t[r.currency] = Math.round(((t[r.currency] ?? 0) + r.amount) * 100) / 100;
     return t;
   };
   const fmt = (t: Record<string, number>) => {
@@ -89,8 +105,7 @@ export function ExcelImportModal({
       setBlocks(analysis.blocks);
       setSummaries(analysis.summaries);
       setFileName(file.name);
-      if (!kasaChoice && !newKasa) setNewKasa(file.name.replace(/\.xlsx$/i, "").replace(/[‎‏]/g, "").trim());
-      if (!kasaChoice) setKasaChoice("__new");
+      if (!newKasa) setNewKasa(file.name.replace(/\.xlsx$/i, "").replace(/[‎‏]/g, "").trim());
     } catch {
       setError(tx(language, "Dosya okunamadı. Geçerli bir .xlsx dosyası seçin.", "Could not read the file. Choose a valid .xlsx file.", "Pel nehat xwendin. Pelekî .xlsx yê derbasdar hilbijêrin."));
     }
@@ -109,6 +124,7 @@ export function ExcelImportModal({
     if (!kasaName) return;
     setBusy(true);
     setError("");
+    const ws = workspaceState(wsKey, { rjKasa: false, listKasa: false });
     const batchId = `xl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     let inserted = 0;
     let skipped = 0;
@@ -118,7 +134,8 @@ export function ExcelImportModal({
         const response = await fetch("/api/records/import-excel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ batchId, kasaName, listKasa, rjKasa, items: chunk }),
+          // Yeni kasa seçilen çalışma alanına bağlanır; var olan kasa zaten o alandadır, dokunulmaz.
+          body: JSON.stringify({ batchId, kasaName, items: chunk, ...(isNewKasa ? { listKasa: ws.listKasa, rjKasa: ws.rjKasa, sectionId: ws.sectionId } : {}) }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
@@ -149,16 +166,16 @@ export function ExcelImportModal({
   const kindLabel = (k: BlockKind) => (k === "income" ? tx(language, "Gelir", "Income", "Dahat") : k === "expense" ? tx(language, "Gider", "Expense", "Mesref") : tx(language, "Yok say", "Ignore", "Paşguh bike"));
   const includedBlocks = blocks.filter((b) => b.include && b.kind !== "ignore");
   const suspiciousTotal = [...built.values()].reduce((a, b) => a + b.suspicious, 0);
-  const canNext2 = !!kasaName && sheets.length > 0;
+  const canNext2 = !!kasaName && sheets.length > 0 && !!kasaChoice;
 
   return (
     <div className="overlay">
       <div className="modal xiModal" onClick={(e) => e.stopPropagation()}>
         <div className="modalHead">
           <div>
-            <h2>{tx(language, "Excel'den Kasa Aktar", "Import a Cash Account from Excel", "Qaseyekê ji Excelê Têxe")}</h2>
+            <h2>{tx(language, "Excel Raporu Yükle", "Upload an Excel Report", "Raporeke Excel Barke")}</h2>
             <p>
-              {step === 1 && tx(language, "1/3 · Dosya ve kasa", "1/3 · File and cash account", "1/3 · Pel û qase")}
+              {step === 1 && tx(language, "1/3 · Dosya, çalışma alanı ve kasa", "1/3 · File, workspace and cash account", "1/3 · Pel, qada xebatê û qase")}
               {step === 2 && tx(language, "2/3 · Sayfalar ve sütunlar", "2/3 · Sheets and columns", "2/3 · Rûpel û stûn")}
               {step === 3 && tx(language, "3/3 · Önizleme ve aktarım", "3/3 · Preview and import", "3/3 · Pêşdîtin û barkirin")}
               {step === 4 && tx(language, "Aktarım tamamlandı", "Import finished", "Barkirin qediya")}
@@ -183,10 +200,16 @@ export function ExcelImportModal({
               </p>
             )}
             <label>
-              {tx(language, "Hedef kasa", "Target cash account", "Qaseya armanc")}
+              {tx(language, "Hangi çalışma alanına eklensin?", "Which workspace should it go to?", "Biçe kîjan qada xebatê?")}
+              <select value={wsKey} onChange={(e) => { setWsKey(e.target.value); setKasaChoice(""); }}>
+                {wsOptions.map((o) => (<option key={o.key} value={o.key}>{o.label}</option>))}
+              </select>
+            </label>
+            <label>
+              {tx(language, "Hangi kasaya eklensin?", "Which cash account should it go to?", "Biçe kîjan qaseyê?")}
               <select value={kasaChoice} onChange={(e) => setKasaChoice(e.target.value)}>
-                <option value="">{tx(language, "Seçin", "Select", "Hilbijêre")}</option>
-                <option value="__new">＋ {tx(language, "Yeni kasa", "New cash account", "Qaseya nû")}</option>
+                <option value="">{tx(language, "Seçin (zorunlu)", "Select (required)", "Hilbijêre (mecbûrî)")}</option>
+                <option value="__new">＋ {tx(language, "Bu alanda yeni kasa", "New cash account in this workspace", "Qaseya nû di vê qadê de")}</option>
                 {kasaOptions.map((k) => (<option key={k} value={k}>{k}</option>))}
               </select>
             </label>
@@ -203,8 +226,9 @@ export function ExcelImportModal({
               </select>
             </label>
             <div className="wide xiOptions">
-              <label className="checkField"><input type="checkbox" checked={listKasa} onChange={(e) => setListKasa(e.target.checked)} /> {tx(language, "Bu kasa bir Liste Kasasıdır (Listeler'de çalışma alanı olsun)", "This is a List cash account (make it a workspace on Lists)", "Ev qaseyek Lîsteyê ye (li Lîste bibe qada xebatê)")}</label>
-              <label className="checkField"><input type="checkbox" checked={rjKasa} onChange={(e) => setRjKasa(e.target.checked)} /> {tx(language, "Bu kasa bir RJ-Kasasıdır (Kasalar sayfasında “RJ-Kasaları” bölümünde görünsün)", "This is an RJ cash account (show under “RJ Cash Accounts” on Kasalar)", "Ev qaseyek RJ ye (li Qase di “Qaseyên RJ” de xuya bibe)")}</label>
+              <label className="checkField"><input type="radio" name="xiMode" checked={mode === "monthly"} onChange={() => setMode("monthly")} /> {tx(language, "Aylık tek kalem (önerilen): Excel'deki satırlar ay ve para birimine göre toplanır; her ay için gelir/giderde tek kayıt oluşur", "Monthly single item (recommended): rows are summed by month and currency; one income/expense record per month", "Yek kalemê mehane (pêşniyar): rêz li gorî meh û dirav têne berhev kirin; ji bo her mehê yek qeyd")}</label>
+              <label className="checkField"><input type="radio" name="xiMode" checked={mode === "rows"} onChange={() => setMode("rows")} /> {tx(language, "Her satır ayrı kayıt olsun", "Each row as a separate record", "Her rêz qeydeke cuda be")}</label>
+              <label className="checkField"><input type="checkbox" checked={withDetail} onChange={(e) => setWithDetail(e.target.checked)} /> {tx(language, "Excel detayı kayda eklensin (kayıttaki Detay'a basınca Excel verisinin özeti açılır)", "Attach the Excel detail (opening a record's Detail shows a summary of the Excel data)", "Hûrgulî Excel li qeydê were zêdekirin (bi tikandina Hûrguliyê kurteya daneyên Excel vedibe)")}</label>
               <label className="checkField"><input type="checkbox" checked={groupInvoices} onChange={(e) => setGroupInvoices(e.target.checked)} /> {tx(language, "Aynı fatura numaralı satırları tek kayıtta topla (ürün satırları Detay tablosuna girer)", "Combine rows with the same invoice number into one record (items go to the Detail table)", "Rêzên bi heman hejmara fatûreyê di yek qeydê de bicivîne (berhem diçin tabloya Hûrgulî)")}</label>
               <label className="checkField"><input type="checkbox" checked={projectFromSheet} onChange={(e) => setProjectFromSheet(e.target.checked)} /> {tx(language, "Sayfa adını “Proje” olarak yaz (alt birimler/bölgeler için)", "Use the sheet name as “Project” (for sub-units/regions)", "Navê rûpelê wekî “Proje” binivîse (ji bo binbirim/herêman)")}</label>
               <label className="checkField"><input type="checkbox" checked={fixDates} onChange={(e) => setFixDates(e.target.checked)} /> {tx(language, "Ay/gün ters okunmuş şüpheli tarihleri düzelt", "Fix suspicious day/month-swapped dates", "Dîrokên bi guman ên roj/meh berevajî bi cih bike")}</label>

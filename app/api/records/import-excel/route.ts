@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { records } from "../../../../db/schema";
+import { cashAccounts, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { json, withErrorHandling } from "../../_lib/http";
@@ -49,6 +49,7 @@ export const POST = withErrorHandling(async (request: Request) => {
     }
     if (payload.listKasa) await markListKasa(link.cashAccountId, tx);
     if (payload.rjKasa) await setRjKasa(link.cashAccountId, true, tx);
+    if (payload.sectionId !== undefined) await tx.update(cashAccounts).set({ sectionId: payload.sectionId }).where(eq(cashAccounts.id, link.cashAccountId));
 
     const keys = payload.items.map((i) => i.importKey).filter(Boolean);
     const existing = keys.length

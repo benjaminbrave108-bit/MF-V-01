@@ -4251,3 +4251,8 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .accessMatrix thead th { position: sticky; top: 0; background: #f1f7f9; z-index: 1; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .accessMatrix tbody th { text-align: left; position: sticky; left: 0; background: #fff; font-weight: 600; }
 .accessMatrix tbody th small { margin-left: 6px; color: #7a8d95; font-weight: 400; }
+
+.reportTabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.reportTabs button { padding: 7px 14px; border: 1px solid #c9d8de; border-radius: 8px; background: #fff; color: #27424c; cursor: pointer; font-weight: 600; }
+.reportTabs button.active { background: #1c6a86; color: #fff; border-color: #1c6a86; }
+.reportUploadSteps { margin: 8px 0 0 18px; display: grid; gap: 6px; color: #4a6370; font-size: 13px; max-width: 780px; }

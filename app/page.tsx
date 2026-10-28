@@ -41,6 +41,7 @@ export default function Home() {
   const [signedIn, setSignedIn] = useState(false);
   const [page, setPage] = useState<Page>("dashboard");
   const [pageHistory, setPageHistory] = useState<Page[]>([]);
+  const [reportTab, setReportTab] = useState<"prepare" | "upload">("prepare");
   function goPage(next: Page) {
     if (next === page) return;
     setPageHistory((h) => [...h.slice(-29), page]);
@@ -840,6 +841,7 @@ export default function Home() {
               onRefreshData={() => { refreshRecords(); refreshCashAccounts(); refreshSections(); }}
               sections={sections}
               isSuperAdmin={profile.isSuperAdmin}
+              onGoUpload={() => { setReportTab("upload"); goPage("reportBuilder"); }}
               checkPassword={checkPassword}
               cashAccounts={contextCashAccounts}
               users={users}
@@ -863,6 +865,11 @@ export default function Home() {
               onDeleteReport={deletePreparedReport}
               profile={profile}
               checkPassword={checkPassword}
+              cashAccounts={contextCashAccounts}
+              sections={sections}
+              tab={reportTab}
+              onTabChange={setReportTab}
+              onDataChanged={() => { refreshRecords(); refreshCashAccounts(); refreshSections(); }}
             />
           )}
           {page === "notes" && (

@@ -103,12 +103,12 @@ function guessField(header: string): Guess {
   if (/^PROJE/.test(n)) return { field: "project" };
   if (/^(NOT|NOTE|TEBINI)\b|^TEBINI/.test(n)) return { field: "note" };
   if (/C PERA|PARA BIRIMI|CURRENCY|^DIRAV/.test(n)) return { field: "currency" };
-  if (/KUDERE|^KIRIN$|WERSE|AJOVAN|XWEDANE|MUSTERI|^ALAV$|^KISI$/.test(n)) return { field: "person" };
+  if (/KUDERE|^KIRIN$|WERSE|AJOVAN|XWEDANE|MUSTERI|^ALAV$|^KISI$|^PERSON$/.test(n)) return { field: "person" };
   const flavor: "usd" | "syp" | undefined = /\bSURI\b|\bL S\b|\bLS\b|\bSYP\b|SYRIA/.test(n) ? "syp" : /DOLAR|\$|\bUSD\b/.test(n) ? "usd" : undefined;
   if (/NIRXE YEKE|^N YEKE|FIYETA|BIRIM FIYAT|UNIT/.test(n)) return { field: "unit", flavor: /KIRIN/.test(n) ? "cost" : /FIROTIN/.test(n) ? "sale" : flavor };
   if (/NIRXE GISTI|MIQDARE PERE|^PERE\b|TUTAR|AMOUNT/.test(n)) return { field: flavor === "syp" ? "amountSyp" : "amount", flavor };
   if (/^(MIQDAR|HEJMAR|QTY|QUANTITY)( |$)/.test(n)) return { field: "qty" };
-  if (/^(MADE|NAV|NAVE MADE|MESRUF|JIBO|HATI DAYIN|CUREYA MADE|KALA|BERHEM|WERGIRTIN)\b/.test(n)) return { field: "title" };
+  if (/^(MADE|NAV|NAVE MADE|MESRUF|JIBO|HATI DAYIN|CUREYA MADE|KALA|BERHEM|WERGIRTIN|BASLIK|ACIKLAMA|URUN|KALEM|MADDE|DETAY|TITLE|ITEM|DESCRIPTION|DETAIL)\b/.test(n)) return { field: "title" };
   return null;
 }
 
@@ -173,7 +173,8 @@ export function analyzeSheets(sheets: SheetData[]): { blocks: Block[]; summaries
     const headerRow = sheet.rows[best] ?? [];
     // İkinci başlık satırı ($ / L.S alt başlıkları) varsa birleştir.
     const nextRow = sheet.rows[best + 1] ?? [];
-    const hasSub = nextRow.some((c) => /^(\$|L\.?S|SYP|USD)$/i.test(cellText(c)));
+    // Veri satırı (sayı/tarih içeren) alt başlık sayılmaz; aksi halde "USD" para birimi sütunu olan dosyalarda ilk satır kaybolur.
+    const hasSub = nextRow.some((c) => /^(\$|L\.?S|SYP|USD)$/i.test(cellText(c))) && !nextRow.some((c) => typeof c === "number" || c instanceof Date);
     const merged: string[] = headerRow.map((c, i) => {
       const base = cellText(c);
       const sub = hasSub ? cellText(nextRow[i]) : "";
@@ -418,4 +419,54 @@ export function buildRecords(sheet: SheetData, block: Block, options: BuildOptio
   const totals: Record<string, number> = {};
   for (const r of rows) totals[r.currency] = Math.round(((totals[r.currency] ?? 0) + r.amount) * 100) / 100;
   return { records: recordsOut, rows: rows.length, skipped, suspicious, totals };
+}
+
+// "Aylık tek kalem": Excel satırları ay ve para birimine göre toplanır; her ay için tek gelir/gider kaydı oluşur.
+// Detay tablosu o ayın Excel verisinin özetidir (başlığa göre satır sayısı ve tutar).
+export function aggregateMonthly(items: ImportRecord[], fileLabel: string, kasaName: string, withDetail: boolean): ImportRecord[] {
+  const groups = new Map<string, ImportRecord[]>();
+  for (const r of items) {
+    const key = `${r.kind}|${r.date.slice(0, 7)}|${r.currency}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const label = fileLabel.slice(0, 60);
+  const out: ImportRecord[] = [];
+  for (const [key, rows] of groups) {
+    const [kind, month, currency] = key.split("|") as ["income" | "expense", string, string];
+    const [year, mm] = month.split("-").map(Number);
+    const lastDay = new Date(year, mm, 0).getDate();
+    const sum = Math.round(rows.reduce((a, r) => a + r.amount, 0) * 100) / 100;
+    const projects = [...new Set(rows.map((r) => r.project).filter(Boolean))];
+    let detailTable: string[][] = [];
+    if (withDetail) {
+      const byTitle = new Map<string, { count: number; amount: number }>();
+      for (const r of rows) {
+        const t = byTitle.get(r.source) ?? { count: 0, amount: 0 };
+        t.count += 1;
+        t.amount += r.amount;
+        byTitle.set(r.source, t);
+      }
+      const sorted = [...byTitle.entries()].sort((a, b) => b[1].amount - a[1].amount);
+      const top = sorted.slice(0, 60);
+      const rest = sorted.slice(60);
+      detailTable = [["Başlık", "Satır", `Tutar (${currency})`], ...top.map(([t, v]) => [t.slice(0, 200), String(v.count), fmt(v.amount)])];
+      if (rest.length) detailTable.push([`Diğer (${rest.length} başlık)`, String(rest.reduce((a, [, v]) => a + v.count, 0)), fmt(rest.reduce((a, [, v]) => a + v.amount, 0))]);
+      detailTable.push(["Toplam", String(rows.length), fmt(sum)]);
+    }
+    out.push({
+      kind,
+      date: `${month}-${String(lastDay).padStart(2, "0")}`,
+      source: `${month} ${kind === "income" ? "Aylık Gelir" : "Aylık Gider"} · ${label}`,
+      detail: `${rows.length} satır · Excel özeti`,
+      note: `Excel: ${fileLabel}`,
+      person: "",
+      amount: sum,
+      currency,
+      project: projects.length === 1 ? projects[0] : "",
+      detailTable,
+      importKey: `m|${kasaName}|${fileLabel}|${key}`.slice(0, 240),
+    });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 }
