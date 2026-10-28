@@ -1518,9 +1518,9 @@ export function Records({
           className={source === g.name && !showAllLists ? "selected" : ""}
           style={tone}
           onClick={() => {
+            // Çalışma alanı açık kalır: diğer kasalar arasında geçiş yapılabilsin.
             setSource(g.name);
             setActiveKasa("");
-            setActiveWs(null);
             setShowAllLists(false);
           }}
         >

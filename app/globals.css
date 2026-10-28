@@ -4240,3 +4240,6 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .kasaManageHint { color: #6b7f88; font-size: 12px; }
 
 .workspaceAdd { align-self: stretch; min-width: 150px; }
+
+.pageBack { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 1px solid #c9d8de; background: #fff; color: #1c6a86; font-size: 18px; line-height: 1; cursor: pointer; flex: none; }
+.pageBack:hover { background: #eaf4f7; }

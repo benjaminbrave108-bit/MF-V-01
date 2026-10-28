@@ -40,6 +40,18 @@ export default function Home() {
   useDraggableModals();
   const [signedIn, setSignedIn] = useState(false);
   const [page, setPage] = useState<Page>("dashboard");
+  const [pageHistory, setPageHistory] = useState<Page[]>([]);
+  function goPage(next: Page) {
+    if (next === page) return;
+    setPageHistory((h) => [...h.slice(-29), page]);
+    setPage(next);
+  }
+  function goBack() {
+    const previous = pageHistory[pageHistory.length - 1];
+    if (!previous) return;
+    setPageHistory(pageHistory.slice(0, -1));
+    setPage(previous);
+  }
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [archive, setArchive] = useState<ArchiveItem[]>([]);
   const [notes, setNotes] = useState<FinanceNote[]>([]);
@@ -633,7 +645,7 @@ export default function Home() {
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
-                onClick={() => setPage(n.id)}
+                onClick={() => goPage(n.id)}
               >
                 <i>{n.icon}</i>
                 <span>{n.label[language]}</span>
@@ -662,6 +674,17 @@ export default function Home() {
       <main>
         <header>
           <div className="headerTitleRow">
+            {pageHistory.length > 0 && (
+              <button
+                type="button"
+                className="pageBack"
+                onClick={goBack}
+                title={tx(language, "Önceki sayfaya dön", "Back to the previous page", "Vegere rûpela berê")}
+                aria-label={tx(language, "Önceki sayfaya dön", "Back to the previous page", "Vegere rûpela berê")}
+              >
+                ←
+              </button>
+            )}
             <h1>
               {nav.find((n) => n.id === page)?.label[language]}
             </h1>
@@ -798,7 +821,7 @@ export default function Home() {
         </header>
         <section className="content">
           {page === "dashboard" && (
-            <Dashboard records={dashboardRecords} language={language} goTo={setPage} />
+            <Dashboard records={dashboardRecords} language={language} goTo={goPage} />
           )}
           {(["cash", "income", "expense"] as Page[]).includes(page) && (
             <Records
