@@ -1266,6 +1266,10 @@ export function Records({
   const [kasaEditTarget, setKasaEditTarget] = useState<CashAccountSummary | null>(null);
   const [kasaDeleteTarget, setKasaDeleteTarget] = useState<CashAccountSummary | null>(null);
   const [kasaMoveTarget, setKasaMoveTarget] = useState<CashAccountSummary | null>(null);
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [newWorkspaceBusy, setNewWorkspaceBusy] = useState(false);
+  const [newWorkspaceError, setNewWorkspaceError] = useState("");
   // Seçili kasa kartında "Kasayı Düzenle" ve "Kasayı Sil" (şifreli onay) düğmeleri.
   const kasaActions = (name: string, selected: boolean) => {
     if (!selected || readOnly) return null;
@@ -1553,19 +1557,36 @@ export function Records({
     );
   };
   const workspacePalette = ["#287b98", "#1f8a5b", "#7b52bf", "#c0562b", "#b9951c", "#3a5fb0", "#a8386b"];
+  // window.prompt masaüstü uygulamasında çalışmadığı için ad uygulama içi pencereden alınır.
   async function createWorkspace() {
-    const name = window.prompt(tx(language, "Yeni çalışma alanı adı (ör. Proje Kasaları, Şirketler):", "New workspace name (e.g. Project Cash Accounts, Companies):", "Navê qada xebatê ya nû (mînak Qaseyên Projeyê, Şirket):"));
-    if (!name || !name.trim()) return;
+    const name = newWorkspaceName.trim();
+    if (!name) return;
+    setNewWorkspaceBusy(true);
+    setNewWorkspaceError("");
     try {
       const response = await fetch("/api/sections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "cash", name: name.trim(), color: workspacePalette[cashSections.length % workspacePalette.length] }),
+        body: JSON.stringify({ scope: "cash", name, color: workspacePalette[cashSections.length % workspacePalette.length] }),
       });
-      if (!response.ok) throw new Error("save");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        setNewWorkspaceError(
+          response.status === 403
+            ? tx(language, "Çalışma alanını yalnızca yönetici oluşturabilir.", "Only an administrator can create a workspace.", "Qada xebatê tenê rêvebir dikare çêke.")
+            : response.status === 409
+              ? tx(language, "Bu adla bir çalışma alanı zaten var.", "A workspace with this name already exists.", "Qada xebatê bi vî navî heye.")
+              : body.error || tx(language, "Çalışma alanı oluşturulamadı.", "The workspace could not be created.", "Qada xebatê nehat çêkirin."),
+        );
+        return;
+      }
+      setNewWorkspaceOpen(false);
+      setNewWorkspaceName("");
       onRefreshData?.();
     } catch {
-      alert(tx(language, "Çalışma alanı oluşturulamadı.", "The workspace could not be created.", "Qada xebatê nehat çêkirin."));
+      setNewWorkspaceError(tx(language, "Çalışma alanı oluşturulamadı.", "The workspace could not be created.", "Qada xebatê nehat çêkirin."));
+    } finally {
+      setNewWorkspaceBusy(false);
     }
   }
   // Overall pill total, computed per currency directly from the record
@@ -2217,6 +2238,40 @@ export function Records({
           }}
         />
       )}
+      {newWorkspaceOpen && (
+        <div className="overlay">
+          <div className="modal kasaManageModal" onClick={(e) => e.stopPropagation()}>
+            <div className="modalHead">
+              <div>
+                <h2>{tx(language, "Yeni Çalışma Alanı", "New Workspace", "Qada Xebatê ya Nû")}</h2>
+                <p>{tx(language, "ör. Proje Kasaları, Şirketler", "e.g. Project Cash Accounts, Companies", "mînak Qaseyên Projeyê, Şirket")}</p>
+              </div>
+              <button type="button" onClick={() => setNewWorkspaceOpen(false)}>×</button>
+            </div>
+            <div className="kasaManageBody">
+              <label>
+                {tx(language, "Çalışma alanı adı", "Workspace name", "Navê qada xebatê")}
+                <input
+                  value={newWorkspaceName}
+                  maxLength={120}
+                  autoFocus
+                  onChange={(e) => setNewWorkspaceName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createWorkspace();
+                  }}
+                />
+              </label>
+              {newWorkspaceError && <p className="kasaManageError">{newWorkspaceError}</p>}
+            </div>
+            <div className="modalActions">
+              <button type="button" className="light" onClick={() => setNewWorkspaceOpen(false)}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+              <button type="button" className="primary" disabled={newWorkspaceBusy || !newWorkspaceName.trim()} onClick={createWorkspace}>
+                {tx(language, "Oluştur", "Create", "Çêke")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {kasaMoveTarget && (
         <KasaEditModal
           language={language}
@@ -2494,7 +2549,7 @@ export function Records({
           <div className="workspacesHead">
             <span className="workspacesLabel" />
             {!readOnly && (
-              <button type="button" className="light compact" onClick={createWorkspace}>
+              <button type="button" className="light compact" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
                 ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
               </button>
             )}
