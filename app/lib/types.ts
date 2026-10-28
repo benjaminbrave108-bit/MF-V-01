@@ -189,7 +189,7 @@ export type RecordComment = {
 // Kullanıcılar to view/edit their own account; Users.tsx itself restricts
 // non-admins to just their own card and a name/password-only edit form.
 export const adminOnlyPages: Page[] = ["settings"];
-export type ReportLine = { date: string; title: string; detail: string; note: string; amount: number };
+export type ReportLine = { date: string; title: string; detail: string; note: string; amount: number; currency?: string };
 export type PreparedReport = {
   id: string;
   createdAt: string;
