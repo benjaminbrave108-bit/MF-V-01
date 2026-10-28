@@ -3299,11 +3299,6 @@ export function RecordModal({
   // translated string back to the database, breaking cashAccount name
   // matching and silently corrupting data across languages.
   const [form, setForm] = useState<Omit<RecordItem, "id">>(base);
-  // "Liste Adı" alanı sadece kayıt bir listeyi ilgilendiriyorsa anlamlı —
-  // her zaman görünen boş bir kutu yerine, bir onay kutusuyla açılıp
-  // kapanıyor. Düzenlenen bir kayıtta zaten bir liste adı varsa, kutu
-  // başta işaretli açılır.
-  const [hasListRecord, setHasListRecord] = useState(!!base.listName);
   // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
   const [sectionId, setSectionId] = useState<number | null>(() => (kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
   const [rjKasa, setRjKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa));
@@ -3583,13 +3578,8 @@ export function RecordModal({
                 <option value="" disabled>
                   {tx(language, "Kasa seçin (zorunlu)", "Select a cash account (required)", "Qaseyekê hilbijêre (mecbûrî)")}
                 </option>
-                {[...new Set([...records.filter((x) => x.kind === "cash").map((x) => x.source), ...cashAccounts.map((a) => a.name), form.cashAccount || ""].filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{localizeData(name, language)}{cashAccounts.some((a) => a.name === name && a.isListWorkspace) ? `  ▣ ${tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}` : ""}</option>)}
+                {[...new Set([...records.filter((x) => x.kind === "cash").map((x) => x.source), ...cashAccounts.map((a) => a.name), form.cashAccount || ""].filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{localizeData(name, language)}</option>)}
               </select>
-              {kind === "expense" && cashAccounts.some((a) => a.name === form.cashAccount && a.isListWorkspace) && (
-                <small className="listKasaHint">
-                  ▣ {tx(language, "Liste Kasası seçili: bu gider Listeler sayfasında kasa geliri/gideri sonuçlarıyla ve kişilere dağıtılabilir şekilde görünür.", "List cash account selected: this expense shows on the Lists page with the account's income/expense results and can be allocated to people.", "Qaseya Lîsteyê hatiye hilbijartin: ev mesref di rûpela Lîste de bi encamên dahat/mesrefa qaseyê tê xuyakirin û dikare ji kesan re were dabeşkirin.")}
-                </small>
-              )}
             </label>
           )}
           {kind !== "cash" && sections.some((x) => x.scope === kind) && (
@@ -3622,10 +3612,10 @@ export function RecordModal({
               )}
             />
           </label>
+          {kind === "cash" && (
           <fieldset className="wide listFieldset">
-            <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
-            {kind === "cash" && (
-              <label>
+            <legend>{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</legend>
+            <label>
                 {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}
                 <select
                   value={workspaceKeyOf({ sectionId, rjKasa, listKasa }, sections)}
@@ -3635,7 +3625,6 @@ export function RecordModal({
                     setRjKasa(next.rjKasa);
                     setListKasa(next.listKasa);
                     if (next.listKasa) {
-                      setHasListRecord(true);
                       setForm((f) => ({ ...f, listName: f.listName || f.source.trim() }));
                     }
                   }}
@@ -3645,40 +3634,9 @@ export function RecordModal({
                   ))}
                 </select>
                 <small className="listKasaHint">{tx(language, "Her kasa mutlaka bir çalışma alanına bağlıdır.", "Every cash account belongs to a workspace.", "Her qase girêdayî qada xebatê ye.")}</small>
-              </label>
-            )}
-            <label>
-              {tx(language, "Bu Kayıt Bir Listeyi İlgilendiriyor mu?", "Is this record related to a list?", "Ev qeyd bi lîsteyekê ve girêdayî ye?")}
-              <span className="checkField">
-                <input
-                  type="checkbox"
-                  checked={hasListRecord}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setHasListRecord(checked);
-                    if (!checked) setForm((f) => ({ ...f, listName: "" }));
-                  }}
-                />
-                {tx(language, "Evet, bir listeyle ilişkilendir", "Yes, link it to a list", "Erê, bi lîsteyekê ve girê bide")}
-              </span>
             </label>
-            {hasListRecord && (
-              <label>
-                {tx(language, "Liste Adı", "List Name", "Navê Lîsteyê")}
-                <SuggestInput
-                  value={form.listName}
-                  onChange={(v) => setForm({ ...form, listName: v })}
-                  options={previous("listName")}
-                  placeholder={tx(
-                    language,
-                    "Örn. V Listesi",
-                    "E.g. List V",
-                    "Mînak: Lîsteya V",
-                  )}
-                />
-              </label>
-            )}
           </fieldset>
+          )}
           <label className="wide">
             {tx(language, "Ek Dosyalar (Excel/Office/PDF)", "Attachments (Excel/Office/PDF)", "Peldankên Pêvekirî (Excel/Office/PDF)")}
             <div className="attachmentField">
