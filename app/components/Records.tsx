@@ -1378,6 +1378,13 @@ export function Records({
   const [activeSection, setActiveSection] = useState<number | null>(null);
   // Kasalar sayfasında çalışma alanı başlığıyla süzülen alan anahtarı (genel / liste / rj / sec-<id>).
   const [activeWs, setActiveWs] = useState<string | null>(null);
+  // Gelir/Gider sayfalarında seçili çalışma alanı (kasa kutuları yalnız seçili alanın kasalarını gösterir).
+  const [activeIeWs, setActiveIeWs] = useState<string | null>(null);
+  // Sayfa (Kasa/Gelir/Gider) değişince seçili çalışma alanı sıfırlanır.
+  useEffect(() => {
+    setActiveIeWs(null);
+    setActiveWs(null);
+  }, [kind]);
   const [showAllLists, setShowAllLists] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState("");
@@ -1737,6 +1744,35 @@ export function Records({
       });
   }, [records, allRecords, kind, cashAccounts, sections, language]);
   const activeWsNames = new Set((cashWorkspaces.find((w) => w.key === activeWs)?.kasas ?? []).map((k) => k.name));
+  // Gelir/Gider sayfaları: kasa kutuları çalışma alanlarına göre gruplanır; üstte yalnızca alan kutuları görünür (ekran şişmesin),
+  // bir alana basınca o alanın kasaları altta açılır. Bu sayfadaki türde (gelir/gider) kaydı olmayan alanlar gösterilmez.
+  const ieWorkspaces = useMemo(() => {
+    if (kind === "cash") return [];
+    const accountOf = new Map(cashAccounts.map((a) => [a.name, a]));
+    const buckets = [
+      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#287b98", kasas: [] as typeof kasaBoxes },
+      { key: "liste", name: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê"), color: "#b9951c", kasas: [] as typeof kasaBoxes },
+      { key: "rj", name: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ"), color: "#7b52bf", kasas: [] as typeof kasaBoxes },
+      ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, kasas: [] as typeof kasaBoxes })),
+    ];
+    const rowsByKasa = new Map<string, RecordItem[]>();
+    for (const x of records) if (x.cashAccount) rowsByKasa.set(x.cashAccount, [...(rowsByKasa.get(x.cashAccount) ?? []), x]);
+    for (const [name, rows] of rowsByKasa) {
+      const account = accountOf.get(name);
+      const key = account?.sectionId != null && cashSections.some((x) => x.id === account.sectionId)
+        ? `sec-${account.sectionId}`
+        : account?.isListWorkspace ? "liste" : account?.isRjKasa ? "rj" : "genel";
+      buckets.find((b) => b.key === key)?.kasas.push({ name, count: rows.length, totalByCurrency: combineByCurrency([{ rows }]), amount: total(rows) });
+    }
+    return buckets
+      .filter((b) => b.kasas.length > 0)
+      .map((b) => {
+        const rows = b.kasas.flatMap((k) => rowsByKasa.get(k.name) ?? []);
+        return { ...b, kasas: [...b.kasas].sort((a, c) => c.amount - a.amount), count: rows.length, totalByCurrency: combineByCurrency([{ rows }]) };
+      });
+  }, [records, kind, cashAccounts, sections, language]);
+  const activeIeWorkspace = kind !== "cash" && activeIeWs ? ieWorkspaces.find((w) => w.key === activeIeWs) ?? null : null;
+  const activeIeNames = new Set((activeIeWorkspace?.kasas ?? []).map((k) => k.name));
   // Gelir/Gider bölüm kutuları: her bölüm için bir kutu (o bölümdeki kayıtların toplamı).
   const sectionBoxes = useMemo(
     () =>
@@ -1779,6 +1815,7 @@ export function Records({
       (source === "Tümü" || source === "__RJ" || x.source === source || x.cashAccount === source) &&
       (!showAllLists || listOf(x) || isListLinked(x)) &&
       (!activeKasa || x.cashAccount === activeKasa) &&
+      (!activeIeWorkspace || activeIeNames.has(x.cashAccount)) &&
       (activeSection === null || x.sectionId === activeSection) &&
       (activeWs === null || kind !== "cash" || activeWsNames.has(x.cashAccount || x.source)) &&
       (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaSeparateNames.has(x.cashAccount || x.source))) &&
@@ -2332,11 +2369,12 @@ export function Records({
       )}
       <div className="groups">
         <button
-          className={source === "Tümü" && !showAllLists && !activeKasa && activeWs === null ? "selected" : ""}
+          className={source === "Tümü" && !showAllLists && !activeKasa && activeWs === null && !activeIeWorkspace ? "selected" : ""}
           onClick={() => {
             setSource("Tümü");
             setActiveKasa("");
             setActiveWs(null);
+            setActiveIeWs(null);
             setShowAllLists(false);
           }}
         >
@@ -2465,29 +2503,24 @@ export function Records({
         })}
         {kind !== "cash" && (
           <>
-            {kasaBoxes.map((k) => (
-              <div className="groupCard" key={k.name}>
+            {ieWorkspaces.map((w) => (
+              <div className="groupCard" key={w.key}>
                 <button
-                  className={activeKasa === k.name ? "selected" : ""}
+                  className={activeIeWs === w.key ? "selected" : ""}
+                  style={{ background: `${w.color}14`, borderColor: `${w.color}66`, borderLeft: `4px solid ${w.color}` }}
                   onClick={() => {
-                    setActiveKasa(activeKasa === k.name ? "" : k.name);
+                    setActiveIeWs(activeIeWs === w.key ? null : w.key);
+                    setActiveKasa("");
                     setSource("Tümü");
                     setSearch("");
                     setActiveList("");
                     setShowAllLists(false);
                   }}
                 >
-                  <b>
-                    {localizeData(k.name, language)}
-                    {(kind === "income" ? /gelir|income|dahat/i : /gider|expense|mesref/i).test(k.name)
-                      ? ""
-                      : ` ${kind === "income" ? tx(language, "Gelirleri", "Income", "Dahat") : tx(language, "Giderleri", "Expenses", "Mesref")}`}{" "}
-                    <span className="groupCount">({k.count})</span>
-                  </b>
-                  <em className="groupKasaTag">▣ {tx(language, "Kasa", "Cash account", "Qase")}</em>
-                  <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
+                  <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
+                  <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+                  <strong style={{ color: w.color }}>{moneyBreakdown(w.totalByCurrency)}</strong>
                 </button>
-                {kasaActions(k.name, activeKasa === k.name && !showAllLists)}
               </div>
             ))}
             {sectionBoxes.map(({ section, count, totalByCurrency }) => (
@@ -2513,7 +2546,31 @@ export function Records({
           </>
         )}
       </div>
-      {(kind as string) !== "cash" && listGroups.length > 0 && (
+      {kind !== "cash" && activeIeWorkspace && (
+        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeIeWorkspace.color}` }}>
+          {activeIeWorkspace.kasas.map((k) => (
+            <div className="groupCard" key={k.name}>
+              <button
+                className={activeKasa === k.name ? "selected" : ""}
+                style={{ background: `${activeIeWorkspace.color}14`, borderColor: `${activeIeWorkspace.color}66` }}
+                onClick={() => {
+                  setActiveKasa(activeKasa === k.name ? "" : k.name);
+                  setSource("Tümü");
+                  setSearch("");
+                  setActiveList("");
+                  setShowAllLists(false);
+                }}
+              >
+                <b>{localizeData(k.name, language)} <span className="groupCount">({k.count})</span></b>
+                <strong>{moneyBreakdown(k.totalByCurrency)}</strong>
+              </button>
+              {kasaActions(k.name, activeKasa === k.name && !showAllLists)}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Listeler menüsü kapatıldı: "Tüm Liste Giderleri/Gelirleri" satırı artık gösterilmez; liste kasaları çalışma alanı kutusunda görünür. */}
+      {false && (kind as string) !== "cash" && listGroups.length > 0 && (
         <div className="groups listGroups">
           <button
             className={showAllLists ? "selected" : ""}
