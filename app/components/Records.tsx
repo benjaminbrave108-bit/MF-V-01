@@ -518,6 +518,17 @@ function DetailTableEditor({
   );
 }
 
+// Detay tablosunda "Birim fiyat" / "Tutar" sütunları kaydın para birimiyle gösterilir (USD, SYP, EUR...).
+const MONEY_HEADER = /birim fiyat|unit price|bihayê yekê|nirxê yekê|^tutar|^amount|^mîqdar \(|^fiyat|^price/i;
+function parseCellNumber(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) return Number(t.replace(/\./g, "").replace(",", "."));
+  if (/^-?\d+,\d+$/.test(t)) return Number(t.replace(",", "."));
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+  return null;
+}
+
 function DetailTableModal({ language, record, onClose }: { language: Language; record: RecordItem; onClose: () => void }) {
   const table = record.detailTable ?? [];
   const columnCount = Math.max(0, ...table.map((r) => r.length));
@@ -625,7 +636,14 @@ function DetailTableModal({ language, record, onClose }: { language: Language; r
                         verticalAlign: effectiveAlign(record.detailTableLayout, rowIndex, colIndex).v,
                       }}
                     >
-                      {localizeData(row[colIndex] ?? "", language)}
+                      {(() => {
+                        const raw = row[colIndex] ?? "";
+                        if (rowIndex > 0 && MONEY_HEADER.test((table[0]?.[colIndex] ?? "").trim())) {
+                          const n = parseCellNumber(raw);
+                          if (n !== null) return money(n, record.currency);
+                        }
+                        return localizeData(raw, language);
+                      })()}
                     </td>
                   ))}
                 </tr>
