@@ -839,6 +839,7 @@ export default function Home() {
               onImport={importRecords}
               onRefreshData={() => { refreshRecords(); refreshCashAccounts(); refreshSections(); }}
               sections={sections}
+              isSuperAdmin={profile.isSuperAdmin}
               checkPassword={checkPassword}
               cashAccounts={contextCashAccounts}
               users={users}

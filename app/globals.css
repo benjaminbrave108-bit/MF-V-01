@@ -4243,3 +4243,11 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 
 .pageBack { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 1px solid #c9d8de; background: #fff; color: #1c6a86; font-size: 18px; line-height: 1; cursor: pointer; flex: none; }
 .pageBack:hover { background: #eaf4f7; }
+
+.kasaAccessModal { width: min(920px, 96vw); max-width: 96vw; }
+.accessMatrixWrap { overflow: auto; max-height: 55vh; border: 1px solid #d6e3e8; border-radius: 8px; }
+.accessMatrix { border-collapse: collapse; font-size: 12px; width: 100%; }
+.accessMatrix th, .accessMatrix td { padding: 6px 8px; border-bottom: 1px solid #e6eef1; text-align: center; white-space: nowrap; }
+.accessMatrix thead th { position: sticky; top: 0; background: #f1f7f9; z-index: 1; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.accessMatrix tbody th { text-align: left; position: sticky; left: 0; background: #fff; font-weight: 600; }
+.accessMatrix tbody th small { margin-left: 6px; color: #7a8d95; font-weight: 400; }

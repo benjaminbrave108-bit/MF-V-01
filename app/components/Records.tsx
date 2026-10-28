@@ -7,6 +7,7 @@ import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
 import { ExcelImportModal } from "./ExcelImport";
 import { KasaDeleteModal, KasaEditModal, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
+import { WorkspaceAccessModal, type AccessKasa } from "./WorkspaceAccess";
 import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
@@ -913,6 +914,7 @@ export function Records({
   notes,
   onRefreshData,
   sections = [],
+  isSuperAdmin = false,
 }: {
   language: Language;
   kind: Kind;
@@ -935,6 +937,7 @@ export function Records({
   notes: FinanceNote[];
   onRefreshData?: () => void;
   sections?: KasaSection[];
+  isSuperAdmin?: boolean;
 }) {
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RecordItem | null>(null);
@@ -1266,6 +1269,7 @@ export function Records({
   const [kasaEditTarget, setKasaEditTarget] = useState<CashAccountSummary | null>(null);
   const [kasaDeleteTarget, setKasaDeleteTarget] = useState<CashAccountSummary | null>(null);
   const [kasaMoveTarget, setKasaMoveTarget] = useState<CashAccountSummary | null>(null);
+  const [accessTarget, setAccessTarget] = useState<{ title: string; kasas: AccessKasa[]; section?: KasaSection } | null>(null);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [newWorkspaceBusy, setNewWorkspaceBusy] = useState(false);
@@ -1278,6 +1282,9 @@ export function Records({
     return (
       <span className="kasaActions">
         <button type="button" title={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} aria-label={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} onClick={() => setKasaEditTarget(account)}>✎</button>
+        {isSuperAdmin && (
+          <button type="button" title={tx(language, "Kimler görebilir?", "Who can see it?", "Kî dikare bibîne?")} aria-label={tx(language, "Kimler görebilir?", "Who can see it?", "Kî dikare bibîne?")} onClick={() => setAccessTarget({ title: `${account.name} — ${tx(language, "Kimler görebilir?", "Who can see it?", "Kî dikare bibîne?")}`, kasas: [{ id: account.id, name: account.name, ownerUserId: account.ownerUserId }] })}>👁</button>
+        )}
         <button type="button" title={tx(language, "Çalışma alanına taşı", "Move to workspace", "Bibe qada xebatê")} aria-label={tx(language, "Çalışma alanına taşı", "Move to workspace", "Bibe qada xebatê")} onClick={() => setKasaMoveTarget(account)}>⇄</button>
         <button type="button" className="danger" title={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} aria-label={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} onClick={() => setKasaDeleteTarget(account)}>🗑</button>
       </span>
@@ -2278,6 +2285,16 @@ export function Records({
           </div>
         </div>
       )}
+      {accessTarget && (
+        <WorkspaceAccessModal
+          language={language}
+          title={accessTarget.title}
+          kasas={accessTarget.kasas}
+          section={accessTarget.section}
+          onClose={() => setAccessTarget(null)}
+          onDone={() => onRefreshData?.()}
+        />
+      )}
       {kasaMoveTarget && (
         <KasaEditModal
           language={language}
@@ -2341,30 +2358,54 @@ export function Records({
             </span>
           )}
         </button>
-        {kind === "cash" && cashWorkspaces.map((w) => {
+        {kind === "cash" && cashWorkspaces.filter((w) => isSuperAdmin || w.kasas.length > 0).map((w) => {
           const tone = { background: `${w.color}14`, borderColor: `${w.color}66` };
           return (
-            <button
-              key={w.key}
-              className={activeWs === w.key && source === "Tümü" ? "selected" : ""}
-              style={{ ...tone, borderLeft: `4px solid ${w.color}` }}
-              onClick={() => {
-                setActiveWs(activeWs === w.key ? null : w.key);
-                setSource("Tümü");
-                setSearch("");
-                setActiveList("");
-                setActiveKasa("");
-                setShowAllLists(false);
-              }}
-            >
-              <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
-              <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
-              <strong style={{ color: w.color }}>{moneyBreakdown(w.totalBy)}</strong>
-              <span className="groupInOut">
-                <span className="in">↗ {moneyBreakdown(w.inBy)}</span>
-                <span className="out">↘ {moneyBreakdown(w.outBy)}</span>
-              </span>
-            </button>
+            <div className="groupCard" key={w.key}>
+              <button
+                className={activeWs === w.key && source === "Tümü" ? "selected" : ""}
+                style={{ ...tone, borderLeft: `4px solid ${w.color}` }}
+                onClick={() => {
+                  setActiveWs(activeWs === w.key ? null : w.key);
+                  setSource("Tümü");
+                  setSearch("");
+                  setActiveList("");
+                  setActiveKasa("");
+                  setShowAllLists(false);
+                }}
+              >
+                <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
+                <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+                <strong style={{ color: w.color }}>{moneyBreakdown(w.totalBy)}</strong>
+                <span className="groupInOut">
+                  <span className="in">↗ {moneyBreakdown(w.inBy)}</span>
+                  <span className="out">↘ {moneyBreakdown(w.outBy)}</span>
+                </span>
+              </button>
+              {isSuperAdmin && (
+                <span className="kasaActions">
+                  <button
+                    type="button"
+                    title={tx(language, "Çalışma alanını düzenle", "Edit workspace", "Qada xebatê biguherîne")}
+                    aria-label={tx(language, "Çalışma alanını düzenle", "Edit workspace", "Qada xebatê biguherîne")}
+                    onClick={() =>
+                      setAccessTarget({
+                        title: `${w.name} — ${tx(language, "Çalışma alanını düzenle", "Edit workspace", "Qada xebatê biguherîne")}`,
+                        kasas: w.kasas
+                          .map((k) => {
+                            const acc = cashAccounts.find((c) => c.name === k.name);
+                            return { id: acc?.id ?? 0, name: k.name, ownerUserId: acc?.ownerUserId ?? null };
+                          })
+                          .filter((k) => k.id > 0),
+                        section: w.key.startsWith("sec-") ? sections.find((x) => x.id === Number(w.key.slice(4))) : undefined,
+                      })
+                    }
+                  >
+                    ✎
+                  </button>
+                </span>
+              )}
+            </div>
           );
         })}
         {(kind === "cash" ? [] : groups).map((g) => {
