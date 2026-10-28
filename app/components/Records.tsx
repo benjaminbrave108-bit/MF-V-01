@@ -1119,7 +1119,7 @@ export function Records({
   ) {
     switch (id) {
       case "date":
-        return date(x.date, language);
+        return <span className="cellDate">{date(x.date, language)}</span>;
       case "title":
         return (
           <>
@@ -1214,7 +1214,7 @@ export function Records({
       case "person":
         return localizeData(x.person, language);
       case "amount":
-        return money(x.amount, x.currency);
+        return <span className={x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : undefined}>{money(x.amount, x.currency)}</span>;
       case "location":
         return (
           <>
