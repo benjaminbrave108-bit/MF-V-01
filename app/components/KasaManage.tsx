@@ -72,9 +72,9 @@ export function KasaEditModal({
           </label>
           {cashSections.length > 0 && (
             <label>
-              {tx(language, "Kasa bölümü", "Cash section", "Beşa qaseyê")}
+              {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}
               <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">{tx(language, "Genel Kasa (bölümsüz)", "Main cash account (no section)", "Qaseya Giştî (bê beş)")}</option>
+                <option value="">{tx(language, "Çalışma alanı yok (Genel Kasa)", "No workspace (general cash account)", "Bê qada xebatê (Qaseya Giştî)")}</option>
                 {cashSections.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}

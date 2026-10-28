@@ -4228,3 +4228,10 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .kasaAccessItem.on { background: #fff; color: #1f2d33; }
 .kasaAccessItem small { color: #8a98a0; font-size: 11px; }
 .kasaAccessFoot { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 12px; }
+
+/* Kasalar: çalışma alanı blokları */
+.workspaces { display: grid; gap: 10px; margin: 6px 0 12px; }
+.workspacesHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.workspacesHead h3 { margin: 0; font-size: 14px; color: #27424c; }
+.workspaceGroups { padding-left: 8px; border-radius: 6px; margin: 0; }
+.workspaceEmpty { align-self: center; color: #7a8d95; font-size: 12px; padding: 0 10px; }
