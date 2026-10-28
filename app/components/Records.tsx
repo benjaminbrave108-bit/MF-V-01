@@ -2324,12 +2324,12 @@ export function Records({
             </button>
           )}
           {!readOnly && (
-            <div className="newRecordWrap" style={{ position: "relative" }}>
+            <div className="newRecordWrap" style={{ position: "relative" }} onMouseLeave={() => setNewMenuOpen(false)}>
               <button className="primary" onClick={() => setNewMenuOpen((x) => !x)} aria-expanded={newMenuOpen}>
                 ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")} ⌄
               </button>
               {newMenuOpen && (
-                <div className="profileMenu" style={{ right: 0, left: "auto", minWidth: 180, zIndex: 30 }}>
+                <div className="profileMenu" style={{ right: 0, left: "auto", top: "100%", minWidth: 180, zIndex: 30 }}>
                   <button onClick={() => { setNewMenuOpen(false); onAdd("income", kasaSplitActive ? source : undefined); }}>
                     ↗ {tx(language, "Gelir Ekle", "Add Income", "Dahat Zêde Bike")}
                   </button>
