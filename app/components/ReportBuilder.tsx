@@ -8,6 +8,7 @@ import { tx, localizeData } from "../lib/i18n";
 import { date, money, total } from "../lib/finance";
 import type { CashAccountSummary, KasaSection, Language, PreparedReport, Profile, RecordItem, ReportLine } from "../lib/types";
 import { ExcelImportModal } from "./ExcelImport";
+import { ConsolidatePanel } from "./ConsolidatePanel";
 
 export function ReportBuilder({
   language,
@@ -64,6 +65,7 @@ export function ReportBuilder({
           <li>{tx(language, "Aylık tek kalem mi, her satır ayrı mı; Excel detayı eklensin mi — seçin.", "Choose monthly single item or one record per row, and whether to attach the Excel detail.", "Hilbijêre yek kalemê mehane an her rêz cuda, û detaya Excel were zêdekirin an na.")}</li>
           <li>{tx(language, "Her ay Gelir veya Gider sayfasında ve seçtiğiniz kasada tek kalem olarak görünür; kayıttaki Detay'a basınca Excel verisinin özeti açılır.", "Each month appears as a single item on the Income or Expense page and in the chosen cash account; opening the record's Detail shows a summary of the Excel data.", "Her meh li rûpela Dahat an Mesref û di qaseya hilbijartî de wekî yek kalem xuya dibe; bi tikandina Hûrguliyê kurteya daneyên Excel vedibe.")}</li>
         </ol>
+        <ConsolidatePanel language={language} onDone={onDataChanged} />
         {uploadOpen && (
           <ExcelImportModal language={language} cashAccounts={cashAccounts} sections={sections} onClose={() => setUploadOpen(false)} onDone={onDataChanged} />
         )}

@@ -4263,3 +4263,8 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .groupCardTooltip .tooltipMonths td { padding: 2px 8px 2px 0; white-space: nowrap; color: #1f2e33; }
 .groupCardTooltip .tooltipMonths td.in { color: #1d7a52; }
 .groupCardTooltip .tooltipMonths td.negative { color: #c94b4b; }
+
+.consolidatePanel { margin-top: 18px; display: grid; gap: 8px; max-width: 900px; }
+.consolidatePanel h3 { margin: 0; font-size: 14px; color: #27424c; }
+.consolidatePreview { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid #d6e3e8; border-radius: 8px; }
+.consolidatePreview h4 { margin: 0; font-size: 12px; color: #4a6370; }
