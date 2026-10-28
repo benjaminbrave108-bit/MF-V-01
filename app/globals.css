@@ -1850,7 +1850,7 @@ header h1 {
 .recordsGrid > * { min-width: 0; }
 .cellTitle {
   display: block;
-  max-width: 260px;
+  max-width: min(260px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
