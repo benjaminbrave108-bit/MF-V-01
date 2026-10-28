@@ -1502,7 +1502,7 @@ export function Records({
   // görünür — önceden ilk 4'ten sonrasını "Diğer Kasalar" açılır menüsünde
   // gizliyorduk, ekran dar olmasa bile. Artık tüm kartlar render ediliyor;
   // dar ekranda tarayıcı bunları kendiliğinden alt satıra sarar.
-  // Kasa kartının üzerine gelince: kasanın aylık gelir / gider / sonuç özeti (son 6 ay).
+  // Kasa kartının üzerine gelince: kasanın aylık gelir / gider / sonuç özeti (son 3 ay).
   const monthlyOfKasa = (name: string) => {
     const byMonth = new Map<string, RecordItem[]>();
     for (const x of allRecords) {
@@ -1512,7 +1512,7 @@ export function Records({
     }
     return [...byMonth.entries()]
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .slice(0, 6)
+      .slice(0, 3)
       .map(([month, rows]) => {
         const inc = rows.filter((x) => x.kind === "income");
         const exp = rows.filter((x) => x.kind === "expense");

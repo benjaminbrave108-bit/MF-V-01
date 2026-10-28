@@ -4273,3 +4273,10 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .cellDate { color: #123b78; font-weight: 800; }
 .amount .amountIncome { color: #0b5d34; }
 .amount .amountExpense { color: #8b1e3f; }
+
+/* Kasa kartı özet balonu: genişlik/yükseklik sınırlı, çok para birimli tutarlar alt alta sarılır. */
+.groupCardTooltip { width: max-content; min-width: 170px; max-width: 280px; box-sizing: border-box; }
+.groupCardTooltip .tooltipMonths { width: 100%; table-layout: auto; font-size: 10.5px; }
+.groupCardTooltip .tooltipMonths td { white-space: normal; vertical-align: top; padding: 2px 6px 2px 0; }
+.groupCardTooltip .tooltipMonths td:first-child { white-space: nowrap; color: #74868c; }
+.groupCardTooltip .tooltipMore { font-size: 10px; color: #74868c; }
