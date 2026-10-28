@@ -29,6 +29,9 @@ export type ImportRecord = {
   project: string;
   detailTable: string[][];
   importKey: string;
+  // Excel'deki asıl tablo (aylık tek kalem Detay'ı için): başlık satırı ve bu kayda giren satırların hücreleri.
+  rawHeaders?: string[];
+  rawRows?: string[][];
 };
 export type BuildOptions = { defaultCurrency: string; projectFromSheet: boolean; groupInvoices: boolean; fixDates: boolean; kasaName: string };
 export type BuildResult = { records: ImportRecord[]; rows: number; skipped: number; suspicious: number; totals: Record<string, number> };
@@ -110,6 +113,13 @@ function guessField(header: string): Guess {
   if (/^(MIQDAR|HEJMAR|QTY|QUANTITY)( |$)/.test(n)) return { field: "qty" };
   if (/^(MADE|NAV|NAVE MADE|MESRUF|JIBO|HATI DAYIN|CUREYA MADE|KALA|BERHEM|WERGIRTIN|BASLIK|ACIKLAMA|URUN|KALEM|MADDE|DETAY|TITLE|ITEM|DESCRIPTION|DETAIL)\b/.test(n)) return { field: "title" };
   return null;
+}
+
+// Hücreyi Detay tablosunda görünecek düz metne çevirir (tarih ISO, sayı en çok 2 ondalık).
+function rawText(c: Cell): string {
+  if (c === null || c === undefined) return "";
+  if (typeof c === "number") return String(Math.round(c * 100) / 100);
+  return cellText(c).slice(0, 480);
 }
 
 function cellText(c: Cell): string {
@@ -271,7 +281,7 @@ export function detectCurrency(text: string): string | null {
   return null;
 }
 
-type Row = { index: number; title: string; invoice: string; date: string | null; qty: number | null; unit: number | null; amount: number; currency: string; person: string; project: string; note: string };
+type Row = { raw: string[]; index: number; title: string; invoice: string; date: string | null; qty: number | null; unit: number | null; amount: number; currency: string; person: string; project: string; note: string };
 
 export function buildRecords(sheet: SheetData, block: Block, options: BuildOptions): BuildResult {
   const m = block.mapping;
@@ -310,6 +320,7 @@ export function buildRecords(sheet: SheetData, block: Block, options: BuildOptio
     currency = colCurrency ?? (currency && m.amountSyp !== undefined ? currency : currency || options.defaultCurrency);
     if (!currency) currency = options.defaultCurrency;
     rows.push({
+      raw: block.headers.map((_, i) => rawText(row[block.colStart + i])),
       index: r,
       title,
       invoice,
@@ -365,6 +376,8 @@ export function buildRecords(sheet: SheetData, block: Block, options: BuildOptio
       project: (r.project || sheetProject).slice(0, 200),
       detailTable: withDetail ? [detailHeader, detailRow(r)] : [],
       importKey: `${baseKey}|r${r.index}|${r.amount}|${r.date ?? ""}`.slice(0, 240),
+      rawHeaders: block.headers.map((h) => h.slice(0, 480)),
+      rawRows: [r.raw],
     });
   };
 
@@ -412,6 +425,8 @@ export function buildRecords(sheet: SheetData, block: Block, options: BuildOptio
         project: (projects[0] || sheetProject).slice(0, 200),
         detailTable: [detailHeader, ...g.map(detailRow)],
         importKey: `${baseKey}|inv${g[0].invoice}|${g[0].currency}`.slice(0, 240),
+        rawHeaders: block.headers.map((h) => h.slice(0, 480)),
+        rawRows: g.map((x) => x.raw),
       });
     }
   }
@@ -438,21 +453,19 @@ export function aggregateMonthly(items: ImportRecord[], fileLabel: string, kasaN
     const lastDay = new Date(year, mm, 0).getDate();
     const sum = Math.round(rows.reduce((a, r) => a + r.amount, 0) * 100) / 100;
     const projects = [...new Set(rows.map((r) => r.project).filter(Boolean))];
+    // Detay: Excel'deki tablo olduğu gibi (aynı başlık satırı, aynı sütunlar, bu aya giren satırlar).
     let detailTable: string[][] = [];
     if (withDetail) {
-      const byTitle = new Map<string, { count: number; amount: number }>();
-      for (const r of rows) {
-        const t = byTitle.get(r.source) ?? { count: 0, amount: 0 };
-        t.count += 1;
-        t.amount += r.amount;
-        byTitle.set(r.source, t);
+      const headers = rows.find((r) => r.rawHeaders?.length)?.rawHeaders ?? [];
+      const body = rows.flatMap((r) => r.rawRows ?? []).slice(0, 498);
+      const extra = rows.reduce((n, r) => n + (r.rawRows?.length ?? 0), 0) - body.length;
+      if (headers.length && body.length) {
+        const width = Math.min(headers.length, 50);
+        detailTable = [headers.slice(0, width), ...body.map((cells) => cells.slice(0, width))];
+        if (extra > 0) detailTable.push([`… +${extra} satır daha`, ...Array(Math.max(0, width - 1)).fill("")]);
+      } else {
+        detailTable = [["Başlık", "Satır", `Tutar (${currency})`], ...[...new Map(rows.map((r) => [r.source, r])).values()].slice(0, 60).map((r) => [r.source.slice(0, 200), "1", fmt(r.amount)]), ["Toplam", String(rows.length), fmt(sum)]];
       }
-      const sorted = [...byTitle.entries()].sort((a, b) => b[1].amount - a[1].amount);
-      const top = sorted.slice(0, 60);
-      const rest = sorted.slice(60);
-      detailTable = [["Başlık", "Satır", `Tutar (${currency})`], ...top.map(([t, v]) => [t.slice(0, 200), String(v.count), fmt(v.amount)])];
-      if (rest.length) detailTable.push([`Diğer (${rest.length} başlık)`, String(rest.reduce((a, [, v]) => a + v.count, 0)), fmt(rest.reduce((a, [, v]) => a + v.amount, 0))]);
-      detailTable.push(["Toplam", String(rows.length), fmt(sum)]);
     }
     out.push({
       kind,

@@ -194,6 +194,7 @@ for (const [src, tr, en, ku] of ENTRIES) {
   if (!MAP.has(key)) MAP.set(key, { tr, en, ku, len: words.length });
 }
 
+const ARABIC = /[\u0600-\u06FF]/;
 const WORD = /[\p{L}\p{M}\p{N}]+/gu;
 
 function matchCase(original: string, out: string, language: Language) {
@@ -248,13 +249,20 @@ export function translateGlossary(text: string, language: Language): string {
     }
     if (matched) {
       const { entry, end } = matched;
-      const translated = language === "tr" ? entry.tr : language === "en" ? entry.en : entry.ku;
       const original = tokens.slice(i, end + 1).map((x) => x.text).join("");
-      if (translated === undefined) out.push(original);
-      else {
+      let translated: string | undefined;
+      if (language === "tr") translated = entry.tr;
+      else if (language === "en") translated = entry.en;
+      else if (entry.ku !== undefined && !ARABIC.test(original)) translated = entry.ku; // sistemin kendi (Türkçe kaynaklı) ifadeleri
+      else translated = undefined;
+      if (translated !== undefined) {
         out.push(matchCase(original, translated, language));
         changed = true;
-      }
+      } else if (language === "ku") {
+        // Kürtçe arayüz: Kürtçe/Arapça orijinal korunur, bilinen kelimenin Türkçesi parantez içinde eklenir.
+        out.push(`${original} (${entry.tr})`);
+        changed = true;
+      } else out.push(original);
       i = end;
     } else if (DROP.has(norm(t.text)) && language !== "ku") {
       // Bağlaç yalnızca metinde sözlükten çevrilen başka kelime varsa düşürülür ("ya da" gibi Türkçe kullanımlar bozulmasın).

@@ -130,7 +130,8 @@ export function ExcelImportModal({
     let skipped = 0;
     try {
       for (let i = 0; i < allRecords.length; i += 150) {
-        const chunk = allRecords.slice(i, i + 150);
+        // Excel ham tablosu yalnızca Detay oluşturmak için kullanılır, sunucuya gönderilmez.
+        const chunk = allRecords.slice(i, i + 150).map(({ rawHeaders: _h, rawRows: _r, ...rest }) => rest);
         const response = await fetch("/api/records/import-excel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

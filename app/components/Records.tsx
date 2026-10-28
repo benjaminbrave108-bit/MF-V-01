@@ -1483,6 +1483,23 @@ export function Records({
   // görünür — önceden ilk 4'ten sonrasını "Diğer Kasalar" açılır menüsünde
   // gizliyorduk, ekran dar olmasa bile. Artık tüm kartlar render ediliyor;
   // dar ekranda tarayıcı bunları kendiliğinden alt satıra sarar.
+  // Kasa kartının üzerine gelince: kasanın aylık gelir / gider / sonuç özeti (son 6 ay).
+  const monthlyOfKasa = (name: string) => {
+    const byMonth = new Map<string, RecordItem[]>();
+    for (const x of allRecords) {
+      if ((x.kind !== "income" && x.kind !== "expense") || x.cashAccount !== name) continue;
+      const key = x.date.slice(0, 7);
+      byMonth.set(key, [...(byMonth.get(key) ?? []), x]);
+    }
+    return [...byMonth.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 6)
+      .map(([month, rows]) => {
+        const inc = rows.filter((x) => x.kind === "income");
+        const exp = rows.filter((x) => x.kind === "expense");
+        return { month, inc: combineByCurrency([{ rows: inc }]), exp: combineByCurrency([{ rows: exp }]), res: combineByCurrency([{ rows: inc }, { rows: exp, sign: -1 }]) };
+      });
+  };
   const renderGroupTooltip = (g: CardGroup, matchingAccount: CashAccountSummary | undefined) => (
     <div className="groupCardTooltip">
       {g.kind === "cash" ? (
@@ -1503,6 +1520,28 @@ export function Records({
             <small>{tx(language, "Sonuç", "Result", "Encam")}</small>
             <strong>{moneyBreakdown(g.totalByCurrency)}</strong>
           </div>
+          {monthlyOfKasa(g.name).length > 0 && (
+            <table className="tooltipMonths">
+              <thead>
+                <tr>
+                  <th>{tx(language, "Ay", "Month", "Meh")}</th>
+                  <th>{tx(language, "Gelir", "Income", "Dahat")}</th>
+                  <th>{tx(language, "Gider", "Expense", "Mesref")}</th>
+                  <th>{tx(language, "Sonuç", "Result", "Encam")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyOfKasa(g.name).map((m) => (
+                  <tr key={m.month}>
+                    <td>{m.month}</td>
+                    <td className="in">{moneyBreakdown(m.inc)}</td>
+                    <td className="negative">{moneyBreakdown(m.exp)}</td>
+                    <td>{moneyBreakdown(m.res)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       ) : (
         <>

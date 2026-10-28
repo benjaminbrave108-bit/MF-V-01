@@ -4256,3 +4256,10 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .reportTabs button { padding: 7px 14px; border: 1px solid #c9d8de; border-radius: 8px; background: #fff; color: #27424c; cursor: pointer; font-weight: 600; }
 .reportTabs button.active { background: #1c6a86; color: #fff; border-color: #1c6a86; }
 .reportUploadSteps { margin: 8px 0 0 18px; display: grid; gap: 6px; color: #4a6370; font-size: 13px; max-width: 780px; }
+
+.groupCardTooltip { min-width: 150px; }
+.groupCardTooltip .tooltipMonths { display: table; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+.groupCardTooltip .tooltipMonths th { text-align: left; color: #74868c; font-weight: 600; padding: 2px 8px 2px 0; white-space: nowrap; }
+.groupCardTooltip .tooltipMonths td { padding: 2px 8px 2px 0; white-space: nowrap; color: #1f2e33; }
+.groupCardTooltip .tooltipMonths td.in { color: #1d7a52; }
+.groupCardTooltip .tooltipMonths td.negative { color: #c94b4b; }
