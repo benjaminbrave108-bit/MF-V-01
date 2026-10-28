@@ -4238,3 +4238,5 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 
 .pageHint { margin: 0; max-width: 720px; font-size: 12.5px; line-height: 1.4; color: #5d7480; font-weight: 400; }
 .kasaManageHint { color: #6b7f88; font-size: 12px; }
+
+.workspaceAdd { align-self: stretch; min-width: 150px; }

@@ -1743,6 +1743,7 @@ export function Records({
             }),
     [records, kind, sections],
   );
+  const activeWorkspace = kind === "cash" && activeWs ? cashWorkspaces.find((w) => w.key === activeWs) ?? null : null;
   const overallListInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [];
@@ -2335,6 +2336,37 @@ export function Records({
             </span>
           )}
         </button>
+        {kind === "cash" && cashWorkspaces.map((w) => {
+          const tone = { background: `${w.color}14`, borderColor: `${w.color}66` };
+          return (
+            <button
+              key={w.key}
+              className={activeWs === w.key && source === "Tümü" ? "selected" : ""}
+              style={{ ...tone, borderLeft: `4px solid ${w.color}` }}
+              onClick={() => {
+                setActiveWs(activeWs === w.key ? null : w.key);
+                setSource("Tümü");
+                setSearch("");
+                setActiveList("");
+                setActiveKasa("");
+                setShowAllLists(false);
+              }}
+            >
+              <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
+              <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+              <strong style={{ color: w.color }}>{moneyBreakdown(w.totalBy)}</strong>
+              <span className="groupInOut">
+                <span className="in">↗ {moneyBreakdown(w.inBy)}</span>
+                <span className="out">↘ {moneyBreakdown(w.outBy)}</span>
+              </span>
+            </button>
+          );
+        })}
+        {kind === "cash" && !readOnly && (
+          <button type="button" className="light compact workspaceAdd" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
+            ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
+          </button>
+        )}
         {(kind === "cash" ? [] : groups).map((g) => {
           const matchingAccount = g.kind === "cash" ? cashAccounts.find((a) => a.name === g.name) : undefined;
           return (
@@ -2544,47 +2576,12 @@ export function Records({
             ))}
         </div>
       )}
-      {kind === "cash" && (
-        <div className="workspaces">
-          <div className="workspacesHead">
-            <span className="workspacesLabel" />
-            {!readOnly && (
-              <button type="button" className="light compact" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
-                ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
-              </button>
-            )}
-          </div>
-          {cashWorkspaces.map((w) => {
-            const tone = { background: `${w.color}14`, borderColor: `${w.color}66` };
-            return (
-              <div className="groups workspaceGroups" key={w.key} style={{ borderLeft: `4px solid ${w.color}` }}>
-                <button
-                  className={activeWs === w.key && source === "Tümü" ? "selected" : ""}
-                  style={tone}
-                  onClick={() => {
-                    setActiveWs(activeWs === w.key ? null : w.key);
-                    setSource("Tümü");
-                    setSearch("");
-                    setActiveList("");
-                    setActiveKasa("");
-                    setShowAllLists(false);
-                  }}
-                >
-                  <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
-                  <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
-                  <strong style={{ color: w.color }}>{moneyBreakdown(w.totalBy)}</strong>
-                  <span className="groupInOut">
-                    <span className="in">↗ {moneyBreakdown(w.inBy)}</span>
-                    <span className="out">↘ {moneyBreakdown(w.outBy)}</span>
-                  </span>
-                </button>
-                {w.kasas.map((g) => renderKasaCard(g, tone))}
-                {w.kasas.length === 0 && (
-                  <small className="workspaceEmpty">{tx(language, "Bu çalışma alanında henüz kasa yok — kasa kaydında “Çalışma alanı” seçin.", "No cash accounts yet — pick “Workspace” on a cash record.", "Hê qase tune — di tomara qaseyê de “Qada xebatê” hilbijêre.")}</small>
-                )}
-              </div>
-            );
-          })}
+      {kind === "cash" && activeWorkspace && (
+        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace.color}` }}>
+          {activeWorkspace.kasas.map((g) => renderKasaCard(g, { background: `${activeWorkspace.color}14`, borderColor: `${activeWorkspace.color}66` }))}
+          {activeWorkspace.kasas.length === 0 && (
+            <small className="workspaceEmpty">{tx(language, "Bu çalışma alanında henüz kasa yok — kasa kaydında “Çalışma alanı” seçin.", "No cash accounts yet — pick “Workspace” on a cash record.", "Hê qase tune — di tomara qaseyê de “Qada xebatê” hilbijêre.")}</small>
+          )}
         </div>
       )}
       <div className="search">
