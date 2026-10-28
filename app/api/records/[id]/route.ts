@@ -58,6 +58,8 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
 
   const source = payload.source ?? old.source;
   const cashAccountName = payload.cashAccount ?? old.cashAccount;
+  // Hiçbir gelir/gider kasadan kopuk olamaz.
+  if (kind !== "cash" && !cashAccountName?.trim()) return json({ error: "Gelir/gider bir kasaya bağlı olmalıdır" }, { status: 400 });
   const linkName = kind === "cash" ? source : cashAccountName;
 
   const result = await db.transaction(async (tx) => {

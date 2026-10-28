@@ -59,6 +59,9 @@ export const POST = withErrorHandling(async (request: Request) => {
     return json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Hiçbir gelir/gider kasadan kopuk olamaz: kasa zorunludur (kasalar da bir çalışma alanına bağlıdır).
+  if (payload.kind !== "cash" && !payload.cashAccount?.trim()) return json({ error: "Gelir/gider bir kasaya bağlı olmalıdır" }, { status: 400 });
+
   const db = getDb();
   const listLink = await resolveRecordList(session.user, { listId: payload.listId, listName: payload.listName }, db);
   if ("error" in listLink) return json({ error: listLink.error }, { status: 400 });

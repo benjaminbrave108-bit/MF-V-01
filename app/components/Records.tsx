@@ -3576,15 +3576,14 @@ export function RecordModal({
             <label>
               {tx(language, "Kasa Seç", "Select Cash Account", "Qase Hilbijêre")}
               <select
+                required
                 value={form.cashAccount || ""}
                 onChange={(e) => setForm({ ...form, cashAccount: e.target.value })}
               >
-                <option value="">
-                  {kind === "expense"
-                    ? tx(language, "Seçilmezse: Diğer Giderler", "If unset: Other Expenses", "Heke neyê hilbijartin: Mesrefên Din")
-                    : tx(language, "Seçilmezse: Diğer", "If unset: Other", "Heke neyê hilbijartin: Yên Din")}
+                <option value="" disabled>
+                  {tx(language, "Kasa seçin (zorunlu)", "Select a cash account (required)", "Qaseyekê hilbijêre (mecbûrî)")}
                 </option>
-                {[...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))].map((name) => <option key={name} value={name}>{localizeData(name, language)}{cashAccounts.some((a) => a.name === name && a.isListWorkspace) ? `  ▣ ${tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}` : ""}</option>)}
+                {[...new Set([...records.filter((x) => x.kind === "cash").map((x) => x.source), ...cashAccounts.map((a) => a.name), form.cashAccount || ""].filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{localizeData(name, language)}{cashAccounts.some((a) => a.name === name && a.isListWorkspace) ? `  ▣ ${tx(language, "Liste Kasası", "List cash account", "Qaseya Lîsteyê")}` : ""}</option>)}
               </select>
               {kind === "expense" && cashAccounts.some((a) => a.name === form.cashAccount && a.isListWorkspace) && (
                 <small className="listKasaHint">

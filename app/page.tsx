@@ -641,7 +641,7 @@ export default function Home() {
           </div>
         </div>
         <nav>
-          {nav.filter((n) => canAccess(n.id)).map((n) => (
+          {nav.filter((n) => n.id !== "lists" && canAccess(n.id)).map((n) => (
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}

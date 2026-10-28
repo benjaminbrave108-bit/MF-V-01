@@ -25,6 +25,10 @@ export const POST = withErrorHandling(async (request: Request) => {
     }
   }
 
+  if (items.some((item) => item.kind !== "cash" && !item.cashAccount?.trim())) {
+    return json({ error: "Gelir/gider bir kasaya bağlı olmalıdır" }, { status: 400 });
+  }
+
   const db = getDb();
   const result = await db.transaction(async (tx) => {
     // Resolve every distinct (kind, kasa name) pair once — cheaper than
