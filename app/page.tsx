@@ -58,7 +58,7 @@ export default function Home() {
   const [notes, setNotes] = useState<FinanceNote[]>([]);
   const [logo, setLogo] = useState("");
   const [company, setCompany] = useState("Maliye-Finans");
-  const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem } | null>(
+  const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem; cashAccount?: string } | null>(
     null,
   );
   const [recordsSearch, setRecordsSearch] = useState("");
@@ -642,7 +642,7 @@ export default function Home() {
           </div>
         </div>
         <nav>
-          {nav.filter((n) => n.id !== "lists" && canAccess(n.id)).map((n) => (
+          {nav.filter((n) => n.id !== "lists" && n.id !== "income" && n.id !== "expense" && canAccess(n.id)).map((n) => (
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
@@ -834,7 +834,7 @@ export default function Home() {
                   (page === "income" && x.kind === "cash"),
               )}
               allRecords={contextRecords}
-              onAdd={() => setModal({ kind: page as Kind })}
+              onAdd={(addKind, cashAccount) => setModal({ kind: addKind ?? (page as Kind), cashAccount })}
               onEdit={(item) => setModal({ kind: item.kind, item })}
               onDelete={removeRecord}
               onImport={importRecords}
@@ -925,6 +925,7 @@ export default function Home() {
           language={language}
           kind={modal.kind}
           initial={modal.item}
+          prefillCashAccount={modal.cashAccount}
           records={records}
           onCreateNote={createNote}
           onClose={() => setModal(null)}

@@ -938,7 +938,7 @@ export function Records({
   kind: Kind;
   records: RecordItem[];
   allRecords: RecordItem[];
-  onAdd: () => void;
+  onAdd: (kind?: Kind, cashAccount?: string) => void;
   onEdit: (x: RecordItem) => void;
   onDelete: (x: RecordItem) => void;
   onImport: (rows: Omit<RecordItem, "id">[]) => void;
@@ -964,6 +964,7 @@ export function Records({
   // tablosunu salt-okunur gösteren pencere (bkz. DetailTableModal).
   const [detailViewTarget, setDetailViewTarget] = useState<RecordItem | null>(null);
   const [kasaResultOpen, setKasaResultOpen] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
   // Manual row order (drag handle in the İşlem column) — a per-kind override
   // on top of the default date/id sort, kept in localStorage since it's a
   // personal display preference, not app data. Ids not in the saved order
@@ -2323,9 +2324,24 @@ export function Records({
             </button>
           )}
           {!readOnly && (
-            <button className="primary" onClick={onAdd}>
-              ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")}
-            </button>
+            <div className="newRecordWrap" style={{ position: "relative" }}>
+              <button className="primary" onClick={() => setNewMenuOpen((x) => !x)} aria-expanded={newMenuOpen}>
+                ＋ {tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")} ⌄
+              </button>
+              {newMenuOpen && (
+                <div className="profileMenu" style={{ right: 0, left: "auto", minWidth: 180, zIndex: 30 }}>
+                  <button onClick={() => { setNewMenuOpen(false); onAdd("income", kasaSplitActive ? source : undefined); }}>
+                    ↗ {tx(language, "Gelir Ekle", "Add Income", "Dahat Zêde Bike")}
+                  </button>
+                  <button onClick={() => { setNewMenuOpen(false); onAdd("expense", kasaSplitActive ? source : undefined); }}>
+                    ↘ {tx(language, "Gider Ekle", "Add Expense", "Mesref Zêde Bike")}
+                  </button>
+                  <button onClick={() => { setNewMenuOpen(false); onAdd("cash"); }}>
+                    ▣ {tx(language, "Kasa Ekle", "Add Cash Account", "Qase Zêde Bike")}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -2841,6 +2857,11 @@ export function Records({
                     {kasaIncomeRows.length} {recordWord}
                   </small>
                 </div>
+                {!readOnly && (
+                  <button type="button" className="light" style={{ marginLeft: "auto" }} onClick={() => onAdd("income", source)}>
+                    ＋ {tx(language, "Gelir Ekle", "Add Income", "Dahat Zêde Bike")}
+                  </button>
+                )}
               </div>
               {renderRecordsTable(kasaIncomeRows)}
             </div>
@@ -2858,6 +2879,11 @@ export function Records({
                     {kasaExpenseRows.length} {recordWord}
                   </small>
                 </div>
+                {!readOnly && (
+                  <button type="button" className="light" style={{ marginLeft: "auto" }} onClick={() => onAdd("expense", source)}>
+                    ＋ {tx(language, "Gider Ekle", "Add Expense", "Mesref Zêde Bike")}
+                  </button>
+                )}
               </div>
               {renderRecordsTable(kasaExpenseRows)}
             </div>
@@ -3382,6 +3408,7 @@ export function RecordModal({
   language,
   kind,
   initial,
+  prefillCashAccount,
   records,
   onCreateNote,
   onClose,
@@ -3394,6 +3421,7 @@ export function RecordModal({
   language: Language;
   kind: Kind;
   initial?: RecordItem;
+  prefillCashAccount?: string;
   sections?: KasaSection[];
   records: RecordItem[];
   onCreateNote: (input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt" | "isArchived" | "archivedAt">) => void;
@@ -3442,7 +3470,7 @@ export function RecordModal({
         currency: "USD",
         project: "",
         tags: [],
-        cashAccount: "",
+        cashAccount: kind === "cash" ? "" : prefillCashAccount ?? "",
         listName: "",
         attachments: [],
         detailTable: [],
