@@ -1843,7 +1843,14 @@ export function Records({
             }),
     [records, kind, sections],
   );
-  const activeWorkspace = kind === "cash" && activeWs ? cashWorkspaces.find((w) => w.key === activeWs) ?? null : null;
+  // "Tüm Kasalar" seçiliyken (activeWs === "__all") çalışma alanlarına dağıtılmış tüm kasalar tek sırada, kendi alanının renginde gösterilir.
+  const activeWorkspace = kind === "cash" && activeWs && activeWs !== "__all" ? cashWorkspaces.find((w) => w.key === activeWs) ?? null : null;
+  const activeKasaCards: { g: CardGroup; color: string }[] =
+    kind !== "cash" || !activeWs
+      ? []
+      : activeWs === "__all"
+        ? cashWorkspaces.flatMap((w) => w.kasas.map((g) => ({ g, color: w.color }))).sort((a, b) => a.g.name.localeCompare(b.g.name))
+        : (activeWorkspace?.kasas ?? []).map((g) => ({ g, color: activeWorkspace!.color }));
   const overallListInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && isListLinked(x)) : [];
@@ -1874,7 +1881,7 @@ export function Records({
       (!activeKasa || x.cashAccount === activeKasa) &&
       (!activeIeWorkspace || activeIeNames.has(x.cashAccount)) &&
       (activeSection === null || x.sectionId === activeSection) &&
-      (activeWs === null || kind !== "cash" || activeWsNames.has(x.cashAccount || x.source)) &&
+      (activeWs === null || activeWs === "__all" || kind !== "cash" || activeWsNames.has(x.cashAccount || x.source)) &&
       (source !== "Tümü" || showAllLists || search !== "" || !(kind === "cash" && kasaSeparateNames.has(x.cashAccount || x.source))) &&
       (source !== "__RJ" || kasaRjNames.has(x.cashAccount || x.source)) &&
       (!filterFrom || x.date >= filterFrom) &&
@@ -2418,11 +2425,12 @@ export function Records({
       )}
       <div className="groups">
         <button
-          className={source === "Tümü" && !showAllLists && !activeKasa && activeWs === null && !activeIeWorkspace ? "selected" : ""}
+          className={source === "Tümü" && !showAllLists && !activeKasa && (activeWs === null || activeWs === "__all") && !activeIeWorkspace ? "selected" : ""}
           onClick={() => {
             setSource("Tümü");
             setActiveKasa("");
-            setActiveWs(null);
+            // Kasalar sayfasında "Tüm Kasalar" altta tüm kasaları açar/kapatır.
+            setActiveWs(kind === "cash" && activeWs !== "__all" ? "__all" : null);
             setActiveIeWs(null);
             setShowAllLists(false);
           }}
@@ -2723,10 +2731,10 @@ export function Records({
             ))}
         </div>
       )}
-      {kind === "cash" && activeWorkspace && (
-        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace.color}` }}>
-          {activeWorkspace.kasas.map((g) => renderKasaCard(g, { background: `${activeWorkspace.color}14`, borderColor: `${activeWorkspace.color}66` }))}
-          {activeWorkspace.kasas.length === 0 && (
+      {kind === "cash" && activeWs && (
+        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#287b98"}` }}>
+          {activeKasaCards.map(({ g, color }) => renderKasaCard(g, { background: `${color}14`, borderColor: `${color}66` }))}
+          {activeKasaCards.length === 0 && (
             <small className="workspaceEmpty">{tx(language, "Bu çalışma alanında henüz kasa yok — kasa kaydında “Çalışma alanı” seçin.", "No cash accounts yet — pick “Workspace” on a cash record.", "Hê qase tune — di tomara qaseyê de “Qada xebatê” hilbijêre.")}</small>
           )}
         </div>
