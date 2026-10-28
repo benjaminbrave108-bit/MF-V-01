@@ -570,7 +570,7 @@ function DetailTableModal({ language, record, onClose }: { language: Language; r
       <div className={`modal detailViewModal${expanded ? " detailViewExpanded" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="modalHead">
           <div>
-            <h2>{tx(language, "Gider Detayları", "Expense Details", "Hûrguliyên Mesrefê")}</h2>
+            <h2>{record.kind === "income" ? tx(language, "Gelir Detayları", "Income Details", "Hûrguliyên Dahatê") : tx(language, "Gider Detayları", "Expense Details", "Hûrguliyên Mesrefê")}</h2>
             <p>
               {localizeData(record.source, language)} · {date(record.date, language)} · {money(record.amount, record.currency)}
             </p>
@@ -625,7 +625,7 @@ function DetailTableModal({ language, record, onClose }: { language: Language; r
                         verticalAlign: effectiveAlign(record.detailTableLayout, rowIndex, colIndex).v,
                       }}
                     >
-                      {row[colIndex] ?? ""}
+                      {localizeData(row[colIndex] ?? "", language)}
                     </td>
                   ))}
                 </tr>

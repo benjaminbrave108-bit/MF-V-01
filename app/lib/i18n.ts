@@ -1,3 +1,4 @@
+import { translateGlossary } from "./glossary";
 import type { Kind, Language, NoteRelation, Page } from "./types";
 
 export const kbGroupLogo = "/kb-logo.png";
@@ -114,7 +115,7 @@ export function noteRelationLabel(relation: NoteRelation, language: Language) {
   return language === "en" ? value[1] : language === "ku" ? value[2] : value[0];
 }
 export function localizeData(value: string, language: Language) {
-  if (language !== "ku") return value;
+  if (language !== "ku") return translateGlossary(value, language);
   const ku: Record<string, string> = {
     "Panel satışı": "Firotina panelan",
     "Peşin tahsilat": "Wergirtina pêşîn",
@@ -157,5 +158,5 @@ export function localizeData(value: string, language: Language) {
     Düzenlendi: "Hat guherandin",
     Silindi: "Hat jêbirin",
   };
-  return ku[value] || value;
+  return ku[value] || translateGlossary(value, language);
 }
