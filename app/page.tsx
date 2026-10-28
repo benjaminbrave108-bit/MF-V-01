@@ -665,6 +665,16 @@ export default function Home() {
             <h1>
               {nav.find((n) => n.id === page)?.label[language]}
             </h1>
+            {page === "cash" && (
+              <p className="pageHint">
+                {tx(
+                  language,
+                  "Çalışma alanları içinde birden fazla kasa bulunabilir. Her kasa mutlaka bir çalışma alanına bağlıdır; kasayı seçip “⇄ Çalışma alanına taşı” ile başka bir alana taşıyabilirsiniz.",
+                  "A workspace can contain several cash accounts. Every cash account belongs to a workspace; select a cash account and use “⇄ Move to workspace” to move it.",
+                  "Di nav qada xebatê de çend qase hene. Her qase girêdayî qada xebatê ye; qaseyê hilbijêre û bi “⇄ Bibe qada xebatê” bibe cihekî din.",
+                )}
+              </p>
+            )}
             {(page === "income" || page === "expense") && (
               <div className="headerSearch">
                 <span>⌕</span>

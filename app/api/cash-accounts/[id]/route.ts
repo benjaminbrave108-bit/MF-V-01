@@ -6,7 +6,7 @@ import { verifyPassword } from "../../../../db/passwords";
 import { requireSession } from "../../_lib/auth";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { json, withErrorHandling } from "../../_lib/http";
-import { markListKasa, setRjKasa } from "../../_lib/lists";
+import { markListKasa, setRjKasa, unmarkListKasa } from "../../_lib/lists";
 import { clearAttempts, isRateLimited, recordFailedAttempt } from "../../_lib/rate-limit";
 import { parseBody } from "../../_lib/validate";
 
@@ -54,6 +54,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
       await tx.update(records).set({ source: payload.name }).where(and(eq(records.cashAccountId, id), eq(records.kind, "cash")));
     }
     if (payload.listKasa) await markListKasa(id, tx);
+    else if (payload.listKasa === false) await unmarkListKasa(id, tx);
     if (payload.rjKasa !== undefined) await setRjKasa(id, payload.rjKasa, tx);
   });
   return json({ ok: true });

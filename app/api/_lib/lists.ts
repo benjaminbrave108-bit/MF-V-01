@@ -298,6 +298,11 @@ export async function markListKasa(cashAccountId: number, db: DbClient = getDb()
   await ensureWorkspace(cashAccountId, db);
 }
 
+// Kasanın "Liste Kasası" işareti kaldırılır (Listeler sayfasındaki çalışma alanı verisi silinmez, yalnız bağlantı kalkar).
+export async function unmarkListKasa(cashAccountId: number, db: DbClient = getDb()): Promise<void> {
+  await db.update(cashAccounts).set({ isListWorkspace: false, updatedAt: new Date() }).where(eq(cashAccounts.id, cashAccountId));
+}
+
 // Kasa "RJ-Kasası" olarak işaretlenir / işareti kaldırılır.
 export async function setRjKasa(cashAccountId: number, value: boolean, db: DbClient = getDb()): Promise<void> {
   await db.update(cashAccounts).set({ isRjKasa: value, updatedAt: new Date() }).where(eq(cashAccounts.id, cashAccountId));

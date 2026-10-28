@@ -6,7 +6,7 @@ import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
 import { RecordCommentsModal } from "./Comments";
 import { ExcelImportModal } from "./ExcelImport";
-import { KasaDeleteModal, KasaEditModal } from "./KasaManage";
+import { KasaDeleteModal, KasaEditModal, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
@@ -1265,6 +1265,7 @@ export function Records({
   const [shareTarget, setShareTarget] = useState<CashAccountSummary | null>(null);
   const [kasaEditTarget, setKasaEditTarget] = useState<CashAccountSummary | null>(null);
   const [kasaDeleteTarget, setKasaDeleteTarget] = useState<CashAccountSummary | null>(null);
+  const [kasaMoveTarget, setKasaMoveTarget] = useState<CashAccountSummary | null>(null);
   // Seçili kasa kartında "Kasayı Düzenle" ve "Kasayı Sil" (şifreli onay) düğmeleri.
   const kasaActions = (name: string, selected: boolean) => {
     if (!selected || readOnly) return null;
@@ -1273,6 +1274,7 @@ export function Records({
     return (
       <span className="kasaActions">
         <button type="button" title={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} aria-label={tx(language, "Kasayı Düzenle", "Edit Cash Account", "Qaseyê Biguherîne")} onClick={() => setKasaEditTarget(account)}>✎</button>
+        <button type="button" title={tx(language, "Çalışma alanına taşı", "Move to workspace", "Bibe qada xebatê")} aria-label={tx(language, "Çalışma alanına taşı", "Move to workspace", "Bibe qada xebatê")} onClick={() => setKasaMoveTarget(account)}>⇄</button>
         <button type="button" className="danger" title={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} aria-label={tx(language, "Kasayı Sil", "Delete Cash Account", "Qaseyê Jê Bibe")} onClick={() => setKasaDeleteTarget(account)}>🗑</button>
       </span>
     );
@@ -2215,6 +2217,19 @@ export function Records({
           }}
         />
       )}
+      {kasaMoveTarget && (
+        <KasaEditModal
+          language={language}
+          account={kasaMoveTarget}
+          sections={sections}
+          moveOnly
+          onClose={() => setKasaMoveTarget(null)}
+          onDone={() => {
+            setActiveWs(null);
+            onRefreshData?.();
+          }}
+        />
+      )}
       {kasaDeleteTarget && (
         <KasaDeleteModal
           language={language}
@@ -2477,7 +2492,7 @@ export function Records({
       {kind === "cash" && (
         <div className="workspaces">
           <div className="workspacesHead">
-            <h3>{tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}</h3>
+            <span className="workspacesLabel" />
             {!readOnly && (
               <button type="button" className="light compact" onClick={createWorkspace}>
                 ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
@@ -3241,6 +3256,16 @@ export function RecordModal({
   const [sectionId, setSectionId] = useState<number | null>(() => (kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
   const [rjKasa, setRjKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa));
   const [listKasa, setListKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace));
+  // Yeni kasa kaydında mevcut bir kasanın adı yazılırsa o kasanın çalışma alanı yüklenir (yanlışlıkla değiştirilmesin).
+  useEffect(() => {
+    if (kind !== "cash" || initial) return;
+    const account = cashAccounts?.find((a) => a.name === form.source.trim());
+    if (!account) return;
+    setSectionId(account.sectionId ?? null);
+    setRjKasa(!!account.isRjKasa);
+    setListKasa(!!account.isListWorkspace);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.source]);
   // "Gider Detaylarını Görüntüle" bölümü kayıt penceresi her açıldığında
   // kapalı başlar (detay kayıtlıysa bile); açılınca tablonun tamamı görünür.
   const [detailTrimmed, setDetailTrimmed] = useState(false);
@@ -3548,42 +3573,27 @@ export function RecordModal({
           </label>
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")}</legend>
-            {kind === "cash" && sections.some((x) => x.scope === "cash") && (
+            {kind === "cash" && (
               <label>
                 {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}
-                <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">{tx(language, "Çalışma alanı yok (Genel Kasa)", "No workspace (general cash account)", "Bê qada xebatê (Qaseya Giştî)")}</option>
-                  {sections.filter((x) => x.scope === "cash").map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+                <select
+                  value={workspaceKeyOf({ sectionId, rjKasa, listKasa }, sections)}
+                  onChange={(e) => {
+                    const next = workspaceState(e.target.value, { rjKasa, listKasa });
+                    setSectionId(next.sectionId);
+                    setRjKasa(next.rjKasa);
+                    setListKasa(next.listKasa);
+                    if (next.listKasa) {
+                      setHasListRecord(true);
+                      setForm((f) => ({ ...f, listName: f.listName || f.source.trim() }));
+                    }
+                  }}
+                >
+                  {workspaceOptions(sections, language).map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
                 </select>
-              </label>
-            )}
-            {kind === "cash" && (
-              <label>
-                {tx(language, "RJ-Kasası", "RJ Cash Account", "Qaseya RJ")}
-                <span className="checkField">
-                  <input type="checkbox" checked={rjKasa} onChange={(e) => setRjKasa(e.target.checked)} />
-                  {tx(language, "Evet, bu kasa bir RJ-Kasasıdır — Kasalar sayfasında ayrı “RJ-Kasaları” bölümünde görünsün", "Yes, this is an RJ cash account — show it in the separate “RJ Cash Accounts” section on the Kasalar page", "Erê, ev qaseyek RJ ye — li rûpela Qase di beşa cuda ya “Qaseyên RJ” de xuya bibe")}
-                </span>
-              </label>
-            )}
-            {kind === "cash" && (
-              <label>
-                {tx(language, "Liste Kasası (Çalışma Alanı)", "List Cash Account (Workspace)", "Qaseya Lîsteyê (Qada Xebatê)")}
-                <span className="checkField">
-                  <input
-                    type="checkbox"
-                    checked={listKasa}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setListKasa(checked);
-                      if (checked) {
-                        setHasListRecord(true);
-                        setForm((f) => ({ ...f, listName: f.listName || f.source.trim() }));
-                      }
-                    }}
-                  />
-                  {tx(language, "Evet, bu kasa bir Liste Kasasıdır — Listeler sayfasında çalışma alanı olsun", "Yes, this is a List cash account — make it a workspace on the Lists page", "Erê, ev qase Qaseya Lîsteyê ye — li rûpela Lîste bibe qada xebatê")}
-                </span>
+                <small className="listKasaHint">{tx(language, "Her kasa mutlaka bir çalışma alanına bağlıdır.", "Every cash account belongs to a workspace.", "Her qase girêdayî qada xebatê ye.")}</small>
               </label>
             )}
             <label>
