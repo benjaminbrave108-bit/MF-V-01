@@ -898,6 +898,7 @@ export default function Home() {
               currentUserIsSuperAdmin={profile.isSuperAdmin}
               checkPassword={checkPassword}
               onlineUserIds={onlineUserIds}
+              sections={sections}
             />
           )}
           {page === "settings" && (

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Title, PasswordField, DeleteConfirmModal } from "./shared";
 import { tx, nav } from "../lib/i18n";
-import type { CashAccountSummary, Language, Page, UserAccount } from "../lib/types";
+import type { CashAccountSummary, KasaSection, Language, Page, UserAccount } from "../lib/types";
+import { workspaceKeyOf, workspaceOptions } from "./KasaManage";
 import { restrictablePages } from "../lib/types";
 
 // Mirrors db/passwords.ts's validatePasswordPolicy — checked client-side too
@@ -33,8 +34,10 @@ export function Users({
   currentUserIsSuperAdmin,
   checkPassword,
   onlineUserIds,
+  sections = [],
 }: {
   language: Language;
+  sections?: KasaSection[];
   users: UserAccount[];
   setUsers: (updater: UserAccount[] | ((current: UserAccount[]) => UserAccount[])) => void;
   currentUsername: string;
@@ -251,35 +254,31 @@ export function Users({
         />
       )}
       {accessTarget && currentUserIsAdmin && (
-        <KasaAccessModal language={language} user={accessTarget} onClose={() => setAccessTarget(null)} />
+        <KasaAccessModal language={language} user={accessTarget} sections={sections} onClose={() => setAccessTarget(null)} />
       )}
     </div>
   );
 }
 
-// Owner grouping'de sırayla döngüsel atanan hafif ton paleti — her sahip
-// kendi rengini alır, aynı sahibin kasaları art arda geldiğinde ayırt
-// edilebilsin (yeni bir kullanıcı eklendiğinde ona ait kasalar da otomatik
-// olarak bir sonraki tonu alır).
-const ownerTintPalette = ["#eaf6f2", "#eef3fc", "#fdf3e7", "#f5eefb", "#fdecee", "#eefbf5"];
-
-// Süper admin only — tek bir kullanıcı için "hangi kasaları görebilir"
-// ataması. Bir kasada işaretli olmayan kullanıcı, o kasanın gelir/gider/
-// rapor verisine API seviyesinde de erişemez (bkz. app/api/_lib/cash-access.ts).
-// Kullanıcı kartındaki "Erişim Ayarları" düğmesinden açılır — böylece Kasa
-// Erişimi artık tüm kullanıcı × kasa matrisini tek panoda göstermek yerine,
-// her kullanıcı için kendi kısa listesine ayrılmış olur.
+// Tek bir kullanıcı için "hangi çalışma alanını ve onun içindeki hangi kasayı görebilir" ataması (süper admin).
+// Seçimler taslak olarak tutulur; "Kaydet" ile tek seferde yazılır. Çalışma alanı kutusu içindeki tüm kasaları
+// birden seçer/kaldırır. Kasa sahibi her zaman erişebilir (işaretli ve değiştirilemez).
 function KasaAccessModal({
   language,
   user,
+  sections,
   onClose,
 }: {
   language: Language;
   user: UserAccount;
+  sections: KasaSection[];
   onClose: () => void;
 }) {
-  const [cashAccounts, setCashAccounts] = useState<CashAccountSummary[] | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [accounts, setAccounts] = useState<CashAccountSummary[] | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const failText = tx(language, "Erişim ayarları kaydedilemedi.", "Access settings could not be saved.", "Sazkariyên gihîştinê nehatin tomarkirin.");
 
   useEffect(() => {
     let cancelled = false;
@@ -287,58 +286,80 @@ function KasaAccessModal({
       try {
         const response = await fetch("/api/cash-accounts");
         const data = await response.json().catch(() => ({}));
-        if (!cancelled) setCashAccounts(response.ok ? (data.cashAccounts ?? []) : []);
+        const list: CashAccountSummary[] = response.ok ? (data.cashAccounts ?? []) : [];
+        let granted: number[] = [];
+        if (list.length) {
+          const access = await fetch(`/api/workspace-access?cashAccountIds=${list.map((a) => a.id).join(",")}`);
+          const accessData = await access.json().catch(() => ({}));
+          if (access.ok) granted = accessData.grants?.[String(user.id)] ?? [];
+          else if (!cancelled) setError(accessData.error || failText);
+        }
+        if (cancelled) return;
+        setAccounts(list);
+        setSelected(new Set(granted));
       } catch {
-        if (!cancelled) setCashAccounts([]);
+        if (!cancelled) {
+          setAccounts([]);
+          setError(failText);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id]);
 
-  async function toggle(cashAccountId: number, grant: boolean) {
-    setBusyId(cashAccountId);
+  const workspaces = (() => {
+    const list = accounts ?? [];
+    return workspaceOptions(sections, language)
+      .map((w) => ({
+        ...w,
+        kasas: list
+          .filter((a) => workspaceKeyOf({ sectionId: a.sectionId ?? null, rjKasa: !!a.isRjKasa, listKasa: !!a.isListWorkspace }, sections) === w.key)
+          .sort((x, y) => x.name.localeCompare(y.name)),
+      }))
+      .filter((w) => w.kasas.length > 0);
+  })();
+
+  const isOn = (a: CashAccountSummary) => a.ownerUserId === user.id || selected.has(a.id);
+  const toggleKasa = (id: number, on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const toggleWorkspace = (kasas: CashAccountSummary[], on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const a of kasas) {
+        if (on) next.add(a.id);
+        else next.delete(a.id);
+      }
+      return next;
+    });
+
+  async function save() {
+    if (!accounts) return;
+    setSaving(true);
+    setError("");
     try {
-      const response = grant
-        ? await fetch(`/api/cash-accounts/${cashAccountId}/access`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id }),
-          })
-        : await fetch(`/api/cash-accounts/${cashAccountId}/access?userId=${user.id}`, { method: "DELETE" });
+      const response = await fetch("/api/workspace-access", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cashAccountIds: accounts.map((a) => a.id), grants: { [String(user.id)]: [...selected] } }),
+      });
       if (!response.ok) {
-        alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+        const body = await response.json().catch(() => ({}));
+        setError(body.error === "Forbidden" ? tx(language, "Erişim atamalarını yalnızca Süper Admin yapabilir.", "Only a Super Admin can change access grants.", "Tenê Super Admîn dikare gihîştinê biguherîne.") : body.error || failText);
         return;
       }
-      setCashAccounts((current) =>
-        (current ?? []).map((account) =>
-          account.id === cashAccountId
-            ? {
-                ...account,
-                sharedWithUserIds: grant
-                  ? [...account.sharedWithUserIds, user.id]
-                  : account.sharedWithUserIds.filter((id) => id !== user.id),
-              }
-            : account,
-        ),
-      );
+      onClose();
     } catch {
-      alert(tx(language, "İşlem tamamlanamadı.", "The operation could not be completed.", "Kirin nehat qedandin."));
+      setError(failText);
     } finally {
-      setBusyId(null);
-    }
-  }
-
-  // Sahibe göre grupla (sahipsiz kasalar en sona) — aynı sahibin kasaları
-  // art arda gelsin ki hem renk tonu hem de ayırıcı çizgi anlamlı olsun.
-  const grouped = cashAccounts ? groupByOwner(cashAccounts) : [];
-  const ownerColor = new Map<number | null, string>();
-  let nextTint = 0;
-  for (const { ownerUserId } of grouped) {
-    if (!ownerColor.has(ownerUserId)) {
-      ownerColor.set(ownerUserId, ownerTintPalette[nextTint % ownerTintPalette.length]);
-      nextTint += 1;
+      setSaving(false);
     }
   }
 
@@ -351,103 +372,67 @@ function KasaAccessModal({
             <p>
               {tx(
                 language,
-                `${user.name} adlı kullanıcının hangi kasaların gelir/gider/rapor verisini görebileceğini belirleyin.`,
-                `Choose which kasas' income/expense/report data ${user.name} can see.`,
-                `Diyar bike ka ${user.name} dikare daneyên gelir/gider/rapor ên kîjan qasan bibîne.`,
+                `${user.name} hangi çalışma alanlarını ve bu alanlardaki hangi kasaları görebilir? Çalışma alanı kutusu içindeki tüm kasaları birden seçer.`,
+                `Which workspaces, and which cash accounts inside them, can ${user.name} see? The workspace box selects all of its cash accounts.`,
+                `${user.name} dikare kîjan qadên xebatê û kîjan qaseyên di wan de bibîne? Qutiya qada xebatê hemû qaseyan hildibijêre.`,
               )}
             </p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
-        {cashAccounts === null ? (
+        {accounts === null ? (
           <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
-        ) : !cashAccounts.length ? (
+        ) : !accounts.length ? (
           <small>{tx(language, "Henüz kasa yok.", "No kasas yet.", "Hîn qase tune.")}</small>
         ) : (
-          <>
-            <small className="cashAccessLegend">
-              ★ {tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye")}
-              {" · "}
-              {tx(
-                language,
-                "aynı renk tonu aynı sahibin kasalarını gösterir",
-                "matching shading marks kasas that share an owner",
-                "renga wekhev qaseyên heman xwedî nîşan dide",
-              )}
-            </small>
-            <div className="recordsTable cashAccessTable accessSettingsTable">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{tx(language, "Kasa", "Kasa", "Qase")}</th>
-                    <th>{tx(language, "Erişim", "Access", "Gihîştin")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grouped.map((account, index) => {
-                    const isGroupStart = index === 0 || grouped[index - 1].ownerUserId !== account.ownerUserId;
-                    const isOwner = account.ownerUserId === user.id;
-                    const shared = account.sharedWithUserIds.includes(user.id);
-                    return (
-                      <tr
-                        key={account.id}
-                        className={isGroupStart ? "cashAccessGroupStart" : ""}
-                        style={{ backgroundColor: ownerColor.get(account.ownerUserId) }}
-                      >
-                        <td>
-                          <span className="cellTitle">{account.name}</span>
-                          <br />
-                          <small>
-                            {tx(language, "Sahibi", "Owner", "Xwedî")}: {account.ownerName || tx(language, "Belirtilmedi", "Unassigned", "Nehatiye diyarkirin")}
-                          </small>
-                        </td>
-                        <td className="cashAccessCell">
-                          {isOwner ? (
-                            <span className="cashAccessOwnerCell" title={tx(language, "kasa sahibi", "kasa owner", "xwedîyê qaseyê")}>
-                              ★
-                            </span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              checked={shared}
-                              disabled={busyId === account.id}
-                              onChange={(e) => toggle(account.id, e.target.checked)}
-                            />
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
+          <div className="accessWorkspaceList">
+            {workspaces.map((w) => {
+              const onCount = w.kasas.filter(isOn).length;
+              const all = onCount === w.kasas.length;
+              const lockedAll = w.kasas.every((a) => a.ownerUserId === user.id);
+              return (
+                <section key={w.key} className="accessWorkspace">
+                  <label className="accessWorkspaceHead">
+                    <input
+                      type="checkbox"
+                      checked={all}
+                      disabled={lockedAll}
+                      ref={(el) => {
+                        if (el) el.indeterminate = onCount > 0 && !all;
+                      }}
+                      onChange={(e) => toggleWorkspace(w.kasas, e.target.checked)}
+                    />
+                    <strong>{w.label}</strong>
+                    <small>{onCount}/{w.kasas.length}</small>
+                  </label>
+                  <div className="accessKasaGrid">
+                    {w.kasas.map((a) => {
+                      const owner = a.ownerUserId === user.id;
+                      return (
+                        <label key={a.id} className="accessKasaItem" title={owner ? tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye") : undefined}>
+                          <input type="checkbox" checked={isOn(a)} disabled={owner} onChange={(e) => toggleKasa(a.id, e.target.checked)} />
+                          <span>{a.name}{owner ? " ★" : ""}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         )}
+        {error && <small className="formWarning" style={{ display: "block", marginTop: 8 }}>{error}</small>}
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>
-            {tx(language, "Kapat", "Close", "Bigire")}
+            {tx(language, "Vazgeç", "Cancel", "Betal")}
+          </button>
+          <button type="button" className="primary" disabled={saving || accounts === null || !accounts.length} onClick={save}>
+            {saving ? tx(language, "Kaydediliyor…", "Saving…", "Tê tomarkirin…") : tx(language, "Kaydet", "Save", "Tomar Bike")}
           </button>
         </div>
       </div>
     </div>
   );
-}
-
-// Aynı sahibin kasalarını art arda getirir (mevcut göreli sırayı korur),
-// sahipsiz kasalar en sona düşer.
-function groupByOwner(accounts: CashAccountSummary[]): CashAccountSummary[] {
-  const order: (number | null)[] = [];
-  const byOwner = new Map<number | null, CashAccountSummary[]>();
-  for (const account of accounts) {
-    const key = account.ownerUserId ?? null;
-    if (!byOwner.has(key)) {
-      byOwner.set(key, []);
-      order.push(key);
-    }
-    byOwner.get(key)!.push(account);
-  }
-  order.sort((a, b) => (a === null ? 1 : b === null ? -1 : 0));
-  return order.flatMap((key) => byOwner.get(key)!);
 }
 
 function UserModal({

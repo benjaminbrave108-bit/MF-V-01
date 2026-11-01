@@ -4285,3 +4285,10 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .groupCardTooltip .tooltipMonths td { font-size: 10.5px; border-top: 0; }
 .groupCardTooltip .tooltipMonths tbody tr + tr td { border-top: 1px solid #edf1f2; }
 .groupCardTooltip { max-width: 330px; }
+
+.accessWorkspaceList { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; }
+.accessWorkspace { border: 1px solid #d6e3e8; border-radius: 10px; padding: 8px 10px; background: #fbfdfd; }
+.accessWorkspaceHead { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; }
+.accessWorkspaceHead small { color: #74868c; margin-left: auto; }
+.accessKasaGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; padding-left: 24px; }
+.accessKasaItem { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
