@@ -1173,16 +1173,6 @@ export function Records({
                 {localizeData(x.source, language)}
               </button>
             )}
-            {(x.detailTable?.length ?? 0) > 0 && (
-              <button
-                type="button"
-                className="detailChip"
-                onClick={() => setDetailViewTarget(x)}
-                title={tx(language, "Gider detay tablosunu görüntüle", "View the expense detail table", "Tabloya hûrguliyên mesrefê nîşan bide")}
-              >
-                ▦ {tx(language, "Detay", "Details", "Hûrguliyan")} · {x.detailTable!.length - 1}
-              </button>
-            )}
             {ctx.pendingTransfer && (
               <small className="subNote pendingBadge">
                 ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}
@@ -1236,7 +1226,8 @@ export function Records({
             language={language}
             docs={docs}
             tableRows={tableRows}
-            onOpen={() => (!docs.length && tableRows ? setDetailViewTarget(x) : onEdit(x))}
+            onOpen={() => onEdit(x)}
+            onOpenDetail={() => setDetailViewTarget(x)}
           />
         );
       }
@@ -3450,7 +3441,7 @@ function KasaResultModal({
 }
 
 // Belgeler hücresi: üzerine gelince belge özeti tablo kutusunun dışında (portal) görünür; böylece kaydırma alanında kesilmez.
-function DocCell({ language, docs, tableRows, onOpen }: { language: Language; docs: { name: string; data: string }[]; tableRows: number; onOpen: () => void }) {
+function DocCell({ language, docs, tableRows, onOpen, onOpenDetail }: { language: Language; docs: { name: string; data: string }[]; tableRows: number; onOpen: () => void; onOpenDetail: () => void }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const show = (el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
@@ -3458,9 +3449,16 @@ function DocCell({ language, docs, tableRows, onOpen }: { language: Language; do
   };
   return (
     <span className="docCell" onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setPos(null)}>
-      <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpen}>
-        📎 {docs.length + (tableRows ? 1 : 0)}
-      </button>
+      {docs.length > 0 && (
+        <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpen}>
+          📎 {docs.length}
+        </button>
+      )}
+      {tableRows > 0 && (
+        <button type="button" className="docChip docChipDetail" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpenDetail}>
+          ▦ {tx(language, "Detay", "Details", "Hûrguliyan")} · {tableRows}
+        </button>
+      )}
       {pos &&
         createPortal(
           <span className="docTooltip" style={{ position: "fixed", left: pos.x, top: pos.y, display: "block" }}>

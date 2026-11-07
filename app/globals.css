@@ -4323,3 +4323,7 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 
 .groupCardTooltip::after { display: none; }
 .groupCardTooltip { pointer-events: none; }
+
+.cellTitle, .cellTitleButton { font-weight: 700; }
+.docCell { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.docChipDetail { background: #fdf2d9; border-color: #e6c77a; color: #7a5410; }
