@@ -85,7 +85,7 @@ export function Users({
           </button>
         )}
       </div>
-      {currentUserIsSuperAdmin && <AccessBoard language={language} sections={sections} />}
+      {currentUserIsSuperAdmin && <AccessBoard language={language} sections={sections} superAdmins={users.filter((u) => u.isSuperAdmin)} />}
       <div className="userCardGrid">
         {users.map((u, index) => {
           const isSelf = u.username === currentUsername;
@@ -189,7 +189,7 @@ function groupKasasByWorkspace(accounts: CashAccountSummary[], sections: KasaSec
 }
 
 // Erişim Panosu: başlıkta Süper Admin, altında erişebildiği alanlar. Liste uzunsa iki sütuna bölünür.
-function AccessBoard({ language, sections }: { language: Language; sections: KasaSection[] }) {
+function AccessBoard({ language, sections, superAdmins }: { language: Language; sections: KasaSection[]; superAdmins: UserAccount[] }) {
   const [accounts, setAccounts] = useState<CashAccountSummary[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -211,7 +211,15 @@ function AccessBoard({ language, sections }: { language: Language; sections: Kas
       <div className="accessBoardHead">
         <span className="accessBoardStar">★</span>
         <div>
-          <b>{tx(language, "Süper Admin", "Super Admin", "Super Admîn")}</b>
+          <b>{superAdmins.length > 1 ? tx(language, "Süper Adminler", "Super Admins", "Super Admîn") : tx(language, "Süper Admin", "Super Admin", "Super Admîn")}</b>
+          <div className="accessBoardPeople">
+            {superAdmins.map((u) => (
+              <span key={u.id} title={"@" + u.username}>
+                <i>{u.name.slice(0, 1).toUpperCase()}</i>
+                {u.name}
+              </span>
+            ))}
+          </div>
           <small>{tx(language, "Tüm sisteme erişir; silme işlemlerinde onay ve şifre gerekir.", "Full system access; deletions need confirmation and a password.", "Gihîştina tevahiya pergalê; di jêbirinê de erêkirin û şîfre pêwîst e.")}</small>
         </div>
         <em>{pages.length} {tx(language, "bölüm", "sections", "beş")} · {accounts.length} {tx(language, "kasa", "cash accounts", "qase")}</em>
