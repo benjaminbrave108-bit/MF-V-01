@@ -4327,3 +4327,6 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .cellTitle, .cellTitleButton { font-weight: 700; }
 .docCell { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .docChipDetail { background: #fdf2d9; border-color: #e6c77a; color: #7a5410; }
+
+.docItem { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 3px 6px; border-radius: 6px; font-size: 11px; color: #1f2e33; cursor: pointer; }
+.docItem:hover { background: #eef6f8; color: #1f5a6b; }

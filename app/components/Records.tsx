@@ -3443,41 +3443,88 @@ function KasaResultModal({
 // Belgeler hücresi: üzerine gelince belge özeti tablo kutusunun dışında (portal) görünür; böylece kaydırma alanında kesilmez.
 function DocCell({ language, docs, tableRows, onOpen, onOpenDetail }: { language: Language; docs: { name: string; data: string }[]; tableRows: number; onOpen: () => void; onOpenDetail: () => void }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const show = (el: HTMLElement) => {
-    const rect = el.getBoundingClientRect();
-    setPos({ x: Math.min(rect.left, window.innerWidth - 340), y: rect.bottom + 4 });
+  const [excelView, setExcelView] = useState<{ name: string; data: string } | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHide = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
   };
+  // Fare balona geçebilsin diye kapanma kısa süre geciktirilir.
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimer.current = setTimeout(() => setPos(null), 180);
+  };
+  const show = (el: HTMLElement) => {
+    cancelHide();
+    const rect = el.getBoundingClientRect();
+    setPos({ x: Math.min(rect.left, window.innerWidth - 340), y: rect.bottom + 2 });
+  };
+  // Excel: tablo olarak açılır; PDF/resim yeni sekmede, diğerleri indirilir.
+  function openDoc(doc: { name: string; data: string }) {
+    setPos(null);
+    if (/\.(xlsx|xlsm)$/i.test(doc.name)) {
+      setExcelView(doc);
+      return;
+    }
+    try {
+      const [header, base64] = doc.data.split(",");
+      const mime = /data:(.*?);base64/.exec(header)?.[1] || "application/octet-stream";
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      const link = document.createElement("a");
+      link.href = url;
+      if (/^(application\/pdf|image\/)/.test(mime)) link.target = "_blank";
+      else link.download = doc.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      onOpen();
+    }
+  }
   return (
-    <span className="docCell" onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setPos(null)}>
+    <>
+    <span className="docCell" onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={scheduleHide}>
       {docs.length > 0 && (
-        <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpen}>
+        <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onClick={onOpen}>
           📎 {docs.length}
         </button>
       )}
       {tableRows > 0 && (
-        <button type="button" className="docChip docChipDetail" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpenDetail}>
+        <button type="button" className="docChip docChipDetail" onFocus={(e) => show(e.currentTarget)} onClick={onOpenDetail}>
           ▦ {tx(language, "Detay", "Details", "Hûrguliyan")} · {tableRows}
         </button>
       )}
       {pos &&
         createPortal(
-          <span className="docTooltip" style={{ position: "fixed", left: pos.x, top: pos.y, display: "block" }}>
+          <span className="docTooltip" style={{ position: "fixed", left: pos.x, top: pos.y, display: "block" }} onMouseEnter={cancelHide} onMouseLeave={scheduleHide}>
             <b>{tx(language, "Belgeler", "Documents", "Belge")}</b>
             <ul>
               {docs.map((d, i) => (
                 <li key={`${d.name}-${i}`}>
-                  📄 {d.name}
-                  <small> · {Math.max(1, Math.round((d.data.length * 3) / 4 / 1024))} KB</small>
+                  <button type="button" className="docItem" title={tx(language, "Açmak için tıklayın", "Click to open", "Ji bo vekirinê bitikîne")} onClick={() => openDoc(d)}>
+                    📄 {d.name}
+                    <small> · {Math.max(1, Math.round((d.data.length * 3) / 4 / 1024))} KB</small>
+                  </button>
                 </li>
               ))}
               {tableRows > 0 && (
-                <li>▦ {tx(language, "Detay tablosu", "Detail table", "Tabloya hûrguliyan")} · {tableRows} {tx(language, "satır", "rows", "rêz")}</li>
+                <li>
+                  <button type="button" className="docItem" onClick={() => { setPos(null); onOpenDetail(); }}>
+                    ▦ {tx(language, "Detay tablosu", "Detail table", "Tabloya hûrguliyan")} · {tableRows} {tx(language, "satır", "rows", "rêz")}
+                  </button>
+                </li>
               )}
             </ul>
           </span>,
           document.body,
         )}
     </span>
+    {excelView && createPortal(<ExcelAttachmentModal language={language} attachment={excelView} onClose={() => setExcelView(null)} />, document.body)}
+    </>
   );
 }
 
