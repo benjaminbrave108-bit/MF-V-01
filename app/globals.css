@@ -4316,3 +4316,9 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .accessBoardGroup ul { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
 .accessFullToggle { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 .accessSectionTitle { font-weight: 700; margin: 10px 0 4px; }
+
+/* Çalışma alanı altındaki kasalar en fazla 2 sıra; fazlası yana kayar. Balonlar kaydırma alanında kesilmesin diye kartın altında sabit konumlanır. */
+.groups.workspaceGroups { display: grid; grid-auto-flow: column; grid-auto-columns: 210px; overflow-x: auto; align-items: stretch; }
+.groups.workspaceGroups > .groupCard { flex: none; }
+.groups.workspaceGroups .groupCardTooltip { position: fixed; left: auto; bottom: auto; margin-top: 6px; }
+.groups.workspaceGroups .groupCardTooltip::after { display: none; }
