@@ -968,6 +968,8 @@ export function Records({
   const [detailViewTarget, setDetailViewTarget] = useState<RecordItem | null>(null);
   const [kasaResultOpen, setKasaResultOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   // Kasa kartı özet balonu: kartın üzerine binip tıklamayı engellemesin diye sayfa akışına göre kartın altında (yer yoksa üstünde) sabit konumlanır.
   useEffect(() => {
     const place = (event: MouseEvent) => {
@@ -2039,7 +2041,7 @@ export function Records({
         ? tx(language, "Gelirler", "Income", "Dahat")
         : tx(language, "Giderler", "Expenses", "Mesref");
   const recordWord = tx(language, "kayıt", "records", "qeyd");
-  async function exportExcel() {
+  async function exportExcel(rowsToExport: RecordItem[] = orderedRows, suffix = "") {
     const columns = [
       tx(language, "Tarih", "Date", "Tarîx"),
       kind === "cash"
@@ -2052,11 +2054,13 @@ export function Records({
       tx(language, "Para Birimi", "Currency", "Yekeya Pere"),
       tx(language, "Proje / Birim", "Project / Unit", "Proje / Yekîne"),
       tx(language, "Etiketler", "Tags", "Etîket"),
+      tx(language, "Tür", "Type", "Cure"),
+      tx(language, "Kasa", "Cash Account", "Qase"),
     ];
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Kayitlar");
     sheet.addRow(columns);
-    for (const x of orderedRows) {
+    for (const x of rowsToExport) {
       sheet.addRow([
         date(x.date),
         x.source,
@@ -2067,6 +2071,8 @@ export function Records({
         x.currency,
         x.project,
         x.tags.join(", "),
+        x.kind === "income" ? tx(language, "Gelir", "Income", "Dahat") : x.kind === "expense" ? tx(language, "Gider", "Expense", "Mesref") : tx(language, "Kasa", "Cash", "Qase"),
+        x.kind === "cash" ? x.source : x.cashAccount,
       ]);
     }
     const buffer = await workbook.xlsx.writeBuffer();
@@ -2077,7 +2083,7 @@ export function Records({
     const link = document.createElement("a");
     const safeName = (source === "Tümü" ? title : source).replace(/[\\/:*?"<>|]/g, "-");
     link.href = url;
-    link.download = `${safeName}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.download = `${safeName}${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -2221,12 +2227,25 @@ export function Records({
       <TableTools id={`records-${kind}`} language={language} className="recordsTable resizableTable" resize={false}>
         <table>
           <colgroup>
+            <col style={{ width: 38 }} />
             {columnOrder.map((id) => (
               <col key={id} style={{ width: columnWidths[id] }} />
             ))}
           </colgroup>
           <thead>
             <tr>
+              <th className="selectCell">
+                <input
+                  type="checkbox"
+                  aria-label={tx(language, "Tümünü seç", "Select all", "Hemûyan hilbijêre")}
+                  disabled={tableRows.length === 0}
+                  checked={tableRows.length > 0 && tableRows.every((r) => selectedIds.has(r.id))}
+                  ref={(el) => {
+                    if (el) el.indeterminate = tableRows.some((r) => selectedIds.has(r.id)) && !tableRows.every((r) => selectedIds.has(r.id));
+                  }}
+                  onChange={(e) => toggleMany(tableRows, e.target.checked)}
+                />
+              </th>
               {columnOrder.map((id) => (
                 <th
                   key={id}
@@ -2266,7 +2285,7 @@ export function Records({
           <tbody>
             {tableRows.length === 0 && (
               <tr>
-                <td colSpan={columnOrder.length} className="empty">
+                <td colSpan={columnOrder.length + 1} className="empty">
                   {tx(language, "Bu grupta kayıt yok.", "No records in this group.", "Di vê komê de qeyd tune.")}
                 </td>
               </tr>
@@ -2279,8 +2298,11 @@ export function Records({
                 <tr
                   key={x.id}
                   data-row-id={x.id}
-                  className={`${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}${dragOverRowId === x.id && draggedRowId !== null && draggedRowId !== x.id ? " rowDragOver" : ""}`}
+                  className={`${selectedIds.has(x.id) ? "rowSelected " : ""}${pendingTransfer ? "pendingTransferRow" : ""}${draggedRowId === x.id ? " rowDragging" : ""}${dragOverRowId === x.id && draggedRowId !== null && draggedRowId !== x.id ? " rowDragOver" : ""}`}
                 >
+                  <td className="selectCell">
+                    <input type="checkbox" aria-label={tx(language, "Satırı seç", "Select row", "Rêzê hilbijêre")} checked={selectedIds.has(x.id)} onChange={(e) => toggleMany([x], e.target.checked)} />
+                  </td>
                   {columnOrder.map((id) => (
                     <td key={id} className={columnCellClassName(id)}>
                       {renderCell(id, x, { pendingTransfer, canApprove })}
@@ -2303,6 +2325,30 @@ export function Records({
   const selectedKasaGroup = kasaSplitActive ? groups.find((g) => g.name === source) : undefined;
   const kasaIncomeRows = kasaSplitActive ? orderedRows.filter((x) => x.kind !== "expense") : [];
   const kasaExpenseRows = kasaSplitActive ? orderedRows.filter((x) => x.kind === "expense") : [];
+  // Satır seçimi: seçili satırlar Excel'e çıkarılabilir, kopyalanabilir veya toplu silinebilir.
+  const selectedRows = orderedRows.filter((x) => selectedIds.has(x.id));
+  useEffect(() => {
+    setSelectedIds(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, activeWs, activeKasa, kind]);
+  function toggleMany(list: RecordItem[], on: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const r of list) {
+        if (on) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  }
+  async function copySelected() {
+    const lines = selectedRows.map((x) => [date(x.date), x.kind === "cash" ? x.source : x.cashAccount, x.source, x.person, x.amount, x.currency, x.tags.join(", ")].join("\t"));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+    } catch {
+      // Pano erişimi yoksa sessizce geçilir.
+    }
+  }
   // Gelir/Gider sayfalarındaki "En Son Gelirler/Giderler" panosuyla aynı
   // düzen — kasa seçiliyken de sağda bu kasanın en son 5 hareketi (gelir +
   // gider karışık) görünsün diye, kullanıcının elle sıraladığı orderedRows
@@ -2347,7 +2393,7 @@ export function Records({
               />
             </label>
           )}
-          <button className="light" onClick={exportExcel}>
+          <button className="light" onClick={() => exportExcel()}>
             ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
           </button>
           {!readOnly && (
@@ -2875,6 +2921,46 @@ export function Records({
             {tx(language, "Filtreleri Temizle", "Clear Filters", "Parzûnan Paqij Bike")}
           </button>
         </div>
+      )}
+      {selectedRows.length > 0 && (
+        <div className="selectionBar">
+          <strong>{selectedRows.length} {tx(language, "kayıt seçili", "records selected", "tomar hatine hilbijartin")}</strong>
+          <span className="selectionTotals">
+            {selectedRows.some((x) => x.kind !== "expense") && (
+              <em className="positive">{tx(language, "Gelir", "Income", "Dahat")}: {moneyBreakdown(combineByCurrency([{ rows: selectedRows.filter((x) => x.kind !== "expense") }]))}</em>
+            )}
+            {selectedRows.some((x) => x.kind === "expense") && (
+              <em className="negative">{tx(language, "Gider", "Expense", "Mesref")}: {moneyBreakdown(combineByCurrency([{ rows: selectedRows.filter((x) => x.kind === "expense") }]))}</em>
+            )}
+          </span>
+          <button type="button" className="light" onClick={() => exportExcel(selectedRows, "-secili")}>
+            ⇩ {tx(language, "Seçilenleri Excel'e Çıkar", "Export Selected to Excel", "Hilbijartiyan Derxe Excelê")}
+          </button>
+          <button type="button" className="light" onClick={copySelected}>
+            ⧉ {tx(language, "Kopyala", "Copy", "Kopî bike")}
+          </button>
+          {!readOnly && (
+            <button type="button" className="light redText" onClick={() => setBulkDeleteOpen(true)}>
+              🗑 {tx(language, "Seçilenleri Sil", "Delete Selected", "Hilbijartiyan Jêbibe")}
+            </button>
+          )}
+          <button type="button" className="light" onClick={() => setSelectedIds(new Set())}>
+            ✕ {tx(language, "Seçimi Temizle", "Clear Selection", "Hilbijartinê Paqij Bike")}
+          </button>
+        </div>
+      )}
+      {bulkDeleteOpen && (
+        <DeleteConfirmModal
+          language={language}
+          itemLabel={`${selectedRows.length} ${tx(language, "kayıt", "records", "tomar")}`}
+          checkPassword={checkPassword}
+          onClose={() => setBulkDeleteOpen(false)}
+          onConfirm={(reason) => {
+            for (const x of selectedRows) onDelete(x, reason);
+            setSelectedIds(new Set());
+            setBulkDeleteOpen(false);
+          }}
+        />
       )}
       <div className={kind === "cash" && !kasaSplitActive ? "" : "recordsGrid"}>
         {kasaSplitActive ? (
