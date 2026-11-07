@@ -206,37 +206,42 @@ function AccessBoard({ language, sections }: { language: Language; sections: Kas
   const pages = accessPages.map((p) => nav.find((n) => n.id === p)?.label[language] ?? p);
   pages.push(tx(language, "Ayarlar", "Settings", "Mîheng"), tx(language, "Kullanıcılar ve Yetkiler", "Users & Permissions", "Bikarhêner û Destûr"));
   const workspaces = groupKasasByWorkspace(accounts, sections, language);
-  const areaCount = pages.length + workspaces.reduce((n, w) => n + 1 + w.kasas.length, 0);
   return (
-    <div className="panel accessBoard">
+    <div className="accessBoard">
       <div className="accessBoardHead">
-        <b>★ {tx(language, "Süper Admin", "Super Admin", "Super Admîn")}</b>
-        <small>{tx(language, "Tüm sisteme erişir; silme işlemlerinde onay ve şifre gerekir.", "Full system access; deletions need confirmation and a password.", "Gihîştina tevahiya pergalê; di jêbirinê de erêkirin û şîfre pêwîst e.")}</small>
-      </div>
-      <div className={`accessBoardAreas${areaCount > 14 ? " twoCols" : ""}`}>
-        <div className="accessBoardGroup">
-          <strong>{tx(language, "Bölümler", "Sections", "Beş")}</strong>
-          <ul>
-            {pages.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+        <span className="accessBoardStar">★</span>
+        <div>
+          <b>{tx(language, "Süper Admin", "Super Admin", "Super Admîn")}</b>
+          <small>{tx(language, "Tüm sisteme erişir; silme işlemlerinde onay ve şifre gerekir.", "Full system access; deletions need confirmation and a password.", "Gihîştina tevahiya pergalê; di jêbirinê de erêkirin û şîfre pêwîst e.")}</small>
         </div>
-        {workspaces.map((w) => (
-          <div key={w.key} className="accessBoardGroup">
-            <strong>{w.label} <small>({w.kasas.length})</small></strong>
-            <ul>
-              {w.kasas.map((a) => (
-                <li key={a.id}>{a.name}</li>
-              ))}
-            </ul>
+        <em>{pages.length} {tx(language, "bölüm", "sections", "beş")} · {accounts.length} {tx(language, "kasa", "cash accounts", "qase")}</em>
+      </div>
+      <div className="accessBoardBody">
+        <div className="accessBoardCard">
+          <h4>▤ {tx(language, "Bölümler", "Sections", "Beş")}</h4>
+          <div className="accessChips">
+            {pages.map((p) => (
+              <span key={p}>{p}</span>
+            ))}
           </div>
-        ))}
+        </div>
+        <div className="accessBoardCard">
+          <h4>▣ {tx(language, "Çalışma alanları ve kasalar", "Workspaces and cash accounts", "Qadên xebatê û qase")}</h4>
+          {workspaces.map((w) => (
+            <div key={w.key} className="accessBoardWs">
+              <div className="accessBoardWsName">{w.label} <small>{w.kasas.length}</small></div>
+              <div className="accessChips kasa">
+                {w.kasas.map((a) => (
+                  <span key={a.id}>{a.name}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
-
 
 // Seçilen kullanıcının hesabı, türü ve erişimleri tek panelde: sol sütun bölümler, sağ sütun çalışma alanları ve kasalar.
 // Değişiklikler taslak olarak tutulur; onay kutusu işaretlenip "Kaydet" ile tek seferde yazılır.
