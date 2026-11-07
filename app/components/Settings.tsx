@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Title } from "./shared";
+import { useEffect, useState, type ReactNode } from "react";
+import { Title, DeleteConfirmModal } from "./shared";
 import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
 import type { BlockedIp, KasaSection, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
@@ -21,6 +21,7 @@ export function Settings({
   isSuperAdmin,
   sections,
   onSectionsChanged,
+  usersPanel,
 }: {
   language: Language;
   company: string;
@@ -34,6 +35,7 @@ export function Settings({
   isSuperAdmin: boolean;
   sections: KasaSection[];
   onSectionsChanged: () => void;
+  usersPanel?: ReactNode;
 }) {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
@@ -186,7 +188,7 @@ export function Settings({
         </button>
         {isSuperAdmin && (
           <button type="button" role="tab" aria-selected={tab === "access"} className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}>
-            {tx(language, "Kasa Erişimi", "Cash Access", "Gihîştina Qaseyê")}
+            {tx(language, "Kullanıcılar ve Yetkiler", "Users & Permissions", "Bikarhêner û Destûr")}
           </button>
         )}
         <button type="button" role="tab" aria-selected={tab === "database"} className={tab === "database" ? "active" : ""} onClick={() => setTab("database")}>
@@ -336,7 +338,7 @@ export function Settings({
         </div>
       )}
 
-      {tab === "sections" && <SectionsPanel language={language} sections={sections} onChanged={onSectionsChanged} />}
+      {tab === "sections" && <SectionsPanel language={language} sections={sections} onChanged={onSectionsChanged} checkPassword={checkPassword} />}
       {tab === "users" && (
         <div className="settings">
           <div className="panel">
@@ -372,7 +374,7 @@ export function Settings({
         </div>
       )}
 
-      {tab === "access" && isSuperAdmin && <KasaAccessPanel language={language} />}
+      {tab === "access" && isSuperAdmin && usersPanel}
 
       {tab === "database" && (
         <div className="settings">
@@ -436,7 +438,8 @@ function TypographyControl({ language, typeKey, value, onChange }: { language: L
 // bölümleri oluşturması. Her bölüm ilgili sayfadaki kutu düzenine yeni bir kutu (satır) ekler.
 const SECTION_COLORS = ["#7b52bf", "#1d9e75", "#d85a30", "#378add", "#ba7517", "#d4537e", "#0f6e56", "#5f5e5a"];
 
-function SectionsPanel({ language, sections, onChanged }: { language: Language; sections: KasaSection[]; onChanged: () => void }) {
+function SectionsPanel({ language, sections, onChanged, checkPassword }: { language: Language; sections: KasaSection[]; onChanged: () => void; checkPassword: (password: string) => Promise<boolean> }) {
+  const [deleteTarget, setDeleteTarget] = useState<KasaSection | null>(null);
   const [drafts, setDrafts] = useState<Record<SectionScope, { name: string; color: string }>>({
     cash: { name: "", color: SECTION_COLORS[0] },
     income: { name: "", color: SECTION_COLORS[1] },
@@ -460,6 +463,7 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
     return true;
   }
   return (
+    <>
     <div className="panel sectionsPanel">
       <Title
         title={tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}
@@ -486,7 +490,7 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
                 <button
                   type="button"
                   title={tx(language, "Sil", "Delete", "Jê bibe")}
-                  onClick={() => confirm(tx(language, `“${x.name}” silinsin mi? Kasa/kayıtlar silinmez, bölümsüz kalır.`, `Delete “${x.name}”? Cash accounts/records are kept without a section.`, `“${x.name}” were jêbirin? Qase/tomar namînin, bê beş dimînin.`)) && call(`/api/sections/${x.id}`, "DELETE")}
+                  onClick={() => setDeleteTarget(x)}
                 >×</button>
               </span>
             ))}
@@ -512,145 +516,20 @@ function SectionsPanel({ language, sections, onChanged }: { language: Language; 
         </div>
       ))}
     </div>
-  );
-}
-
-// Süper yönetici: her kullanıcının hangi kasaları görebileceğini belirler.
-function KasaAccessPanel({ language }: { language: Language }) {
-  type AccessUser = { id: number; name: string; username: string; isSuperAdmin: boolean };
-  type AccessKasa = { id: number; name: string; ownerUserId: number | null; ownerName?: string | null };
-  const [users, setUsers] = useState<AccessUser[]>([]);
-  const [kasas, setKasas] = useState<AccessKasa[]>([]);
-  const [userId, setUserId] = useState<number | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      fetch("/api/users").then((r) => (r.ok ? r.json() : { users: [] })),
-      fetch("/api/cash-accounts").then((r) => (r.ok ? r.json() : { cashAccounts: [] })),
-    ]).then(([u, k]) => {
-      if (cancelled) return;
-      const list = (u.users as AccessUser[]).filter((x) => !x.isSuperAdmin);
-      setUsers(list);
-      setKasas(k.cashAccounts as AccessKasa[]);
-      if (list[0]) setUserId(list[0].id);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (userId === null) return;
-    let cancelled = false;
-    setMessage("");
-    fetch(`/api/users/${userId}/cash-access`)
-      .then((r) => (r.ok ? r.json() : { cashAccountIds: [] }))
-      .then((d) => {
-        if (!cancelled) setSelected(new Set(d.cashAccountIds as number[]));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  const ownedByUser = (k: AccessKasa) => k.ownerUserId === userId;
-  const toggle = (id: number) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  async function save() {
-    if (userId === null) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const response = await fetch(`/api/users/${userId}/cash-access`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cashAccountIds: [...selected] }),
-      });
-      setMessage(
-        response.ok
-          ? tx(language, "Kaydedildi.", "Saved.", "Hate tomarkirin.")
-          : tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."),
-      );
-    } catch {
-      setMessage(tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const visibleCount = kasas.filter((k) => selected.has(k.id) || ownedByUser(k)).length;
-
-  return (
-    <div className="settings">
-      <div className="panel kasaAccessPanel">
-        <Title
-          title={tx(language, "Kasa Erişimi", "Cash Access", "Gihîştina Qaseyê")}
-          sub={tx(
-            language,
-            "Her kullanıcının hangi kasaları görebileceğini belirleyin. Süper yöneticiler her şeyi görür; kullanıcı kendi oluşturduğu kasayı her zaman görür.",
-            "Choose which cash accounts each user can see. Super admins see everything; a user always sees the cash accounts they created.",
-            "Diyar bikin ku her bikarhêner kîjan qaseyan dibîne. Super admin her tiştî dibînin; bikarhêner qaseya ku çêkiriye her tim dibîne.",
-          )}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          language={language}
+          itemLabel={deleteTarget.name}
+          warningText={tx(language, "Kasa ve kayıtlar silinmez; bölümsüz (Diğer) kalır.", "Cash accounts and records are kept without a section.", "Qase û tomar nayên jêbirin; bê beş dimînin.")}
+          checkPassword={checkPassword}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const target = deleteTarget;
+            setDeleteTarget(null);
+            call(`/api/sections/${target.id}`, "DELETE");
+          }}
         />
-        {users.length === 0 ? (
-          <small>{tx(language, "Kasa erişimi ayarlanacak başka kullanıcı yok.", "There are no other users to configure.", "Bikarhênerek din tune ye.")}</small>
-        ) : (
-          <>
-            <label className="kasaAccessUser">
-              {tx(language, "Kullanıcı", "User", "Bikarhêner")}
-              <select value={userId ?? ""} onChange={(e) => setUserId(Number(e.target.value))}>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.username})</option>
-                ))}
-              </select>
-            </label>
-            <div className="kasaAccessBox">
-              <div className="kasaAccessHead">
-                <span>
-                  👁 <b>{tx(language, "Hangi kasaları görebilir", "Which cash accounts can be seen", "Kîjan qaseyan dibîne")}</b>
-                  <em className="kasaAccessCount">{visibleCount} / {kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
-                </span>
-                <span className="kasaAccessBtns">
-                  <button type="button" className="light compact" onClick={() => setSelected(new Set(kasas.map((k) => k.id)))}>
-                    {tx(language, "Tümünü işaretle", "Select all", "Hemûyan nîşan bike")}
-                  </button>
-                  <button type="button" className="light compact" onClick={() => setSelected(new Set())}>
-                    {tx(language, "Tümünü kaldır", "Clear all", "Hemûyan rake")}
-                  </button>
-                </span>
-              </div>
-              <div className="kasaAccessGrid">
-                {kasas.map((k) => {
-                  const owned = ownedByUser(k);
-                  return (
-                    <label key={k.id} className={`kasaAccessItem${selected.has(k.id) || owned ? " on" : ""}`}>
-                      <input type="checkbox" checked={selected.has(k.id) || owned} disabled={owned} onChange={() => toggle(k.id)} />
-                      <b>{k.name}</b>
-                      {k.ownerName && <small>{k.ownerName}</small>}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="kasaAccessFoot">
-              {message && <small>{message}</small>}
-              <button type="button" className="primary" disabled={busy} onClick={save}>
-                {tx(language, "Değişiklikleri kaydet", "Save changes", "Guhertinan tomar bike")}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+      )}
+    </>
   );
 }

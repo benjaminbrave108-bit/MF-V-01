@@ -874,8 +874,9 @@ function TagsInput({
 // (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
 // kimliklerini hem de varsayılan genişliklerini taşır; sırası
 // DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
-type ColumnId = "date" | "title" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "detail", "messages", "person", "amount", "location", "tags", "action"];
+type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
+// Ana görünüm: Tarih, Kasa Adı, Çalışma Alanı, Kişi, Belgeler, Miktar, Etiket, İşlem. Detay/Not, Mesajlar ve Kasa Yeri ana tabloda yok.
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "tags", "action"];
 // Detay/Not ve Mesajlar öntanımlı olarak en dar iki sütun — uzun metin
 // satıra sığmayınca satırı büyütmek yerine tek satırda "..." ile kesilir
 // (bkz. renderCell'deki .cellDetailText ve .messagesCellText), böylece
@@ -884,7 +885,9 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "detail", "messages",
 // gerekiyor. Kullanıcı isterse sütun kenarından tutup yine genişletebilir.
 const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   date: 100,
-  title: 140,
+  title: 170,
+  workspace: 130,
+  documents: 90,
   detail: 110,
   messages: 110,
   person: 80,
@@ -897,7 +900,7 @@ const MIN_COLUMN_WIDTH = 64;
 // v2: Detay/Not ve Mesajlar öntanımlı genişlikleri daraltıldı — anahtar
 // sürümü artırılmasa, daha önce kaydedilmiş (geniş) genişlikler yeni
 // varsayılanları maskeler ve kullanıcı hiçbir fark görmez.
-const COLUMNS_STORAGE_KEY = "mf-records-columns-v2";
+const COLUMNS_STORAGE_KEY = "mf-records-columns-v3";
 
 // Kasalar sayfasındaki kasa kartı verisi (kasa kaydı + bağlı gelir/gider).
 type CardGroup = {
@@ -1082,6 +1085,7 @@ export function Records({
     window.addEventListener("mouseup", onResizeEnd);
   }
 
+  const wsOptions = workspaceOptions(sections, language);
   function columnLabel(id: ColumnId): string {
     switch (id) {
       case "date":
@@ -1090,6 +1094,10 @@ export function Records({
         return kind === "cash"
           ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
           : tx(language, "Ana Başlık", "Main Category", "Sernavê Sereke");
+      case "workspace":
+        return tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê");
+      case "documents":
+        return tx(language, "Belgeler", "Documents", "Belge");
       case "detail":
         return showListColumn
           ? tx(language, "Liste Kaydı", "List Record", "Qeyda Lîsteyê")
@@ -1189,6 +1197,27 @@ export function Records({
             </small>
           </>
         );
+      case "workspace": {
+        const kasaName = x.kind === "cash" ? x.source : x.cashAccount;
+        const account = cashAccounts.find((a) => a.name === kasaName);
+        const label = account
+          ? wsOptions.find((o) => o.key === workspaceKeyOf({ sectionId: account.sectionId ?? null, rjKasa: !!account.isRjKasa, listKasa: !!account.isListWorkspace }, sections))?.label
+          : undefined;
+        return <span className="cellDetailText" title={label}>{label ? localizeData(label, language) : "—"}</span>;
+      }
+      case "documents": {
+        const docs = x.attachments ?? [];
+        const tableRows = (x.detailTable?.length ?? 0) > 1 ? x.detailTable!.length - 1 : 0;
+        if (!docs.length && !tableRows) return <span className="docEmpty">—</span>;
+        return (
+          <DocCell
+            language={language}
+            docs={docs}
+            tableRows={tableRows}
+            onOpen={() => (!docs.length && tableRows ? setDetailViewTarget(x) : onEdit(x))}
+          />
+        );
+      }
       case "messages":
         return (
           <button
@@ -2408,6 +2437,9 @@ export function Records({
           title={accessTarget.title}
           kasas={accessTarget.kasas}
           section={accessTarget.section}
+          sections={sections}
+          accounts={cashAccounts}
+          checkPassword={checkPassword}
           onClose={() => setAccessTarget(null)}
           onDone={() => onRefreshData?.()}
         />
@@ -2757,15 +2789,6 @@ export function Records({
       )}
       <div className="search">
         <span>⌕</span>
-        <button
-          type="button"
-          className="light compact"
-          onClick={() => setShowListColumn((v) => !v)}
-        >
-          {showListColumn
-            ? tx(language, "Detay / Not Göster", "Show Detail / Note", "Hûragahî / Nîşe Nîşan Bide")
-            : tx(language, "Liste Kaydı Göster", "Show List Record", "Qeyda Lîsteyê Nîşan Bide")}
-        </button>
         {kind === "cash" && (
           <input
             value={search}
@@ -2850,7 +2873,7 @@ export function Records({
                   <h3>
                     {tx(language, "Gelirler", "Income", "Dahat")}
                     <strong className="positive">
-                      {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalInByCurrency) : money(0)}
+                      {moneyBreakdown(combineByCurrency([{ rows: kasaIncomeRows }]))}
                     </strong>
                   </h3>
                   <small>
@@ -2872,7 +2895,7 @@ export function Records({
                   <h3>
                     {tx(language, "Giderler", "Expenses", "Mesref")}
                     <strong className="negative">
-                      {selectedKasaGroup ? moneyBreakdown(selectedKasaGroup.totalOutByCurrency) : money(0)}
+                      {moneyBreakdown(combineByCurrency([{ rows: kasaExpenseRows }]))}
                     </strong>
                   </h3>
                   <small>
@@ -3404,6 +3427,107 @@ function KasaResultModal({
   );
 }
 
+// Belgeler hücresi: üzerine gelince belge özeti tablo kutusunun dışında (portal) görünür; böylece kaydırma alanında kesilmez.
+function DocCell({ language, docs, tableRows, onOpen }: { language: Language; docs: { name: string; data: string }[]; tableRows: number; onOpen: () => void }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const show = (el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    setPos({ x: Math.min(rect.left, window.innerWidth - 340), y: rect.bottom + 4 });
+  };
+  return (
+    <span className="docCell" onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setPos(null)}>
+      <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onBlur={() => setPos(null)} onClick={onOpen}>
+        📎 {docs.length + (tableRows ? 1 : 0)}
+      </button>
+      {pos &&
+        createPortal(
+          <span className="docTooltip" style={{ position: "fixed", left: pos.x, top: pos.y, display: "block" }}>
+            <b>{tx(language, "Belgeler", "Documents", "Belge")}</b>
+            <ul>
+              {docs.map((d, i) => (
+                <li key={`${d.name}-${i}`}>
+                  📄 {d.name}
+                  <small> · {Math.max(1, Math.round((d.data.length * 3) / 4 / 1024))} KB</small>
+                </li>
+              ))}
+              {tableRows > 0 && (
+                <li>▦ {tx(language, "Detay tablosu", "Detail table", "Tabloya hûrguliyan")} · {tableRows} {tx(language, "satır", "rows", "rêz")}</li>
+              )}
+            </ul>
+          </span>,
+          document.body,
+        )}
+    </span>
+  );
+}
+
+// Eklenen Excel belgesinin içeriğini (sayfa sayfa) tablo olarak gösterir.
+function ExcelAttachmentModal({ language, attachment, onClose }: { language: Language; attachment: { name: string; data: string }; onClose: () => void }) {
+  const [sheets, setSheets] = useState<{ name: string; rows: (string | number | Date | null)[][] }[] | null>(null);
+  const [active, setActive] = useState(0);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const blob = await (await fetch(attachment.data)).blob();
+        const { readWorkbook } = await import("../lib/excelImport");
+        const data = await readWorkbook(new File([blob], attachment.name));
+        if (!cancelled) setSheets(data.filter((s) => !s.hidden).map((s) => ({ name: s.name, rows: s.rows.filter(Boolean) })));
+      } catch {
+        if (!cancelled) setError(tx(language, "Excel dosyası okunamadı.", "The Excel file could not be read.", "Pelê Excelê nehat xwendin."));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment, language]);
+  const sheet = sheets?.[active];
+  const fmt = (v: string | number | Date | null) => (v instanceof Date ? v.toISOString().slice(0, 10) : v === null ? "" : typeof v === "number" ? v.toLocaleString("tr-TR") : String(v));
+  const cols = sheet ? Math.min(40, Math.max(0, ...sheet.rows.map((row) => row.length))) : 0;
+  return (
+    <div className="overlay">
+      <div className="modal excelViewModal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>▦ {tx(language, "Excel Detayı", "Excel Detail", "Hûrguliyên Excelê")}</h2>
+            <p>{attachment.name}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        {!sheets && !error && <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>}
+        {error && <small className="formWarning">{error}</small>}
+        {sheets && sheets.length > 1 && (
+          <div className="excelSheetTabs">
+            {sheets.map((s, i) => (
+              <button key={s.name} type="button" className={i === active ? "active" : ""} onClick={() => setActive(i)}>{s.name}</button>
+            ))}
+          </div>
+        )}
+        {sheet && (
+          <div className="excelViewScroll">
+            <table>
+              <tbody>
+                {sheet.rows.slice(0, 500).map((row, ri) => (
+                  <tr key={ri}>
+                    {Array.from({ length: cols }, (_, ci) => (
+                      <td key={ci}>{fmt(row[ci] ?? null)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sheet.rows.length > 500 && <small>… {sheet.rows.length - 500} {tx(language, "satır daha", "more rows", "rêzên din")}</small>}
+          </div>
+        )}
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Kapat", "Close", "Bigire")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RecordModal({
   language,
   kind,
@@ -3500,6 +3624,7 @@ export function RecordModal({
   // kapalı başlar (detay kayıtlıysa bile); açılınca tablonun tamamı görünür.
   const [detailTrimmed, setDetailTrimmed] = useState(false);
   const [detailPasteHint, setDetailPasteHint] = useState("");
+  const [excelView, setExcelView] = useState<{ name: string; data: string } | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const previous = (field: "source" | "person" | "project" | "listName") => [
     ...new Set(
@@ -3839,6 +3964,11 @@ export function RecordModal({
                 {form.attachments!.map((att, index) => (
                   <li key={`${att.name}-${index}`}>
                     <small className="attachmentFieldName">{att.name}</small>
+                    {/\.(xlsx|xlsm)$/i.test(att.name) && (
+                      <button type="button" className="light compact" onClick={() => setExcelView(att)}>
+                        ▦ {tx(language, "Excel Detayı", "Excel Detail", "Hûrguliyên Excelê")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="light compact"
@@ -3858,6 +3988,7 @@ export function RecordModal({
               </ul>
             )}
           </label>
+          {excelView && createPortal(<ExcelAttachmentModal language={language} attachment={excelView} onClose={() => setExcelView(null)} />, document.body)}
           {kind === "expense" && (
             <details
               className="wide detailTableBox"

@@ -4292,3 +4292,27 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .accessWorkspaceHead small { color: #74868c; margin-left: auto; }
 .accessKasaGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; padding-left: 24px; }
 .accessKasaItem { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+
+/* Belgeler sütunu: üzerine gelince belge özeti */
+.docCell { position: relative; display: inline-block; }
+.docChip { border: 1px solid #c8dfe5; background: #eef6f8; border-radius: 999px; padding: 2px 9px; font-size: 11px; cursor: pointer; color: #1f5a6b; }
+.docEmpty { color: #9aa9ae; }
+.docTooltip { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 60; min-width: 200px; max-width: 320px; padding: 8px 10px; border-radius: 10px; background: #fff; border: 1px solid #d8e2e5; box-shadow: 0 10px 24px rgba(20,40,45,.16); font-size: 11px; color: #1f2e33; text-align: left; }
+.docTooltip ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.docTooltip small { color: #74868c; }
+.docCell:hover .docTooltip, .docCell:focus-within .docTooltip { display: block; }
+.excelViewModal { width: min(1100px, 95vw); max-width: 95vw; }
+.excelViewScroll { max-height: 60vh; overflow: auto; border: 1px solid #d6e3e8; border-radius: 8px; }
+.excelViewScroll table { min-width: 0; width: max-content; font-size: 11px; }
+.excelViewScroll td { padding: 4px 8px; white-space: nowrap; border: 1px solid #edf1f2; }
+.excelSheetTabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.excelSheetTabs button { border: 1px solid #c8dfe5; background: #fff; border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+.excelSheetTabs button.active { background: #1f6f87; color: #fff; }
+.accessBoard { margin-bottom: 14px; }
+.accessBoardHead { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.accessBoardAreas { display: block; }
+.accessBoardAreas.twoCols { columns: 2; column-gap: 28px; }
+.accessBoardGroup { break-inside: avoid; margin-bottom: 10px; }
+.accessBoardGroup ul { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+.accessFullToggle { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.accessSectionTitle { font-weight: 700; margin: 10px 0 4px; }

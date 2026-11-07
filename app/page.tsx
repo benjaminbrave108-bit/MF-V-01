@@ -5,7 +5,7 @@ import { LanguageSetup, Login } from "./components/Login";
 import { ProfileModal } from "./components/ProfileModal";
 import { Dashboard } from "./components/Dashboard";
 import { Records, RecordModal } from "./components/Records";
-import { useDraggableModals } from "./components/shared";
+import { useDraggableModals, DeleteConfirmModal } from "./components/shared";
 import { Archive } from "./components/Archive";
 import { ReportBuilder } from "./components/ReportBuilder";
 import { Notes } from "./components/Notes";
@@ -56,6 +56,7 @@ export default function Home() {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [archive, setArchive] = useState<ArchiveItem[]>([]);
   const [notes, setNotes] = useState<FinanceNote[]>([]);
+  const [noteDeleteId, setNoteDeleteId] = useState<number | null>(null);
   const [logo, setLogo] = useState("");
   const [company, setCompany] = useState("Maliye-Finans");
   const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem; cashAccount?: string } | null>(
@@ -404,15 +405,24 @@ export default function Home() {
   // state değişimi yapar, sayfa hiçbir zaman elle yenilenmek zorunda kalmaz.
   useEffect(() => {
     if (!signedIn) return;
-    const interval = setInterval(() => {
+    const sync = () => {
+      if (document.hidden) return;
       refreshRecords();
       refreshCashAccounts();
       refreshCashTransfers();
+      refreshSections();
       refreshNotes();
       refreshArchive();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, 20000);
-    return () => clearInterval(interval);
+    };
+    const interval = setInterval(sync, 5000);
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("focus", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn]);
   async function checkPassword(password: string) {
     try {
@@ -642,7 +652,7 @@ export default function Home() {
           </div>
         </div>
         <nav>
-          {nav.filter((n) => n.id !== "lists" && n.id !== "income" && n.id !== "expense" && canAccess(n.id)).map((n) => (
+          {nav.filter((n) => n.id !== "lists" && n.id !== "income" && n.id !== "expense" && n.id !== "users" && canAccess(n.id)).map((n) => (
             <div key={n.id}>
               <button
                 className={page === n.id ? "active" : ""}
@@ -879,7 +889,7 @@ export default function Home() {
               users={users}
               onCreateNote={createNote}
               onUpdateNote={updateNote}
-              onDeleteNote={deleteNote}
+              onDeleteNote={(id) => setNoteDeleteId(id)}
               onArchiveNote={archiveNote}
               onMarkAllRead={markNotesRead}
             />
@@ -915,6 +925,19 @@ export default function Home() {
               isSuperAdmin={profile.isSuperAdmin}
               sections={sections}
               onSectionsChanged={() => { refreshSections(); refreshCashAccounts(); refreshRecords(); }}
+              usersPanel={
+                <Users
+                  language={language}
+                  users={users}
+                  setUsers={setUsers}
+                  currentUsername={profile.username}
+                  currentUserIsAdmin={profile.isAdmin}
+                  currentUserIsSuperAdmin={profile.isSuperAdmin}
+                  checkPassword={checkPassword}
+                  onlineUserIds={onlineUserIds}
+                  sections={sections}
+                />
+              }
             />
           )}
           {page === "guide" && <Guide language={language} />}
@@ -935,6 +958,19 @@ export default function Home() {
           sections={sections}
           users={users}
           onTransfersChanged={refreshAfterCashTransfer}
+        />
+      )}
+      {noteDeleteId !== null && (
+        <DeleteConfirmModal
+          language={language}
+          itemLabel={notes.find((n) => n.id === noteDeleteId)?.title || tx(language, "Not", "Note", "Nîşe")}
+          checkPassword={checkPassword}
+          onClose={() => setNoteDeleteId(null)}
+          onConfirm={() => {
+            const id = noteDeleteId;
+            setNoteDeleteId(null);
+            deleteNote(id);
+          }}
         />
       )}
       {profileModal && (

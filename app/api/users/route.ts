@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { users } from "../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../db/passwords";
-import { requireAdmin } from "../_lib/auth";
+import { requireAdmin, requireSuperAdmin } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
 import { parseBody, userCreateSchema } from "../_lib/validate";
 
@@ -31,7 +31,7 @@ export const GET = withErrorHandling(async (request: Request) => {
 });
 
 export const POST = withErrorHandling(async (request: Request) => {
-  const session = await requireAdmin(request);
+  const session = await requireSuperAdmin(request);
   if ("response" in session) return session.response;
 
   const parsed = await parseBody(request, userCreateSchema);

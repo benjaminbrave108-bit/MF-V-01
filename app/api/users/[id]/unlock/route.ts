@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { users } from "../../../../../db/schema";
-import { requireAdmin } from "../../../_lib/auth";
+import { requireSuperAdmin } from "../../../_lib/auth";
 import { json, withErrorHandling } from "../../../_lib/http";
 import { unlockUserAccount } from "../../../_lib/security";
 
@@ -20,7 +20,7 @@ function toClientUser(row: typeof users.$inferSelect) {
 }
 
 export const POST = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
-  const session = await requireAdmin(request);
+  const session = await requireSuperAdmin(request);
   if ("response" in session) return session.response;
 
   const { id: idParam } = await params;

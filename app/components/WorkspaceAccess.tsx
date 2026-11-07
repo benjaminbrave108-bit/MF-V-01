@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { KasaSection, Language } from "../lib/types";
+import type { CashAccountSummary, KasaSection, Language } from "../lib/types";
 import { tx } from "../lib/i18n";
+import { workspaceOptions, workspaceState } from "./KasaManage";
 
 type AccessUser = { id: number; name: string; username: string };
 export type AccessKasa = { id: number; name: string; ownerUserId?: number | null };
@@ -15,6 +16,9 @@ export function WorkspaceAccessModal({
   title,
   kasas,
   section,
+  sections = [],
+  accounts = [],
+  checkPassword,
   onClose,
   onDone,
 }: {
@@ -22,9 +26,13 @@ export function WorkspaceAccessModal({
   title: string;
   kasas: AccessKasa[];
   section?: KasaSection;
+  sections?: KasaSection[];
+  accounts?: CashAccountSummary[];
+  checkPassword?: (password: string) => Promise<boolean>;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
   const [people, setPeople] = useState<AccessUser[]>([]);
   const [grants, setGrants] = useState<Record<string, Set<number>>>({});
@@ -185,8 +193,161 @@ export function WorkspaceAccessModal({
           {error && <p className="kasaManageError">{error}</p>}
         </div>
         <div className="modalActions">
+          {section && checkPassword && (
+            <button type="button" className="danger" style={{ marginRight: "auto" }} onClick={() => setDeleting(true)}>
+              🗑 {tx(language, "Çalışma Alanını Sil", "Delete Workspace", "Qada Xebatê Jê Bibe")}
+            </button>
+          )}
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
           <button type="button" className="primary" disabled={busy || loading} onClick={save}>{tx(language, "Kaydet", "Save", "Tomar bike")}</button>
+        </div>
+      </div>
+      {deleting && section && checkPassword && (
+        <WorkspaceDeleteModal
+          language={language}
+          section={section}
+          sections={sections}
+          kasas={kasas.map((k) => accounts.find((a) => a.id === k.id)).filter((a): a is CashAccountSummary => Boolean(a))}
+          checkPassword={checkPassword}
+          onClose={() => setDeleting(false)}
+          onDone={() => {
+            onDone();
+            onClose();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Çalışma alanını siler. İçinde kasa varsa kasalar önce geçici adlı yeni bir çalışma alanına ya da seçilen mevcut bir alana
+// taşınır; hiçbir kasa veya kayıt silinmez. Silme için şifre istenir.
+function WorkspaceDeleteModal({
+  language,
+  section,
+  sections,
+  kasas,
+  checkPassword,
+  onClose,
+  onDone,
+}: {
+  language: Language;
+  section: KasaSection;
+  sections: KasaSection[];
+  kasas: CashAccountSummary[];
+  checkPassword: (password: string) => Promise<boolean>;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const ownKey = `sec-${section.id}`;
+  const others = workspaceOptions(sections, language).filter((o) => o.key !== ownKey);
+  const [mode, setMode] = useState<"temp" | "existing">("temp");
+  const [tempName, setTempName] = useState(tx(language, "Geçici Kasalar", "Temporary Cash Accounts", "Qaseyên Demkî"));
+  const [target, setTarget] = useState(others[0]?.key ?? "genel");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function confirmDelete() {
+    setBusy(true);
+    setError("");
+    try {
+      if (!(await checkPassword(password))) {
+        setError(tx(language, "Şifre yanlış.", "Wrong password.", "Şîfre şaş e."));
+        return;
+      }
+      let targetKey = target;
+      if (kasas.length && mode === "temp") {
+        if (!tempName.trim()) {
+          setError(tx(language, "Geçici çalışma alanı için bir ad yazın.", "Enter a name for the temporary workspace.", "Ji bo qada demkî navek binivîse."));
+          return;
+        }
+        const created = await fetch("/api/sections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "cash", name: tempName.trim(), color: section.color }),
+        });
+        const body = await created.json().catch(() => ({}));
+        if (!created.ok) {
+          setError(created.status === 409 ? tx(language, "Bu adla bir çalışma alanı zaten var.", "A workspace with this name already exists.", "Qada xebatê bi vî navî heye.") : body.error || tx(language, "Geçici çalışma alanı oluşturulamadı.", "Could not create the temporary workspace.", "Qada demkî nehat afirandin."));
+          return;
+        }
+        targetKey = `sec-${body.section.id}`;
+      }
+      for (const account of kasas) {
+        const next = workspaceState(targetKey, { rjKasa: !!account.isRjKasa, listKasa: !!account.isListWorkspace });
+        const moved = await fetch(`/api/cash-accounts/${account.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: account.name, listKasa: next.listKasa, rjKasa: next.rjKasa, sectionId: next.sectionId }),
+        });
+        if (!moved.ok) {
+          setError(tx(language, `“${account.name}” taşınamadı; çalışma alanı silinmedi.`, `“${account.name}” could not be moved; the workspace was not deleted.`, `“${account.name}” nehat barkirin; qada xebatê nehat jêbirin.`));
+          return;
+        }
+      }
+      const removed = await fetch(`/api/sections/${section.id}`, { method: "DELETE" });
+      if (!removed.ok) {
+        setError(tx(language, "Çalışma alanı silinemedi.", "The workspace could not be deleted.", "Qada xebatê nehat jêbirin."));
+        return;
+      }
+      onDone();
+    } catch {
+      setError(tx(language, "Çalışma alanı silinemedi.", "The workspace could not be deleted.", "Qada xebatê nehat jêbirin."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="overlay">
+      <div className="modal kasaManageModal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>{tx(language, "Çalışma Alanını Sil", "Delete Workspace", "Qada Xebatê Jê Bibe")}</h2>
+            <p>{section.name}</p>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="kasaManageBody">
+          {kasas.length > 0 ? (
+            <>
+              <p className="kasaManageWarn">
+                {tx(language, `Bu çalışma alanında ${kasas.length} kasa var. Kasalar ve kayıtları silinmez; aşağıdan nereye taşınacağını seçin.`, `This workspace has ${kasas.length} cash account(s). They and their records are not deleted; choose where to move them.`, `Di vê qada xebatê de ${kasas.length} qase hene. Ew û tomarên wan nayên jêbirin; hilbijêre ku bibin ku.`)}
+              </p>
+              <label className="relationTypeOption">
+                <input type="radio" name="wsDelMode" checked={mode === "temp"} onChange={() => setMode("temp")} />
+                {tx(language, "Geçici bir çalışma alanı oluştur ve kasaları oraya taşı", "Create a temporary workspace and move the cash accounts there", "Qadek demkî çêke û qaseyan bibe wê")}
+              </label>
+              {mode === "temp" && (
+                <input value={tempName} maxLength={80} onChange={(e) => setTempName(e.target.value)} placeholder={tx(language, "Geçici çalışma alanı adı", "Temporary workspace name", "Navê qada demkî")} />
+              )}
+              <label className="relationTypeOption">
+                <input type="radio" name="wsDelMode" checked={mode === "existing"} onChange={() => setMode("existing")} />
+                {tx(language, "Kasaları mevcut bir çalışma alanına taşı", "Move the cash accounts to an existing workspace", "Qaseyan bibe qadeke heyî")}
+              </label>
+              {mode === "existing" && (
+                <select value={target} onChange={(e) => setTarget(e.target.value)}>
+                  {others.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              )}
+            </>
+          ) : (
+            <p className="kasaManageWarn">{tx(language, "Bu çalışma alanında kasa yok; yalnızca çalışma alanı silinecek.", "This workspace has no cash accounts; only the workspace is deleted.", "Di vê qada xebatê de qase tune; tenê qada xebatê tê jêbirin.")}</p>
+          )}
+          <label>
+            {tx(language, "Onay için şifrenizi girin", "Enter your password to confirm", "Ji bo erêkirinê şîfreya xwe binivîse")}
+            <input type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          {error && <p className="kasaManageError">{error}</p>}
+        </div>
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+          <button type="button" className="danger" disabled={busy || !password} onClick={confirmDelete}>
+            {tx(language, "Çalışma Alanını Sil", "Delete Workspace", "Qada Xebatê Jê Bibe")}
+          </button>
         </div>
       </div>
     </div>

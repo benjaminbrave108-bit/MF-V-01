@@ -7,6 +7,8 @@ import type { CashAccountSummary, KasaSection, Language, Page, UserAccount } fro
 import { workspaceKeyOf, workspaceOptions } from "./KasaManage";
 import { restrictablePages } from "../lib/types";
 
+const accessPages = restrictablePages.filter((p) => p !== "lists");
+
 // Mirrors db/passwords.ts's validatePasswordPolicy — checked client-side too
 // so the Kaydet button can disable itself instead of round-tripping to the
 // server just to learn the password is too short.
@@ -73,13 +75,14 @@ export function Users({
                 )
           }
         />
-        {currentUserIsAdmin && (
+        {currentUserIsSuperAdmin && (
           <button className="primary" onClick={() => setEditing("new")}>
             ＋{" "}
             {tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}
           </button>
         )}
       </div>
+      {currentUserIsSuperAdmin && <AccessBoard language={language} sections={sections} />}
       <div className="users">
         {users.map((u) => {
           const isSelf = u.username === currentUsername;
@@ -119,6 +122,9 @@ export function Users({
                       ★ {tx(language, "Süper Admin", "Super Admin", "Super Admîn")}
                     </span>
                   )}
+                  {!u.isSuperAdmin && (
+                    <span className="userPermTag">{tx(language, "Admin", "Admin", "Admîn")}</span>
+                  )}
                   {u.isAdmin ? (
                     <span className="userPermTag userPermTagAdmin">
                       {tx(language, "Tüm bölümlere erişim", "Access to all sections", "Gihîştina hemû beşan")}
@@ -139,12 +145,12 @@ export function Users({
                   <button type="button" onClick={() => setEditing(u)}>
                     ✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}
                   </button>
-                  {currentUserIsAdmin && (
+                  {currentUserIsSuperAdmin && !u.isSuperAdmin && (
                     <button type="button" onClick={() => setAccessTarget(u)}>
-                      🔑 {tx(language, "Erişim Ayarları", "Access Settings", "Sazkariyên Gihîştinê")}
+                      🔑 {tx(language, "Admin Erişimi", "Admin Access", "Gihîştina Admîn")}
                     </button>
                   )}
-                  {u.locked && (
+                  {u.locked && currentUserIsSuperAdmin && (
                     <button
                       type="button"
                       onClick={async () => {
@@ -164,7 +170,7 @@ export function Users({
                       🔓 {tx(language, "Kilidi Aç", "Unlock", "Kilîtê Veke")}
                     </button>
                   )}
-                  {!isSelf && !isLastAdmin && !isLastSuperAdmin && (
+                  {currentUserIsSuperAdmin && !isSelf && !isLastAdmin && !isLastSuperAdmin && (
                     <button type="button" className="redText" onClick={() => setDeleteTarget(u)}>
                       🗑 {tx(language, "Sil", "Delete", "Jêbibe")}
                     </button>
@@ -175,7 +181,7 @@ export function Users({
           );
         })}
       </div>
-      {editing && currentUserIsAdmin && (
+      {editing && currentUserIsSuperAdmin && (
         <UserModal
           language={language}
           initial={editing === "new" ? null : editing}
@@ -205,7 +211,7 @@ export function Users({
           }}
         />
       )}
-      {editing && editing !== "new" && !currentUserIsAdmin && (
+      {editing && editing !== "new" && !currentUserIsSuperAdmin && (
         <SelfEditModal
           language={language}
           initial={editing}
@@ -253,29 +259,100 @@ export function Users({
           }}
         />
       )}
-      {accessTarget && currentUserIsAdmin && (
-        <KasaAccessModal language={language} user={accessTarget} sections={sections} onClose={() => setAccessTarget(null)} />
+      {accessTarget && currentUserIsSuperAdmin && (
+        <AdminAccessModal
+          language={language}
+          user={accessTarget}
+          sections={sections}
+          onClose={() => setAccessTarget(null)}
+          onSaved={(saved) => setUsers((current) => current.map((x) => (x.id === saved.id ? saved : x)))}
+        />
       )}
     </div>
   );
 }
 
-// Tek bir kullanıcı için "hangi çalışma alanını ve onun içindeki hangi kasayı görebilir" ataması (süper admin).
-// Seçimler taslak olarak tutulur; "Kaydet" ile tek seferde yazılır. Çalışma alanı kutusu içindeki tüm kasaları
-// birden seçer/kaldırır. Kasa sahibi her zaman erişebilir (işaretli ve değiştirilemez).
-function KasaAccessModal({
+// Kasaları çalışma alanlarına göre gruplar (boş alanlar atlanır).
+function groupKasasByWorkspace(accounts: CashAccountSummary[], sections: KasaSection[], language: Language) {
+  return workspaceOptions(sections, language)
+    .map((w) => ({
+      ...w,
+      kasas: accounts
+        .filter((a) => workspaceKeyOf({ sectionId: a.sectionId ?? null, rjKasa: !!a.isRjKasa, listKasa: !!a.isListWorkspace }, sections) === w.key)
+        .sort((x, y) => x.name.localeCompare(y.name)),
+    }))
+    .filter((w) => w.kasas.length > 0);
+}
+
+// Erişim Panosu: başlıkta Süper Admin, altında erişebildiği alanlar. Liste uzunsa iki sütuna bölünür.
+function AccessBoard({ language, sections }: { language: Language; sections: KasaSection[] }) {
+  const [accounts, setAccounts] = useState<CashAccountSummary[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/cash-accounts")
+      .then((r) => (r.ok ? r.json() : { cashAccounts: [] }))
+      .then((d) => {
+        if (!cancelled) setAccounts(d.cashAccounts ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const pages = accessPages.map((p) => nav.find((n) => n.id === p)?.label[language] ?? p);
+  pages.push(tx(language, "Ayarlar", "Settings", "Mîheng"), tx(language, "Kullanıcılar ve Yetkiler", "Users & Permissions", "Bikarhêner û Destûr"));
+  const workspaces = groupKasasByWorkspace(accounts, sections, language);
+  const areaCount = pages.length + workspaces.reduce((n, w) => n + 1 + w.kasas.length, 0);
+  return (
+    <div className="panel accessBoard">
+      <div className="accessBoardHead">
+        <b>★ {tx(language, "Süper Admin", "Super Admin", "Super Admîn")}</b>
+        <small>{tx(language, "Tüm sisteme erişir; silme işlemlerinde onay ve şifre gerekir.", "Full system access; deletions need confirmation and a password.", "Gihîştina tevahiya pergalê; di jêbirinê de erêkirin û şîfre pêwîst e.")}</small>
+      </div>
+      <div className={`accessBoardAreas${areaCount > 14 ? " twoCols" : ""}`}>
+        <div className="accessBoardGroup">
+          <strong>{tx(language, "Bölümler", "Sections", "Beş")}</strong>
+          <ul>
+            {pages.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+        {workspaces.map((w) => (
+          <div key={w.key} className="accessBoardGroup">
+            <strong>{w.label} <small>({w.kasas.length})</small></strong>
+            <ul>
+              {w.kasas.map((a) => (
+                <li key={a.id}>{a.name}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Admin Erişimi: bir admine hangi bölümlerin ve (tam yetkili değilse) hangi çalışma alanı / kasaların verileceği.
+// Değişiklikler taslak olarak tutulur; onay kutusu işaretlenip "Onayla ve Kaydet" ile tek seferde yazılır.
+function AdminAccessModal({
   language,
   user,
   sections,
   onClose,
+  onSaved,
 }: {
   language: Language;
   user: UserAccount;
   sections: KasaSection[];
   onClose: () => void;
+  onSaved: (user: UserAccount) => void;
 }) {
   const [accounts, setAccounts] = useState<CashAccountSummary[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [fullAccess, setFullAccess] = useState(user.isAdmin);
+  const [pages, setPages] = useState<Page[]>(user.permissions);
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const failText = tx(language, "Erişim ayarları kaydedilemedi.", "Access settings could not be saved.", "Sazkariyên gihîştinê nehatin tomarkirin.");
@@ -310,18 +387,7 @@ function KasaAccessModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
 
-  const workspaces = (() => {
-    const list = accounts ?? [];
-    return workspaceOptions(sections, language)
-      .map((w) => ({
-        ...w,
-        kasas: list
-          .filter((a) => workspaceKeyOf({ sectionId: a.sectionId ?? null, rjKasa: !!a.isRjKasa, listKasa: !!a.isListWorkspace }, sections) === w.key)
-          .sort((x, y) => x.name.localeCompare(y.name)),
-      }))
-      .filter((w) => w.kasas.length > 0);
-  })();
-
+  const workspaces = groupKasasByWorkspace(accounts ?? [], sections, language);
   const isOn = (a: CashAccountSummary) => a.ownerUserId === user.id || selected.has(a.id);
   const toggleKasa = (id: number, on: boolean) =>
     setSelected((current) => {
@@ -339,22 +405,36 @@ function KasaAccessModal({
       }
       return next;
     });
+  const togglePage = (p: Page) => setPages((current) => (current.includes(p) ? current.filter((x) => x !== p) : [...current, p]));
 
   async function save() {
     if (!accounts) return;
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/workspace-access", {
+      const userResponse = await fetch(`/api/users/${user.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cashAccountIds: accounts.map((a) => a.id), grants: { [String(user.id)]: [...selected] } }),
+        body: JSON.stringify({ name: user.name, roleLabel: user.roleLabel, isAdmin: fullAccess, isSuperAdmin: false, permissions: fullAccess ? [] : pages, password: "" }),
       });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        setError(body.error === "Forbidden" ? tx(language, "Erişim atamalarını yalnızca Süper Admin yapabilir.", "Only a Super Admin can change access grants.", "Tenê Super Admîn dikare gihîştinê biguherîne.") : body.error || failText);
+      const userBody = await userResponse.json().catch(() => ({}));
+      if (!userResponse.ok) {
+        setError(userBody.error || failText);
         return;
       }
+      if (!fullAccess && accounts.length) {
+        const response = await fetch("/api/workspace-access", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cashAccountIds: accounts.map((a) => a.id), grants: { [String(user.id)]: [...selected] } }),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          setError(body.error || failText);
+          return;
+        }
+      }
+      onSaved(userBody.user);
       onClose();
     } catch {
       setError(failText);
@@ -368,66 +448,88 @@ function KasaAccessModal({
       <div className="modal accessSettingsModal">
         <div className="modalHead">
           <div>
-            <h2>{tx(language, "Erişim Ayarları", "Access Settings", "Sazkariyên Gihîştinê")}</h2>
+            <h2>{tx(language, "Admin Erişimi", "Admin Access", "Gihîştina Admîn")} — {user.name}</h2>
             <p>
               {tx(
                 language,
-                `${user.name} hangi çalışma alanlarını ve bu alanlardaki hangi kasaları görebilir? Çalışma alanı kutusu içindeki tüm kasaları birden seçer.`,
-                `Which workspaces, and which cash accounts inside them, can ${user.name} see? The workspace box selects all of its cash accounts.`,
-                `${user.name} dikare kîjan qadên xebatê û kîjan qaseyên di wan de bibîne? Qutiya qada xebatê hemû qaseyan hildibijêre.`,
+                "Bu admine verilecek bölümleri, çalışma alanlarını ve kasaları seçin. Değişiklik onaylanıp kaydedilince geçerli olur.",
+                "Choose the sections, workspaces and cash accounts this admin gets. Changes apply once confirmed and saved.",
+                "Beş, qadên xebatê û qaseyên ku ev admîn werdigire hilbijêre. Guhertin piştî erêkirin û tomarkirinê derbas dibin.",
               )}
             </p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
-        {accounts === null ? (
-          <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
-        ) : !accounts.length ? (
-          <small>{tx(language, "Henüz kasa yok.", "No kasas yet.", "Hîn qase tune.")}</small>
-        ) : (
-          <div className="accessWorkspaceList">
-            {workspaces.map((w) => {
-              const onCount = w.kasas.filter(isOn).length;
-              const all = onCount === w.kasas.length;
-              const lockedAll = w.kasas.every((a) => a.ownerUserId === user.id);
-              return (
-                <section key={w.key} className="accessWorkspace">
-                  <label className="accessWorkspaceHead">
-                    <input
-                      type="checkbox"
-                      checked={all}
-                      disabled={lockedAll}
-                      ref={(el) => {
-                        if (el) el.indeterminate = onCount > 0 && !all;
-                      }}
-                      onChange={(e) => toggleWorkspace(w.kasas, e.target.checked)}
-                    />
-                    <strong>{w.label}</strong>
-                    <small>{onCount}/{w.kasas.length}</small>
-                  </label>
-                  <div className="accessKasaGrid">
-                    {w.kasas.map((a) => {
-                      const owner = a.ownerUserId === user.id;
-                      return (
-                        <label key={a.id} className="accessKasaItem" title={owner ? tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye") : undefined}>
-                          <input type="checkbox" checked={isOn(a)} disabled={owner} onChange={(e) => toggleKasa(a.id, e.target.checked)} />
-                          <span>{a.name}{owner ? " ★" : ""}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+        <label className="accessFullToggle">
+          <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} />
+          <span>{tx(language, "Tüm bölümlere ve kasalara erişim (tam yetkili admin)", "Access to every section and cash account (full admin)", "Gihîştina hemû beş û qaseyan (admîna tevahî)")}</span>
+        </label>
+        {!fullAccess && (
+          <>
+            <div className="accessSectionTitle">{tx(language, "Bölümler", "Sections", "Beş")}</div>
+            <div className="accessKasaGrid" style={{ paddingLeft: 0 }}>
+              {accessPages.map((p) => (
+                <label key={p} className="accessKasaItem">
+                  <input type="checkbox" checked={pages.includes(p)} onChange={() => togglePage(p)} />
+                  <span>{nav.find((n) => n.id === p)?.label[language] ?? p}</span>
+                </label>
+              ))}
+            </div>
+            <div className="accessSectionTitle">{tx(language, "Çalışma alanları ve kasalar", "Workspaces and cash accounts", "Qadên xebatê û qase")}</div>
+            {accounts === null ? (
+              <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
+            ) : !accounts.length ? (
+              <small>{tx(language, "Henüz kasa yok.", "No kasas yet.", "Hîn qase tune.")}</small>
+            ) : (
+              <div className="accessWorkspaceList">
+                {workspaces.map((w) => {
+                  const onCount = w.kasas.filter(isOn).length;
+                  const all = onCount === w.kasas.length;
+                  const lockedAll = w.kasas.every((a) => a.ownerUserId === user.id);
+                  return (
+                    <section key={w.key} className="accessWorkspace">
+                      <label className="accessWorkspaceHead">
+                        <input
+                          type="checkbox"
+                          checked={all}
+                          disabled={lockedAll}
+                          ref={(el) => {
+                            if (el) el.indeterminate = onCount > 0 && !all;
+                          }}
+                          onChange={(e) => toggleWorkspace(w.kasas, e.target.checked)}
+                        />
+                        <strong>{w.label}</strong>
+                        <small>{onCount}/{w.kasas.length}</small>
+                      </label>
+                      <div className="accessKasaGrid">
+                        {w.kasas.map((a) => {
+                          const owner = a.ownerUserId === user.id;
+                          return (
+                            <label key={a.id} className="accessKasaItem" title={owner ? tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye") : undefined}>
+                              <input type="checkbox" checked={isOn(a)} disabled={owner} onChange={(e) => toggleKasa(a.id, e.target.checked)} />
+                              <span>{a.name}{owner ? " ★" : ""}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
+        <label className="accessFullToggle" style={{ marginTop: 10 }}>
+          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+          <span>{tx(language, "Bu erişim değişikliğini onaylıyorum.", "I confirm this access change.", "Ez vê guhertina gihîştinê erê dikim.")}</span>
+        </label>
         {error && <small className="formWarning" style={{ display: "block", marginTop: 8 }}>{error}</small>}
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Vazgeç", "Cancel", "Betal")}
           </button>
-          <button type="button" className="primary" disabled={saving || accounts === null || !accounts.length} onClick={save}>
-            {saving ? tx(language, "Kaydediliyor…", "Saving…", "Tê tomarkirin…") : tx(language, "Kaydet", "Save", "Tomar Bike")}
+          <button type="button" className="primary" disabled={saving || !confirmed || (!fullAccess && accounts === null)} onClick={save}>
+            {saving ? tx(language, "Kaydediliyor…", "Saving…", "Tê tomarkirin…") : tx(language, "Onayla ve Kaydet", "Confirm and Save", "Erê Bike û Tomar Bike")}
           </button>
         </div>
       </div>
@@ -454,11 +556,9 @@ function UserModal({
   const [username, setUsername] = useState(initial?.username ?? "");
   const [password, setPassword] = useState("");
   const [roleLabel, setRoleLabel] = useState(initial?.roleLabel ?? "");
-  const [isAdmin, setIsAdmin] = useState(initial?.isAdmin ?? false);
+  const isAdmin = initial?.isAdmin ?? false;
   const [isSuperAdmin, setIsSuperAdmin] = useState(initial?.isSuperAdmin ?? false);
-  const [permissions, setPermissions] = useState<Page[]>(initial?.permissions ?? []);
-  const togglePermission = (p: Page) =>
-    setPermissions((current) => current.includes(p) ? current.filter((x) => x !== p) : [...current, p]);
+  const permissions: Page[] = initial?.permissions ?? [];
   const usernameTaken = existingUsernames.includes(username.trim().toLowerCase());
   const pwError = passwordPolicyError(language, password, username);
   const valid =
@@ -481,9 +581,9 @@ function UserModal({
             username: username.trim(),
             password: password.trim(),
             roleLabel: roleLabel.trim(),
-            isAdmin: isAdmin || isSuperAdmin,
+            isAdmin: isSuperAdmin || isAdmin,
             isSuperAdmin,
-            permissions: isAdmin || isSuperAdmin ? [] : permissions,
+            permissions: isSuperAdmin || isAdmin ? [] : permissions,
           });
         }}
       >
@@ -534,34 +634,15 @@ function UserModal({
             {tx(language, "Rol Etiketi", "Role Label", "Nîşana Rolê")}
             <input required value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder={tx(language, "Örn. Finans Müdürü", "e.g. Finance Manager", "Mînak: Birêvebirê Darayî")} />
           </label>
-          <label className="wide relationTypeOption">
-            <input type="checkbox" checked={isAdmin || isSuperAdmin} disabled={isSuperAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
-            {tx(language, "Tam Yetkili (Yönetici) — tüm bölümlere erişebilir", "Full access (Admin) — can reach every section", "Destûra Tevahî (Rêveber) — dikare bighêje hemû beşan")}
-          </label>
-          {canGrantSuperAdmin && (
-            <label className="wide relationTypeOption">
-              <input type="checkbox" checked={isSuperAdmin} onChange={(e) => setIsSuperAdmin(e.target.checked)} />
-              ★ {tx(
-                language,
-                "Süper Admin — tüm kasalara erişir, kasa erişim atamalarını yapar",
-                "Super Admin — sees every kasa, manages kasa access grants",
-                "Super Admîn — bighêje hemû qasan, veqetandinên gihîştinê yên qasan birêve dibe",
+          <label className="wide">
+            {tx(language, "Kullanıcı Türü", "User Type", "Cureya Bikarhêner")}
+            <select value={isSuperAdmin ? "super" : "admin"} onChange={(e) => setIsSuperAdmin(e.target.value === "super")}>
+              <option value="admin">{tx(language, "Admin — erişimi “Admin Erişimi” düğmesinden verilir", "Admin — access is granted via “Admin Access”", "Admîn — gihîştin ji bişkoja “Gihîştina Admîn” tê dayin")}</option>
+              {canGrantSuperAdmin && (
+                <option value="super">★ {tx(language, "Süper Admin — tüm sisteme erişir", "Super Admin — full system access", "Super Admîn — gihîştina tevahiya pergalê")}</option>
               )}
-            </label>
-          )}
-          {!isAdmin && !isSuperAdmin && (
-            <div className="wide userPermissionGrid">
-              <small>{tx(language, "Erişebileceği bölümler", "Sections this user can access", "Beşên ku ev bikarhêner dikare bighêje")}</small>
-              <div className="userPermissionOptions">
-                {restrictablePages.map((p) => (
-                  <label key={p} className="userPermissionOption">
-                    <input type="checkbox" checked={permissions.includes(p)} onChange={() => togglePermission(p)} />
-                    {nav.find((n) => n.id === p)?.label[language] ?? p}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+            </select>
+          </label>
         </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
