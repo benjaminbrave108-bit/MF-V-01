@@ -439,9 +439,9 @@ export default function Home() {
       return false;
     }
   }
-  async function removeRecord(item: RecordItem) {
+  async function removeRecord(item: RecordItem, reason: string) {
     try {
-      const response = await fetch(`/api/records/${item.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/records/${item.id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
       if (!response.ok) {
         if (response.status === 423) {
           const info = await response.json().catch(() => ({}));
@@ -511,9 +511,9 @@ export default function Home() {
       alert(noteSaveError);
     }
   }
-  async function deleteNote(id: number) {
+  async function deleteNote(id: number, reason: string) {
     try {
-      const response = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/notes/${id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
       if (!response.ok) return alert(noteSaveError);
       setNotes((n) => n.filter((x) => x.id !== id));
     } catch {
@@ -569,9 +569,9 @@ export default function Home() {
       alert(reportSaveError);
     }
   }
-  async function deletePreparedReport(id: string) {
+  async function deletePreparedReport(id: string, reason: string) {
     try {
-      const response = await fetch(`/api/prepared-reports/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/prepared-reports/${id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
       if (!response.ok) return alert(reportSaveError);
       setPreparedReports((current) => current.filter((x) => x.id !== id));
     } catch {
@@ -968,10 +968,10 @@ export default function Home() {
           itemLabel={notes.find((n) => n.id === noteDeleteId)?.title || tx(language, "Not", "Note", "Nîşe")}
           checkPassword={checkPassword}
           onClose={() => setNoteDeleteId(null)}
-          onConfirm={() => {
+          onConfirm={(reason) => {
             const id = noteDeleteId;
             setNoteDeleteId(null);
-            deleteNote(id);
+            deleteNote(id, reason);
           }}
         />
       )}

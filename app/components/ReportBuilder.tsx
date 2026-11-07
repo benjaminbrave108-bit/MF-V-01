@@ -46,7 +46,7 @@ export function ReportBuilder({
   preparedReports: PreparedReport[];
   onCreateReport: (report: PreparedReport) => void;
   onUpdateReport: (report: PreparedReport) => void;
-  onDeleteReport: (id: string) => void;
+  onDeleteReport: (id: string, reason: string) => void;
   profile: Profile;
   checkPassword: (password: string) => Promise<boolean>;
   cashAccounts: CashAccountSummary[];
@@ -191,8 +191,8 @@ export function ReportBuilder({
           itemLabel={deleteTarget.title}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            onDeleteReport(deleteTarget.id);
+          onConfirm={(reason) => {
+            onDeleteReport(deleteTarget.id, reason);
             if (openId === deleteTarget.id) setOpenId(null);
             setDeleteTarget(null);
           }}

@@ -61,6 +61,7 @@ export type ArchiveItem = {
   at: string;
   user: string;
   old: RecordItem;
+  reason?: string;
 };
 export type NoteStatus = "important" | "urgent" | "pending" | "completed";
 export type NoteRelation = "none" | "cash" | "income" | "expense" | "reports" | "archive" | "other";

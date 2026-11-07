@@ -10,5 +10,6 @@ export function toClientArchiveItem(row: typeof archive.$inferSelect) {
     at: row.at instanceof Date ? row.at.toISOString() : row.at,
     user: row.userName,
     old: row.oldRecord,
+    reason: row.reason,
   };
 }

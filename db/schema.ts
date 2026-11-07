@@ -360,6 +360,8 @@ export const archive = pgTable("archive", {
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   userName: text("user_name").notNull(),
   oldRecord: jsonb("old_record").notNull(),
+  // Silme gerekçesi (yalnızca "Silindi" kayıtlarında dolu).
+  reason: text("reason").notNull().default(""),
 }, (table) => [
   index("archive_at_idx").on(table.at.desc()),
 ]);

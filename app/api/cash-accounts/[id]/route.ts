@@ -17,7 +17,7 @@ const kasaUpdateSchema = z.object({
   sectionId: z.number().int().nullable().optional(),
 });
 
-const kasaDeleteSchema = z.object({ password: z.string().min(1).max(200) });
+const kasaDeleteSchema = z.object({ password: z.string().min(1).max(200), reason: z.string().trim().min(3).max(500) });
 
 function parseId(value: string): number | null {
   const id = Number(value);
@@ -26,7 +26,7 @@ function parseId(value: string): number | null {
 
 // PUT /api/cash-accounts/:id — kasayı düzenle (ad, Liste/RJ işareti, bölüm).
 // Ad değişirse kasaya bağlı tüm kayıtların kasa adı da güncellenir.
-import { logActivity } from "../../_lib/activity";
+import { logActivity, withReason } from "../../_lib/activity";
 
 export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireSession(request);
@@ -103,12 +103,12 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   const deleted = await db.transaction(async (tx) => {
     const rows = await tx.select().from(records).where(eq(records.cashAccountId, id));
     if (rows.length > 0) {
-      await tx.insert(archive).values(rows.map((old) => ({ action: "Silindi", userName: session.user.name, oldRecord: old })));
+      await tx.insert(archive).values(rows.map((old) => ({ action: "Silindi", userName: session.user.name, oldRecord: old, reason: `Kasa silindi: ${parsed.data.reason}` })));
       await tx.delete(records).where(eq(records.cashAccountId, id));
     }
     await tx.delete(cashAccounts).where(eq(cashAccounts.id, id));
     return rows.length;
   });
-  await logActivity(session.user, { category: "cash", action: "delete", summary: `Kasa silindi: ${account.name} (${deleted} kayıt Arşiv'e taşındı)`, workspace: "", meta: { id } });
+  await logActivity(session.user, { category: "cash", action: "delete", summary: withReason(`Kasa silindi: ${account.name} (${deleted} kayıt Arşiv'e taşındı)`, parsed.data.reason), workspace: "", meta: { id } });
   return json({ ok: true, deletedRecords: deleted });
 });

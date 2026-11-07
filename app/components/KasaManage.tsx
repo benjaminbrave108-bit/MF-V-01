@@ -139,18 +139,19 @@ export function KasaDeleteModal({
   onDone: () => void;
 }) {
   const [password, setPassword] = useState("");
+  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function confirmDelete() {
-    if (!password) return;
+    if (!password || reason.trim().length < 3) return;
     setBusy(true);
     setError("");
     try {
       const response = await fetch(`/api/cash-accounts/${account.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, reason: reason.trim() }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -186,6 +187,10 @@ export function KasaDeleteModal({
             )}
           </p>
           <label>
+            {tx(language, "Silme gerekçesi (zorunlu)", "Reason for deleting (required)", "Sedema jêbirinê (pêwîst)")}
+            <textarea rows={2} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <label>
             {tx(language, "Onay için şifrenizi girin", "Enter your password to confirm", "Ji bo erêkirinê şîfreya xwe binivîse")}
             <input
               type="password"
@@ -202,7 +207,7 @@ export function KasaDeleteModal({
         </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-          <button type="button" className="danger" disabled={busy || !password} onClick={confirmDelete}>
+          <button type="button" className="danger" disabled={busy || !password || reason.trim().length < 3} onClick={confirmDelete}>
             {tx(language, "Kasayı Kalıcı Sil", "Delete Permanently", "Bi Temamî Jê Bibe")}
           </button>
         </div>

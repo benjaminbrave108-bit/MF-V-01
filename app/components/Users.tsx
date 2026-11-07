@@ -155,9 +155,9 @@ export function Users({
           itemLabel={`${deleteTarget.name} (@${deleteTarget.username})`}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={async () => {
+          onConfirm={async (reason) => {
             try {
-              const response = await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
+              const response = await fetch(`/api/users/${deleteTarget.id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
               if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 alert(body.error || tx(language, "Kullanıcı silinemedi.", "The user could not be deleted.", "Bikarhêner nehat jêbirin."));

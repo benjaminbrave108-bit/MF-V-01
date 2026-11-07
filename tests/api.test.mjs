@@ -151,7 +151,7 @@ test("records: create, partial update, archive, delete", async () => {
   });
   assert.equal(staleUpdate.status, 409);
 
-  const remove = await call("DELETE", `/api/records/${record.id}`, { cookie: adminCookie });
+  const remove = await call("DELETE", `/api/records/${record.id}?reason=test%20cleanup`, { cookie: adminCookie });
   assert.equal(remove.status, 200);
   assert.equal(remove.json.archiveEntry.action, "Silindi");
   createdRecordIds.splice(createdRecordIds.indexOf(record.id), 1);

@@ -53,7 +53,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   return json({ note: { ...note, assignedUserNames, isUnread: false } });
 });
 
-import { logActivity } from "../../_lib/activity";
+import { deleteReason, logActivity, withReason } from "../../_lib/activity";
 
 export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requirePermission(request, "notes");
@@ -65,6 +65,6 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
 
   const db = getDb();
   await db.delete(financeNotes).where(eq(financeNotes.id, id));
-  await logActivity(session.user, { category: "note", action: "delete", summary: "Not silindi" });
+  await logActivity(session.user, { category: "note", action: "delete", summary: withReason("Not silindi", deleteReason(request)) });
   return json({ ok: true });
 });

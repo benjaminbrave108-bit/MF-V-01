@@ -26,6 +26,12 @@ export async function workspaceOfKasa(kasaName: string | null | undefined): Prom
   }
 }
 
+// DELETE isteklerinde ?reason= ile gelen silme gerekçesi.
+export function deleteReason(request: Request): string {
+  return (new URL(request.url).searchParams.get("reason") ?? "").trim().slice(0, 500);
+}
+export const withReason = (summary: string, reason: string) => (reason ? `${summary} — Gerekçe: ${reason}` : summary);
+
 export function formatAmount(amount: number, currency: string): string {
   const symbol = currency === "USD" ? "$" : "";
   const text = amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -943,7 +943,7 @@ export function Records({
   allRecords: RecordItem[];
   onAdd: (kind?: Kind, cashAccount?: string) => void;
   onEdit: (x: RecordItem) => void;
-  onDelete: (x: RecordItem) => void;
+  onDelete: (x: RecordItem, reason: string) => void;
   onImport: (rows: Omit<RecordItem, "id">[]) => void;
   checkPassword: (password: string) => Promise<boolean>;
   cashAccounts: CashAccountSummary[];
@@ -2995,8 +2995,8 @@ export function Records({
           itemLabel={`${localizeData(deleteTarget.source, language)} · ${money(deleteTarget.amount, deleteTarget.currency)}`}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            onDelete(deleteTarget);
+          onConfirm={(reason) => {
+            onDelete(deleteTarget, reason);
             setDeleteTarget(null);
           }}
         />

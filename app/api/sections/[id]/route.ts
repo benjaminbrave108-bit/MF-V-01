@@ -4,7 +4,7 @@ import { cashAccounts, kasaSections, records } from "../../../../db/schema";
 import { requireSession } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
 import { parseBody, sectionUpdateSchema } from "../../_lib/validate";
-import { logActivity } from "../../_lib/activity";
+import { deleteReason, logActivity, withReason } from "../../_lib/activity";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -42,6 +42,6 @@ export const DELETE = withErrorHandling<Ctx>(async (request, { params }) => {
     await tx.update(records).set({ sectionId: null }).where(eq(records.sectionId, id));
     await tx.delete(kasaSections).where(eq(kasaSections.id, id));
   });
-  await logActivity(session.user, { category: "workspace", action: "delete", summary: `Çalışma alanı silindi: ${gone?.name ?? id}`, workspace: gone?.name ?? "" });
+  await logActivity(session.user, { category: "workspace", action: "delete", summary: withReason(`Çalışma alanı silindi: ${gone?.name ?? id}`, deleteReason(request)), workspace: gone?.name ?? "" });
   return json({ ok: true });
 });

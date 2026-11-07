@@ -245,6 +245,7 @@ function WorkspaceDeleteModal({
   const [tempName, setTempName] = useState(tx(language, "Geçici Kasalar", "Temporary Cash Accounts", "Qaseyên Demkî"));
   const [target, setTarget] = useState(others[0]?.key ?? "genel");
   const [password, setPassword] = useState("");
+  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -286,7 +287,7 @@ function WorkspaceDeleteModal({
           return;
         }
       }
-      const removed = await fetch(`/api/sections/${section.id}`, { method: "DELETE" });
+      const removed = await fetch(`/api/sections/${section.id}?reason=${encodeURIComponent(reason.trim())}`, { method: "DELETE" });
       if (!removed.ok) {
         setError(tx(language, "Çalışma alanı silinemedi.", "The workspace could not be deleted.", "Qada xebatê nehat jêbirin."));
         return;
@@ -338,6 +339,10 @@ function WorkspaceDeleteModal({
             <p className="kasaManageWarn">{tx(language, "Bu çalışma alanında kasa yok; yalnızca çalışma alanı silinecek.", "This workspace has no cash accounts; only the workspace is deleted.", "Di vê qada xebatê de qase tune; tenê qada xebatê tê jêbirin.")}</p>
           )}
           <label>
+            {tx(language, "Silme gerekçesi (zorunlu)", "Reason for deleting (required)", "Sedema jêbirinê (pêwîst)")}
+            <textarea rows={2} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <label>
             {tx(language, "Onay için şifrenizi girin", "Enter your password to confirm", "Ji bo erêkirinê şîfreya xwe binivîse")}
             <input type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
           </label>
@@ -345,7 +350,7 @@ function WorkspaceDeleteModal({
         </div>
         <div className="modalActions">
           <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-          <button type="button" className="danger" disabled={busy || !password} onClick={confirmDelete}>
+          <button type="button" className="danger" disabled={busy || !password || reason.trim().length < 3} onClick={confirmDelete}>
             {tx(language, "Çalışma Alanını Sil", "Delete Workspace", "Qada Xebatê Jê Bibe")}
           </button>
         </div>

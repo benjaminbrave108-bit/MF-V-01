@@ -23,6 +23,7 @@ function ArchiveRecordsTable({ language, rows }: { language: Language; rows: Arc
             <th>{tx(language, "Birim / Kasa", "Unit / Cash", "Yekîne / Qase")}</th>
             <th>{tx(language, "Eski Tutar", "Previous Amount", "Meblağa Berê")}</th>
             <th>{tx(language, "Kullanıcı", "User", "Bikarhêner")}</th>
+            <th>{tx(language, "Silme Gerekçesi", "Deletion Reason", "Sedema Jêbirinê")}</th>
           </tr>
         </thead>
         <tbody>
@@ -46,11 +47,12 @@ function ArchiveRecordsTable({ language, rows }: { language: Language; rows: Arc
               <td>{localizeData(x.old.kind === "cash" ? x.old.source : x.old.project, language)}</td>
               <td className="amount">{money(x.old.amount)}</td>
               <td>{localizeData(x.user, language)}</td>
+              <td>{x.action === "Silindi" ? x.reason || "—" : ""}</td>
             </tr>
           ))}
           {!rows.length && (
             <tr>
-              <td colSpan={8} className="empty">
+              <td colSpan={9} className="empty">
                 {tx(
                   language,
                   "Seçilen filtrelere uygun arşiv kaydı bulunamadı.",

@@ -189,9 +189,10 @@ export function DeleteConfirmModal({
   confirmLabel?: string;
   checkPassword: (password: string) => Promise<boolean>;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
+  const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
   return (
@@ -201,14 +202,14 @@ export function DeleteConfirmModal({
         onSubmit={async (e) => {
           e.preventDefault();
           if (step === 1) {
-            setStep(2);
+            if (reason.trim().length >= 3) setStep(2);
             return;
           }
           if (!(await checkPassword(password))) {
             setError(true);
             return;
           }
-          onConfirm();
+          onConfirm(reason.trim());
         }}
       >
         <div className="modalHead">
@@ -221,6 +222,7 @@ export function DeleteConfirmModal({
           </button>
         </div>
         {step === 1 ? (
+          <>
           <p className="deleteWarning">
             {warningText ?? tx(
               language,
@@ -229,6 +231,18 @@ export function DeleteConfirmModal({
               "Ev qeyd dê bi awayekî domdar were jêbirin. Rewşa berê di Arşîvê de tê parastin. Domandin?",
             )}
           </p>
+          <label className="settingLabel">
+            {tx(language, "Silme gerekçesi (zorunlu)", "Reason for deleting (required)", "Sedema jêbirinê (pêwîst)")}
+            <textarea
+              autoFocus
+              rows={3}
+              value={reason}
+              maxLength={500}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={tx(language, "Bu neden siliniyor? En az 3 karakter yazın.", "Why is this being deleted? Write at least 3 characters.", "Ev çima tê jêbirin? Herî kêm 3 karakter binivîse.")}
+            />
+          </label>
+          </>
         ) : (
           <label className="settingLabel">
             {tx(
@@ -258,7 +272,7 @@ export function DeleteConfirmModal({
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Vazgeç", "Cancel", "Betal")}
           </button>
-          <button className="danger">
+          <button className="danger" disabled={step === 1 && reason.trim().length < 3}>
             {step === 1
               ? tx(language, "Devam Et", "Continue", "Bidomîne")
               : confirmLabel ?? tx(language, "Kalıcı Olarak Sil", "Delete Permanently", "Bi Domdarî Jêbibe")}

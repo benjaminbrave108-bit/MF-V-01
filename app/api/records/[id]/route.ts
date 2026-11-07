@@ -10,7 +10,7 @@ import { cashAccounts } from "../../../../db/schema";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
-import { formatAmount, logActivity } from "../../_lib/activity";
+import { deleteReason, formatAmount, logActivity, withReason } from "../../_lib/activity";
 
 function canAccessKind(user: { isAdmin: boolean; permissions: string[] }, kind: string): boolean {
   return user.isAdmin || user.permissions.includes(kind as Kind);
@@ -138,6 +138,9 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   const id = Number(idParam);
   if (!Number.isFinite(id)) return json({ error: "Invalid id" }, { status: 400 });
 
+  const reason = deleteReason(request);
+  if (reason.length < 3) return json({ error: "Silme gerekçesi zorunludur" }, { status: 400 });
+
   const db = getDb();
   const existingRows = await db.select().from(records).where(eq(records.id, id)).limit(1);
   const old = existingRows[0];
@@ -158,6 +161,7 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
         action: "Silindi",
         userName: session.user.name,
         oldRecord: old,
+        reason,
       })
       .returning();
   });
@@ -165,7 +169,7 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   await logActivity(session.user, {
     category: old.kind,
     action: "delete",
-    summary: `${({ income: "Gelir", expense: "Gider", cash: "Kasa" } as Record<string, string>)[old.kind]} silindi: ${old.source} — ${formatAmount(old.amount, old.currency)}`,
+    summary: withReason(`${({ income: "Gelir", expense: "Gider", cash: "Kasa" } as Record<string, string>)[old.kind]} silindi: ${old.source} — ${formatAmount(old.amount, old.currency)}`, reason),
     kasa: old.kind === "cash" ? old.source : old.cashAccount,
     meta: { id: old.id },
   });

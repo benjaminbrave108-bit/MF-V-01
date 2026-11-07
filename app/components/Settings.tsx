@@ -523,10 +523,10 @@ function SectionsPanel({ language, sections, onChanged, checkPassword }: { langu
           warningText={tx(language, "Kasa ve kayıtlar silinmez; bölümsüz (Diğer) kalır.", "Cash accounts and records are kept without a section.", "Qase û tomar nayên jêbirin; bê beş dimînin.")}
           checkPassword={checkPassword}
           onClose={() => setDeleteTarget(null)}
-          onConfirm={() => {
+          onConfirm={(reason) => {
             const target = deleteTarget;
             setDeleteTarget(null);
-            call(`/api/sections/${target.id}`, "DELETE");
+            call(`/api/sections/${target.id}?reason=${encodeURIComponent(reason)}`, "DELETE");
           }}
         />
       )}
