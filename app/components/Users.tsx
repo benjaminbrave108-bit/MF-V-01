@@ -49,180 +49,92 @@ export function Users({
   onlineUserIds: number[];
 }) {
   const onlineSet = new Set(onlineUserIds);
-  const [editing, setEditing] = useState<UserAccount | "new" | null>(null);
+  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null);
-  const [accessTarget, setAccessTarget] = useState<UserAccount | null>(null);
   const adminCount = users.filter((u) => u.isAdmin).length;
   const superAdminCount = users.filter((u) => u.isSuperAdmin).length;
+  const selected = typeof selectedId === "number" ? users.find((u) => u.id === selectedId) ?? null : null;
+  const cardColors = ["#4f7d0f", "#f2c61b", "#1f6f87", "#7b52bf", "#d85a30", "#d4537e", "#0f6e56", "#5f5e5a"];
+
+  async function unlock(u: UserAccount) {
+    try {
+      const response = await fetch(`/api/users/${u.id}/unlock`, { method: "POST" });
+      if (!response.ok) return false;
+      const data = await response.json();
+      setUsers((current) => current.map((x) => (x.id === data.user.id ? { ...x, ...data.user } : x)));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return (
     <div className="panel">
       <div className="toolbar">
         <Title
-          title={tx(language, "Kullanıcılar", "Users", "Bikarhêner")}
+          title={tx(language, "Kullanıcılar ve Yetkiler", "Users & Permissions", "Bikarhêner û Destûr")}
           sub={
-            currentUserIsAdmin
-              ? tx(
-                  language,
-                  "Uygulama kullanıcıları, rolleri ve erişim izinleri",
-                  "Application users, roles and access permissions",
-                  "Bikarhêner, rol û destûrên gihîştinê yên bernameyê",
-                )
-              : tx(
-                  language,
-                  "Kendi hesap bilgilerinizi buradan görüntüleyip düzenleyebilirsiniz",
-                  "View and edit your own account details here",
-                  "Hûn dikarin agahiyên hesabê xwe li vir bibînin û biguherînin",
-                )
+            currentUserIsSuperAdmin
+              ? tx(language, "Hesapları, kullanıcı türlerini ve erişimleri buradan yönetin", "Manage accounts, user types and access here", "Hesab, cureyên bikarhêneran û gihîştinê li vir birêve bibe")
+              : tx(language, "Kendi hesap bilgilerinizi buradan görüntüleyip düzenleyebilirsiniz", "View and edit your own account details here", "Hûn dikarin agahiyên hesabê xwe li vir bibînin û biguherînin")
           }
         />
         {currentUserIsSuperAdmin && (
-          <button className="primary" onClick={() => setEditing("new")}>
-            ＋{" "}
-            {tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}
+          <button className="primary" onClick={() => setSelectedId("new")}>
+            ＋ {tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}
           </button>
         )}
       </div>
       {currentUserIsSuperAdmin && <AccessBoard language={language} sections={sections} />}
-      <div className="users">
-        {users.map((u) => {
+      <div className="userCardGrid">
+        {users.map((u, index) => {
           const isSelf = u.username === currentUsername;
-          const isLastAdmin = u.isAdmin && adminCount <= 1;
-          const isLastSuperAdmin = u.isSuperAdmin && superAdminCount <= 1;
+          if (!currentUserIsSuperAdmin && !isSelf) return null;
           const isOnline = onlineSet.has(u.id);
+          const access = u.isSuperAdmin
+            ? tx(language, "Süper Admin", "Super Admin", "Super Admîn")
+            : u.isAdmin
+              ? tx(language, "Tam yetki", "Full access", "Destûra tevahî")
+              : `${u.permissions.length} ${tx(language, "yetki", "permissions", "destûr")}`;
           return (
-            <article key={u.id}>
-              <b className="userAvatarWrap">
-                {u.name.slice(0, 1).toUpperCase()}
-                <span
-                  className={`userOnlineDot${isOnline ? " online" : ""}`}
-                  title={isOnline ? tx(language, "Çevrimiçi", "Online", "Girêdayî") : tx(language, "Çevrimdışı", "Offline", "Negirêdayî")}
-                />
-              </b>
+            <button key={u.id} type="button" className={`userCard${selectedId === u.id ? " selected" : ""}`} onClick={() => setSelectedId(selectedId === u.id ? null : u.id)}>
+              <b style={{ background: cardColors[index % cardColors.length], color: cardColors[index % cardColors.length] === "#f2c61b" ? "#1f2e33" : "#fff" }}>{u.name.slice(0, 2).toUpperCase()}</b>
               <span>
                 <strong>{u.name}</strong>
-                <small>@{u.username}</small>
-                <small className={`userOnlineLabel${isOnline ? " online" : ""}`}>
-                  {isOnline ? tx(language, "● Çevrimiçi", "● Online", "● Girêdayî") : tx(language, "○ Çevrimdışı", "○ Offline", "○ Negirêdayî")}
-                </small>
-                <em>{u.roleLabel}</em>
-                {u.locked && (
-                  <span className="userPermTag userPermTagLocked">
-                    🔒{" "}
-                    {tx(
-                      language,
-                      "Kilitli — güvenlik nedeniyle askıda",
-                      "Locked — suspended for security",
-                      "Kilît — ji ber ewlehiyê hate rawestandin",
-                    )}
-                  </span>
-                )}
-                <div className="userPermissions">
-                  {u.isSuperAdmin && (
-                    <span className="userPermTag userPermTagAdmin">
-                      ★ {tx(language, "Süper Admin", "Super Admin", "Super Admîn")}
-                    </span>
-                  )}
-                  {!u.isSuperAdmin && (
-                    <span className="userPermTag">{tx(language, "Admin", "Admin", "Admîn")}</span>
-                  )}
-                  {u.isAdmin ? (
-                    <span className="userPermTag userPermTagAdmin">
-                      {tx(language, "Tüm bölümlere erişim", "Access to all sections", "Gihîştina hemû beşan")}
-                    </span>
-                  ) : u.permissions.length ? (
-                    u.permissions.map((p) => (
-                      <span key={p} className="userPermTag">
-                        {nav.find((n) => n.id === p)?.label[language] ?? p}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="userPermTag userPermTagEmpty">
-                      {tx(language, "Erişim yok", "No access", "Destûr tune")}
-                    </span>
-                  )}
-                </div>
-                <div className="userActions">
-                  <button type="button" onClick={() => setEditing(u)}>
-                    ✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}
-                  </button>
-                  {currentUserIsSuperAdmin && !u.isSuperAdmin && (
-                    <button type="button" onClick={() => setAccessTarget(u)}>
-                      🔑 {tx(language, "Admin Erişimi", "Admin Access", "Gihîştina Admîn")}
-                    </button>
-                  )}
-                  {u.locked && currentUserIsSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const response = await fetch(`/api/users/${u.id}/unlock`, { method: "POST" });
-                          if (!response.ok) {
-                            alert(tx(language, "Kilit açılamadı.", "Could not unlock the account.", "Kilît nehat vekirin."));
-                            return;
-                          }
-                          const data = await response.json();
-                          setUsers((current) => current.map((x) => (x.id === data.user.id ? { ...x, ...data.user } : x)));
-                        } catch {
-                          alert(tx(language, "Kilit açılamadı.", "Could not unlock the account.", "Kilît nehat vekirin."));
-                        }
-                      }}
-                    >
-                      🔓 {tx(language, "Kilidi Aç", "Unlock", "Kilîtê Veke")}
-                    </button>
-                  )}
-                  {currentUserIsSuperAdmin && !isSelf && !isLastAdmin && !isLastSuperAdmin && (
-                    <button type="button" className="redText" onClick={() => setDeleteTarget(u)}>
-                      🗑 {tx(language, "Sil", "Delete", "Jêbibe")}
-                    </button>
-                  )}
-                </div>
+                <small>@{u.username} · {access}</small>
               </span>
-            </article>
+              <em className={u.locked ? "locked" : isOnline ? "online" : ""}>
+                {u.locked ? tx(language, "Kilitli", "Locked", "Kilît") : isOnline ? tx(language, "Çevrimiçi", "Online", "Girêdayî") : tx(language, "Aktif", "Active", "Çalak")}
+              </em>
+            </button>
           );
         })}
       </div>
-      {editing && currentUserIsSuperAdmin && (
-        <UserModal
+      {selectedId !== null && currentUserIsSuperAdmin && (selectedId === "new" || selected) && (
+        <UserManagePanel
+          key={String(selectedId)}
           language={language}
-          initial={editing === "new" ? null : editing}
-          existingUsernames={users.filter((u) => u !== editing).map((u) => u.username.toLowerCase())}
-          canGrantSuperAdmin={currentUserIsSuperAdmin}
-          onClose={() => setEditing(null)}
-          onSave={async (input) => {
-            try {
-              const response = await fetch(input.id ? `/api/users/${input.id}` : "/api/users", {
-                method: input.id ? "PUT" : "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(input),
-              });
-              if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                alert(body.error || tx(language, "Kullanıcı kaydedilemedi.", "The user could not be saved.", "Bikarhêner nehat tomarkirin."));
-                return;
-              }
-              const data = await response.json();
-              setUsers((current) =>
-                input.id ? current.map((u) => (u.id === data.user.id ? data.user : u)) : [...current, data.user],
-              );
-              setEditing(null);
-            } catch {
-              alert(tx(language, "Kullanıcı kaydedilemedi.", "The user could not be saved.", "Bikarhêner nehat tomarkirin."));
-            }
+          initial={selected}
+          existingUsernames={users.filter((u) => u.id !== selected?.id).map((u) => u.username.toLowerCase())}
+          sections={sections}
+          canDelete={Boolean(selected) && selected!.username !== currentUsername && !(selected!.isAdmin && adminCount <= 1) && !(selected!.isSuperAdmin && superAdminCount <= 1)}
+          onClose={() => setSelectedId(null)}
+          onSaved={(saved, created) => {
+            setUsers((current) => (created ? [...current, saved] : current.map((u) => (u.id === saved.id ? saved : u))));
+            setSelectedId(created ? saved.id : selectedId);
           }}
+          onDelete={() => selected && setDeleteTarget(selected)}
+          onUnlock={() => (selected ? unlock(selected) : Promise.resolve(false))}
         />
       )}
-      {editing && editing !== "new" && !currentUserIsSuperAdmin && (
+      {selected && !currentUserIsSuperAdmin && (
         <SelfEditModal
           language={language}
-          initial={editing}
-          onClose={() => setEditing(null)}
+          initial={selected}
+          onClose={() => setSelectedId(null)}
           onSave={async (input) => {
             try {
-              const response = await fetch(`/api/users/${input.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(input),
-              });
+              const response = await fetch(`/api/users/${input.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
               if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 alert(body.error || tx(language, "Bilgiler kaydedilemedi.", "The details could not be saved.", "Agahî nehat tomarkirin."));
@@ -230,7 +142,7 @@ export function Users({
               }
               const data = await response.json();
               setUsers((current) => current.map((u) => (u.id === data.user.id ? data.user : u)));
-              setEditing(null);
+              setSelectedId(null);
             } catch {
               alert(tx(language, "Bilgiler kaydedilemedi.", "The details could not be saved.", "Agahî nehat tomarkirin."));
             }
@@ -252,20 +164,12 @@ export function Users({
                 return;
               }
               setUsers((current) => current.filter((u) => u.id !== deleteTarget.id));
+              setSelectedId(null);
             } catch {
               alert(tx(language, "Kullanıcı silinemedi.", "The user could not be deleted.", "Bikarhêner nehat jêbirin."));
             }
             setDeleteTarget(null);
           }}
-        />
-      )}
-      {accessTarget && currentUserIsSuperAdmin && (
-        <AdminAccessModal
-          language={language}
-          user={accessTarget}
-          sections={sections}
-          onClose={() => setAccessTarget(null)}
-          onSaved={(saved) => setUsers((current) => current.map((x) => (x.id === saved.id ? saved : x)))}
         />
       )}
     </div>
@@ -333,29 +237,44 @@ function AccessBoard({ language, sections }: { language: Language; sections: Kas
   );
 }
 
-// Admin Erişimi: bir admine hangi bölümlerin ve (tam yetkili değilse) hangi çalışma alanı / kasaların verileceği.
-// Değişiklikler taslak olarak tutulur; onay kutusu işaretlenip "Onayla ve Kaydet" ile tek seferde yazılır.
-function AdminAccessModal({
+
+// Seçilen kullanıcının hesabı, türü ve erişimleri tek panelde: sol sütun bölümler, sağ sütun çalışma alanları ve kasalar.
+// Değişiklikler taslak olarak tutulur; onay kutusu işaretlenip "Kaydet" ile tek seferde yazılır.
+function UserManagePanel({
   language,
-  user,
+  initial,
+  existingUsernames,
   sections,
+  canDelete,
   onClose,
   onSaved,
+  onDelete,
+  onUnlock,
 }: {
   language: Language;
-  user: UserAccount;
+  initial: UserAccount | null;
+  existingUsernames: string[];
   sections: KasaSection[];
+  canDelete: boolean;
   onClose: () => void;
-  onSaved: (user: UserAccount) => void;
+  onSaved: (user: UserAccount, created: boolean) => void;
+  onDelete: () => void;
+  onUnlock: () => Promise<boolean>;
 }) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [username, setUsername] = useState(initial?.username ?? "");
+  const [password, setPassword] = useState("");
+  const [roleLabel, setRoleLabel] = useState(initial?.roleLabel ?? "");
+  const [isSuper, setIsSuper] = useState(initial?.isSuperAdmin ?? false);
+  const [fullAccess, setFullAccess] = useState(initial?.isAdmin ?? false);
+  const [pages, setPages] = useState<Page[]>(initial?.permissions ?? []);
   const [accounts, setAccounts] = useState<CashAccountSummary[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [fullAccess, setFullAccess] = useState(user.isAdmin);
-  const [pages, setPages] = useState<Page[]>(user.permissions);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const failText = tx(language, "Erişim ayarları kaydedilemedi.", "Access settings could not be saved.", "Sazkariyên gihîştinê nehatin tomarkirin.");
+  const failText = tx(language, "Kullanıcı kaydedilemedi.", "The user could not be saved.", "Bikarhêner nehat tomarkirin.");
+  const userId = initial?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -365,30 +284,30 @@ function AdminAccessModal({
         const data = await response.json().catch(() => ({}));
         const list: CashAccountSummary[] = response.ok ? (data.cashAccounts ?? []) : [];
         let granted: number[] = [];
-        if (list.length) {
+        if (list.length && userId != null) {
           const access = await fetch(`/api/workspace-access?cashAccountIds=${list.map((a) => a.id).join(",")}`);
           const accessData = await access.json().catch(() => ({}));
-          if (access.ok) granted = accessData.grants?.[String(user.id)] ?? [];
-          else if (!cancelled) setError(accessData.error || failText);
+          if (access.ok) granted = accessData.grants?.[String(userId)] ?? [];
         }
         if (cancelled) return;
         setAccounts(list);
         setSelected(new Set(granted));
       } catch {
-        if (!cancelled) {
-          setAccounts([]);
-          setError(failText);
-        }
+        if (!cancelled) setAccounts([]);
       }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.id]);
+  }, [userId]);
 
+  const usernameTaken = !initial && existingUsernames.includes(username.trim().toLowerCase());
+  const pwError = passwordPolicyError(language, password, username);
+  const valid = Boolean(name.trim()) && Boolean(username.trim()) && !usernameTaken && Boolean(roleLabel.trim()) && (Boolean(initial) || Boolean(password.trim())) && !pwError && confirmed;
+  const limited = !isSuper && !fullAccess;
   const workspaces = groupKasasByWorkspace(accounts ?? [], sections, language);
-  const isOn = (a: CashAccountSummary) => a.ownerUserId === user.id || selected.has(a.id);
+  const isOn = (a: CashAccountSummary) => (userId != null && a.ownerUserId === userId) || selected.has(a.id);
+  const togglePage = (p: Page) => setPages((current) => (current.includes(p) ? current.filter((x) => x !== p) : [...current, p]));
   const toggleKasa = (id: number, on: boolean) =>
     setSelected((current) => {
       const next = new Set(current);
@@ -405,37 +324,49 @@ function AdminAccessModal({
       }
       return next;
     });
-  const togglePage = (p: Page) => setPages((current) => (current.includes(p) ? current.filter((x) => x !== p) : [...current, p]));
 
   async function save() {
-    if (!accounts) return;
+    if (!valid) return;
     setSaving(true);
     setError("");
     try {
-      const userResponse = await fetch(`/api/users/${user.id}`, {
-        method: "PUT",
+      const body = {
+        name: name.trim(),
+        roleLabel: roleLabel.trim(),
+        password: password.trim(),
+        isAdmin: isSuper || fullAccess,
+        isSuperAdmin: isSuper,
+        permissions: limited ? pages : [],
+        ...(initial ? {} : { username: username.trim() }),
+      };
+      const response = await fetch(initial ? `/api/users/${initial.id}` : "/api/users", {
+        method: initial ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: user.name, roleLabel: user.roleLabel, isAdmin: fullAccess, isSuperAdmin: false, permissions: fullAccess ? [] : pages, password: "" }),
+        body: JSON.stringify(body),
       });
-      const userBody = await userResponse.json().catch(() => ({}));
-      if (!userResponse.ok) {
-        setError(userBody.error || failText);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || failText);
         return;
       }
-      if (!fullAccess && accounts.length) {
-        const response = await fetch("/api/workspace-access", {
+      const saved: UserAccount = data.user;
+      if (limited && accounts && accounts.length) {
+        const access = await fetch("/api/workspace-access", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cashAccountIds: accounts.map((a) => a.id), grants: { [String(user.id)]: [...selected] } }),
+          body: JSON.stringify({ cashAccountIds: accounts.map((a) => a.id), grants: { [String(saved.id)]: [...selected] } }),
         });
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          setError(body.error || failText);
+        if (!access.ok) {
+          const accessBody = await access.json().catch(() => ({}));
+          onSaved(saved, !initial);
+          setError(accessBody.error || tx(language, "Hesap kaydedildi ama kasa erişimi kaydedilemedi.", "The account was saved but cash access could not be saved.", "Hesab hate tomarkirin lê gihîştina qaseyê nehat tomarkirin."));
           return;
         }
       }
-      onSaved(userBody.user);
-      onClose();
+      onSaved(saved, !initial);
+      setPassword("");
+      setConfirmed(false);
+      if (!initial) onClose();
     } catch {
       setError(failText);
     } finally {
@@ -444,211 +375,135 @@ function AdminAccessModal({
   }
 
   return (
-    <div className="overlay">
-      <div className="modal accessSettingsModal">
-        <div className="modalHead">
-          <div>
-            <h2>{tx(language, "Admin Erişimi", "Admin Access", "Gihîştina Admîn")} — {user.name}</h2>
-            <p>
-              {tx(
-                language,
-                "Bu admine verilecek bölümleri, çalışma alanlarını ve kasaları seçin. Değişiklik onaylanıp kaydedilince geçerli olur.",
-                "Choose the sections, workspaces and cash accounts this admin gets. Changes apply once confirmed and saved.",
-                "Beş, qadên xebatê û qaseyên ku ev admîn werdigire hilbijêre. Guhertin piştî erêkirin û tomarkirinê derbas dibin.",
-              )}
-            </p>
-          </div>
-          <button type="button" onClick={onClose}>×</button>
+    <div className="userManage">
+      <div className="userManageHead">
+        <div>
+          <h3>{initial ? tx(language, "Hesabı yönet", "Manage account", "Hesabê birêve bibe") : tx(language, "Yeni kullanıcı", "New user", "Bikarhêna nû")}</h3>
+          <small>{tx(language, "Değişiklikler kullanıcının bir sonraki işleminde geçerli olur.", "Changes apply on the user's next action.", "Guhertin di çalakiya piştî ya bikarhêner de derbas dibin.")}</small>
         </div>
-        <label className="accessFullToggle">
-          <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} />
-          <span>{tx(language, "Tüm bölümlere ve kasalara erişim (tam yetkili admin)", "Access to every section and cash account (full admin)", "Gihîştina hemû beş û qaseyan (admîna tevahî)")}</span>
-        </label>
-        {!fullAccess && (
-          <>
-            <div className="accessSectionTitle">{tx(language, "Bölümler", "Sections", "Beş")}</div>
-            <div className="accessKasaGrid" style={{ paddingLeft: 0 }}>
-              {accessPages.map((p) => (
-                <label key={p} className="accessKasaItem">
-                  <input type="checkbox" checked={pages.includes(p)} onChange={() => togglePage(p)} />
-                  <span>{nav.find((n) => n.id === p)?.label[language] ?? p}</span>
-                </label>
-              ))}
-            </div>
-            <div className="accessSectionTitle">{tx(language, "Çalışma alanları ve kasalar", "Workspaces and cash accounts", "Qadên xebatê û qase")}</div>
-            {accounts === null ? (
-              <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
-            ) : !accounts.length ? (
-              <small>{tx(language, "Henüz kasa yok.", "No kasas yet.", "Hîn qase tune.")}</small>
-            ) : (
-              <div className="accessWorkspaceList">
-                {workspaces.map((w) => {
-                  const onCount = w.kasas.filter(isOn).length;
-                  const all = onCount === w.kasas.length;
-                  const lockedAll = w.kasas.every((a) => a.ownerUserId === user.id);
-                  return (
-                    <section key={w.key} className="accessWorkspace">
-                      <label className="accessWorkspaceHead">
-                        <input
-                          type="checkbox"
-                          checked={all}
-                          disabled={lockedAll}
-                          ref={(el) => {
-                            if (el) el.indeterminate = onCount > 0 && !all;
-                          }}
-                          onChange={(e) => toggleWorkspace(w.kasas, e.target.checked)}
-                        />
-                        <strong>{w.label}</strong>
-                        <small>{onCount}/{w.kasas.length}</small>
-                      </label>
-                      <div className="accessKasaGrid">
-                        {w.kasas.map((a) => {
-                          const owner = a.ownerUserId === user.id;
-                          return (
-                            <label key={a.id} className="accessKasaItem" title={owner ? tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye") : undefined}>
-                              <input type="checkbox" checked={isOn(a)} disabled={owner} onChange={(e) => toggleKasa(a.id, e.target.checked)} />
-                              <span>{a.name}{owner ? " ★" : ""}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-        <label className="accessFullToggle" style={{ marginTop: 10 }}>
-          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-          <span>{tx(language, "Bu erişim değişikliğini onaylıyorum.", "I confirm this access change.", "Ez vê guhertina gihîştinê erê dikim.")}</span>
-        </label>
-        {error && <small className="formWarning" style={{ display: "block", marginTop: 8 }}>{error}</small>}
-        <div className="modalActions">
-          <button type="button" className="light" onClick={onClose}>
-            {tx(language, "Vazgeç", "Cancel", "Betal")}
-          </button>
-          <button type="button" className="primary" disabled={saving || !confirmed || (!fullAccess && accounts === null)} onClick={save}>
-            {saving ? tx(language, "Kaydediliyor…", "Saving…", "Tê tomarkirin…") : tx(language, "Onayla ve Kaydet", "Confirm and Save", "Erê Bike û Tomar Bike")}
-          </button>
-        </div>
+        <button type="button" className="light" onClick={onClose}>{tx(language, "Kapat", "Close", "Bigire")}</button>
       </div>
-    </div>
-  );
-}
+      <div className="userManageGrid">
+        <label>
+          {tx(language, "Görünen ad", "Display name", "Navê xuya")}
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label>
+          {tx(language, "Kullanıcı adı", "Username", "Navê bikarhêner")}
+          <input value={username} disabled={Boolean(initial)} onChange={(e) => setUsername(e.target.value)} />
+        </label>
+        {usernameTaken && <small className="wide formWarning">{tx(language, "Bu kullanıcı adı zaten kullanılıyor.", "This username is already in use.", "Ev navê bikarhêner jixwe tê bikaranîn.")}</small>}
+        <label>
+          {tx(language, "Rol etiketi", "Role label", "Nîşana rolê")}
+          <input value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder={tx(language, "Örn. Finans Müdürü", "e.g. Finance Manager", "Mînak: Birêvebirê Darayî")} />
+        </label>
+        <label>
+          {initial ? tx(language, "Yeni şifre (isteğe bağlı)", "New password (optional)", "Şîfreya nû (bijarte)") : tx(language, "Şifre", "Password", "Şîfre")}
+          <PasswordField required={!initial} value={password} onChange={setPassword} placeholder={initial ? tx(language, "Mevcut şifreyi korumak için boş bırakın", "Leave blank to keep the current password", "Ji bo parastina şîfreya heyî vala bihêle") : ""} />
+        </label>
+        {pwError ? (
+          <small className="wide formWarning">{pwError}</small>
+        ) : (
+          <small className="wide">{tx(language, "En az 10 karakter, en az bir harf ve bir rakam içermeli.", "At least 10 characters, with at least one letter and one number.", "Herî kêm 10 karakter, herî kêm yek tîp û yek hejmar.")}</small>
+        )}
+        <label className="wide">
+          {tx(language, "Kullanıcı türü", "User type", "Cureya bikarhêner")}
+          <select value={isSuper ? "super" : "admin"} onChange={(e) => setIsSuper(e.target.value === "super")}>
+            <option value="admin">{tx(language, "Admin — erişimi aşağıdan seçilir", "Admin — access is chosen below", "Admîn — gihîştin li jêr tê hilbijartin")}</option>
+            <option value="super">★ {tx(language, "Süper Admin — tüm sisteme erişir", "Super Admin — full system access", "Super Admîn — gihîştina tevahiya pergalê")}</option>
+          </select>
+        </label>
+      </div>
 
-function UserModal({
-  language,
-  initial,
-  existingUsernames,
-  canGrantSuperAdmin,
-  onClose,
-  onSave,
-}: {
-  language: Language;
-  initial: UserAccount | null;
-  existingUsernames: string[];
-  canGrantSuperAdmin: boolean;
-  onClose: () => void;
-  onSave: (input: { id?: number; name: string; username: string; password: string; roleLabel: string; isAdmin: boolean; isSuperAdmin: boolean; permissions: Page[] }) => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [username, setUsername] = useState(initial?.username ?? "");
-  const [password, setPassword] = useState("");
-  const [roleLabel, setRoleLabel] = useState(initial?.roleLabel ?? "");
-  const isAdmin = initial?.isAdmin ?? false;
-  const [isSuperAdmin, setIsSuperAdmin] = useState(initial?.isSuperAdmin ?? false);
-  const permissions: Page[] = initial?.permissions ?? [];
-  const usernameTaken = existingUsernames.includes(username.trim().toLowerCase());
-  const pwError = passwordPolicyError(language, password, username);
-  const valid =
-    Boolean(name.trim()) &&
-    Boolean(username.trim()) &&
-    !usernameTaken &&
-    Boolean(roleLabel.trim()) &&
-    (Boolean(initial) || Boolean(password.trim())) &&
-    !pwError;
-  return (
-    <div className="overlay">
-      <form
-        className="modal"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!valid) return;
-          onSave({
-            id: initial?.id,
-            name: name.trim(),
-            username: username.trim(),
-            password: password.trim(),
-            roleLabel: roleLabel.trim(),
-            isAdmin: isSuperAdmin || isAdmin,
-            isSuperAdmin,
-            permissions: isSuperAdmin || isAdmin ? [] : permissions,
-          });
-        }}
-      >
-        <div className="modalHead">
-          <div>
-            <h2>{initial ? tx(language, "Kullanıcıyı Düzenle", "Edit User", "Bikarhênerê Biguherîne") : tx(language, "Kullanıcı Ekle", "Add User", "Bikarhêner Zêde Bike")}</h2>
-            <p>{tx(language, "Kullanıcı bilgilerini ve erişebileceği bölümleri belirleyin.", "Set the user's details and which sections they can access.", "Agahiyên bikarhêner û beşên ku ew dikare gihîje diyar bike.")}</p>
+      {isSuper ? (
+        <p className="userManageNote">★ {tx(language, "Süper Admin tüm bölümlere, çalışma alanlarına ve kasalara erişir; silme işlemlerinde onay ve şifre gerekir.", "A Super Admin can reach every section, workspace and cash account; deletions need confirmation and a password.", "Super Admîn digihîje hemû beş, qad û qaseyan; di jêbirinê de erêkirin û şîfre pêwîst e.")}</p>
+      ) : (
+        <>
+          <div className="userManageStrip">
+            <label>
+              <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} />
+              <b>{tx(language, "Tam yönetici erişimi", "Full admin access", "Gihîştina rêvebirê tevahî")}</b>
+              <span>{tx(language, "tüm bölümleri ve kasaları görür", "sees every section and cash account", "hemû beş û qaseyan dibîne")}</span>
+            </label>
           </div>
-          <button type="button" onClick={onClose}>×</button>
-        </div>
-        <div className="formGrid">
-          <label>
-            {tx(language, "Ad Soyad", "Full Name", "Nav û Paşnav")}
-            <input required value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-          <label>
-            {tx(language, "Kullanıcı Adı", "Username", "Navê Bikarhêner")}
-            <input required value={username} onChange={(e) => setUsername(e.target.value)} />
-          </label>
-          {usernameTaken && (
-            <small className="wide formWarning">
-              {tx(language, "Bu kullanıcı adı zaten kullanılıyor.", "This username is already in use.", "Ev navê bikarhêner jixwe tê bikaranîn.")}
-            </small>
+          {limited && (
+            <div className="userManageCols">
+              <div className="userManageCol sectionsCol">
+                <div className="userManageColHead">▤ {tx(language, "Bölümler", "Sections", "Beş")}</div>
+                <div className="userManageColBody">
+                  {accessPages.map((p) => (
+                    <label key={p}>
+                      <input type="checkbox" checked={pages.includes(p)} onChange={() => togglePage(p)} />
+                      {nav.find((n) => n.id === p)?.label[language] ?? p}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="userManageCol kasaCol">
+                <div className="userManageColHead">▣ {tx(language, "Çalışma alanları ve kasalar", "Workspaces and cash accounts", "Qadên xebatê û qase")}</div>
+                <div className="userManageColBody">
+                  {accounts === null ? (
+                    <small>{tx(language, "Yükleniyor…", "Loading…", "Tê barkirin…")}</small>
+                  ) : !accounts.length ? (
+                    <small>{tx(language, "Henüz kasa yok.", "No kasas yet.", "Hîn qase tune.")}</small>
+                  ) : (
+                    workspaces.map((w) => {
+                      const onCount = w.kasas.filter(isOn).length;
+                      const all = onCount === w.kasas.length;
+                      const lockedAll = userId != null && w.kasas.every((a) => a.ownerUserId === userId);
+                      return (
+                        <div key={w.key} className="userManageWs">
+                          <label className="userManageWsHead">
+                            <input
+                              type="checkbox"
+                              checked={all}
+                              disabled={lockedAll}
+                              ref={(el) => {
+                                if (el) el.indeterminate = onCount > 0 && !all;
+                              }}
+                              onChange={(e) => toggleWorkspace(w.kasas, e.target.checked)}
+                            />
+                            <strong>{w.label}</strong>
+                            <small>{onCount}/{w.kasas.length}</small>
+                          </label>
+                          {w.kasas.map((a) => {
+                            const owner = userId != null && a.ownerUserId === userId;
+                            return (
+                              <label key={a.id} className="userManageKasa" title={owner ? tx(language, "kasa sahibi — her zaman erişebilir", "kasa owner — always has access", "xwedîyê qaseyê — her tim gihîştin heye") : undefined}>
+                                <input type="checkbox" checked={isOn(a)} disabled={owner} onChange={(e) => toggleKasa(a.id, e.target.checked)} />
+                                {a.name}{owner ? " ★" : ""}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
           )}
-          <label>
-            {tx(language, "Şifre", "Password", "Şîfre")}
-            <PasswordField
-              required={!initial}
-              value={password}
-              onChange={setPassword}
-              placeholder={initial ? tx(language, "Değiştirmek için yazın", "Type to change", "Ji bo guherînê binivîse") : ""}
-            />
-          </label>
-          {!pwError && (
-            <small className="wide">
-              {tx(
-                language,
-                "En az 10 karakter, en az bir harf ve bir rakam içermeli.",
-                "At least 10 characters, with at least one letter and one number.",
-                "Herî kêm 10 karakter, herî kêm yek tîp û yek hejmar.",
-              )}
-            </small>
+        </>
+      )}
+
+      {error && <small className="formWarning" style={{ display: "block", marginTop: 8 }}>{error}</small>}
+      <div className="userManageFoot">
+        <div className="userManageFootLeft">
+          {initial?.locked && (
+            <button type="button" className="light" onClick={() => void onUnlock()}>🔓 {tx(language, "Kilidi Aç", "Unlock", "Kilîtê Veke")}</button>
           )}
-          {pwError && (
-            <small className="wide formWarning">{pwError}</small>
+          {canDelete && (
+            <button type="button" className="light redText" onClick={onDelete}>🗑 {tx(language, "Sil", "Delete", "Jêbibe")}</button>
           )}
-          <label>
-            {tx(language, "Rol Etiketi", "Role Label", "Nîşana Rolê")}
-            <input required value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder={tx(language, "Örn. Finans Müdürü", "e.g. Finance Manager", "Mînak: Birêvebirê Darayî")} />
-          </label>
-          <label className="wide">
-            {tx(language, "Kullanıcı Türü", "User Type", "Cureya Bikarhêner")}
-            <select value={isSuperAdmin ? "super" : "admin"} onChange={(e) => setIsSuperAdmin(e.target.value === "super")}>
-              <option value="admin">{tx(language, "Admin — erişimi “Admin Erişimi” düğmesinden verilir", "Admin — access is granted via “Admin Access”", "Admîn — gihîştin ji bişkoja “Gihîştina Admîn” tê dayin")}</option>
-              {canGrantSuperAdmin && (
-                <option value="super">★ {tx(language, "Süper Admin — tüm sisteme erişir", "Super Admin — full system access", "Super Admîn — gihîştina tevahiya pergalê")}</option>
-              )}
-            </select>
-          </label>
         </div>
-        <div className="modalActions">
-          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-          <button className="primary" disabled={!valid}>{tx(language, "Kaydet", "Save", "Tomar Bike")}</button>
-        </div>
-      </form>
+        <label className="userManageConfirm">
+          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+          {tx(language, "Değişikliği onaylıyorum", "I confirm the changes", "Ez guhertinê erê dikim")}
+        </label>
+        <button type="button" className="primary" disabled={!valid || saving} onClick={save}>
+          {saving ? tx(language, "Kaydediliyor…", "Saving…", "Tê tomarkirin…") : tx(language, "Kaydet", "Save", "Tomar Bike")}
+        </button>
+      </div>
     </div>
   );
 }

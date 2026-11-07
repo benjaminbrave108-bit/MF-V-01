@@ -4356,3 +4356,42 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .activityUser b { width: 24px; height: 24px; border-radius: 50%; background: #1f6f87; color: #fff; display: grid; place-items: center; font-size: 11px; flex: none; }
 .activityEmpty { color: #7a8a91; }
 @media (max-width: 900px) { .activityDay li { grid-template-columns: 48px 1fr; } .activityUser { grid-column: 2; } }
+
+/* Kullanıcılar ve Yetkiler: kart ızgarası + hesap yönetim paneli */
+.userCardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin: 12px 0; }
+.userCard { display: flex; align-items: center; gap: 12px; text-align: left; border: 1.5px solid #dbe6ea; background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+.userCard.selected { border-color: #3b6fd8; background: #f3f7ff; }
+.userCard > b { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 14px; flex: none; }
+.userCard > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.userCard strong { font-size: 14px; color: #1f2e33; }
+.userCard small { color: #6b7c83; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.userCard em { font-style: normal; font-size: 11px; padding: 3px 10px; border-radius: 999px; background: #e3f5ee; color: #0f6e56; }
+.userCard em.online { background: #d7f0e4; }
+.userCard em.locked { background: #fdebe3; color: #b4481f; }
+.userManage { border: 1px solid #d3dff0; background: #f7faff; border-radius: 14px; padding: 16px; margin-top: 6px; }
+.userManageHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.userManageHead h3 { margin: 0 0 2px; font-size: 18px; }
+.userManageHead small { color: #6b7c83; }
+.userManageGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.userManageGrid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #4c5e66; }
+.userManageGrid .wide { grid-column: 1 / -1; }
+.userManageGrid input, .userManageGrid select { height: 42px; border: 1px solid #d6e3e8; border-radius: 10px; padding: 0 12px; background: #fff; font-size: 14px; }
+.userManageNote { margin: 14px 0 0; padding: 12px 14px; border: 1px dashed #b8cdf0; border-radius: 10px; background: #eef4ff; color: #274a8a; font-size: 13px; }
+.userManageStrip { margin: 14px 0 10px; padding: 10px 14px; border: 1px solid #f0d9b5; background: #fff6e8; border-radius: 10px; }
+.userManageStrip label { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.userManageStrip span { color: #8a6a3a; font-size: 12px; }
+.userManageCols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.userManageCol { border: 1px solid #d6e3e8; border-radius: 12px; overflow: hidden; background: #fff; }
+.userManageColHead { padding: 10px 14px; font-weight: 700; font-size: 14px; }
+.sectionsCol .userManageColHead { background: #eaf1fd; color: #2456b5; }
+.kasaCol .userManageColHead { background: #e6f7ee; color: #14724a; }
+.userManageColBody { padding: 10px 14px; max-height: 340px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.userManageColBody > label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.userManageWs { border-bottom: 1px solid #edf1f2; padding-bottom: 6px; margin-bottom: 2px; }
+.userManageWsHead { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.userManageWsHead small { margin-left: auto; color: #6b7c83; }
+.userManageKasa { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding-left: 24px; margin: 2px 0; }
+.userManageFoot { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.userManageFootLeft { display: flex; gap: 8px; margin-right: auto; }
+.userManageConfirm { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+@media (max-width: 900px) { .userManageGrid, .userManageCols { grid-template-columns: 1fr; } }
