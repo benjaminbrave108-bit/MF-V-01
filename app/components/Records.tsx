@@ -2780,7 +2780,7 @@ export function Records({
         </div>
       )}
       {kind === "cash" && activeWs && (
-        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#287b98"}`, gridTemplateRows: `repeat(${activeKasaCards.length > 6 ? 2 : 1}, auto)` }}>
+        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#287b98"}` }}>
           {activeKasaCards.map(({ g, color }) => renderKasaCard(g, { background: `${color}14`, borderColor: `${color}66` }))}
           {activeKasaCards.length === 0 && (
             <small className="workspaceEmpty">{tx(language, "Bu çalışma alanında henüz kasa yok — kasa kaydında “Çalışma alanı” seçin.", "No cash accounts yet — pick “Workspace” on a cash record.", "Hê qase tune — di tomara qaseyê de “Qada xebatê” hilbijêre.")}</small>
