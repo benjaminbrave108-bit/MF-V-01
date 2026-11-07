@@ -968,6 +968,28 @@ export function Records({
   const [detailViewTarget, setDetailViewTarget] = useState<RecordItem | null>(null);
   const [kasaResultOpen, setKasaResultOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  // Kasa kartı özet balonu: kartın üzerine binip tıklamayı engellemesin diye sayfa akışına göre kartın altında (yer yoksa üstünde) sabit konumlanır.
+  useEffect(() => {
+    const place = (event: MouseEvent) => {
+      const card = (event.target as HTMLElement | null)?.closest?.(".groupCard");
+      const tip = card?.querySelector<HTMLElement>(":scope > .groupCardTooltip");
+      if (!card || !tip) return;
+      requestAnimationFrame(() => {
+        const rect = card.getBoundingClientRect();
+        const h = tip.offsetHeight;
+        const w = tip.offsetWidth;
+        const below = rect.bottom + 8 + h <= window.innerHeight || rect.top - 8 - h < 0;
+        tip.style.position = "fixed";
+        tip.style.bottom = "auto";
+        tip.style.margin = "0";
+        tip.style.pointerEvents = "none";
+        tip.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - w - 8))}px`;
+        tip.style.top = `${below ? rect.bottom + 8 : rect.top - 8 - h}px`;
+      });
+    };
+    document.addEventListener("mouseover", place);
+    return () => document.removeEventListener("mouseover", place);
+  }, []);
   // Manual row order (drag handle in the İşlem column) — a per-kind override
   // on top of the default date/id sort, kept in localStorage since it's a
   // personal display preference, not app data. Ids not in the saved order
