@@ -27,6 +27,8 @@ export const GET = withErrorHandling(async (request: Request) => {
   return json({ notes });
 });
 
+import { logActivity } from "../_lib/activity";
+
 export const POST = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "notes");
   if ("response" in session) return session.response;
@@ -48,5 +50,6 @@ export const POST = withErrorHandling(async (request: Request) => {
     })
     .returning();
 
+  await logActivity(session.user, { category: "note", action: "create", summary: `Not eklendi: ${note.title}` });
   return json({ note }, { status: 201 });
 });

@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { users } from "../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../db/passwords";
 import { requireAdmin, requireSuperAdmin } from "../_lib/auth";
+import { logActivity } from "../_lib/activity";
 import { json, withErrorHandling } from "../_lib/http";
 import { parseBody, userCreateSchema } from "../_lib/validate";
 
@@ -67,5 +68,6 @@ export const POST = withErrorHandling(async (request: Request) => {
     })
     .returning();
 
+  await logActivity(session.user, { category: "user", action: "create", summary: `Kullanıcı eklendi: ${account.name} (@${account.username}) — ${account.isSuperAdmin ? "Süper Admin" : "Admin"}` });
   return json({ user: toClientUser(account) }, { status: 201 });
 });

@@ -35,6 +35,8 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   return json({ preparedReport: report });
 });
 
+import { logActivity } from "../../_lib/activity";
+
 export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
@@ -42,5 +44,6 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   const { id } = await params;
   const db = getDb();
   await db.delete(preparedReports).where(eq(preparedReports.id, id));
+  await logActivity(session.user, { category: "report", action: "delete", summary: "Hazırlanmış rapor silindi" });
   return json({ ok: true });
 });

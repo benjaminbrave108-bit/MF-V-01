@@ -3,6 +3,7 @@ import { kasaSections } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
 import { parseBody, sectionInputSchema } from "../_lib/validate";
+import { logActivity } from "../_lib/activity";
 
 // Ayarlar > Bölümler: yönetici tanımlı kasa / gelir / gider bölümleri. Herkes okur (kutular için), yalnızca yönetici yazar.
 export const GET = withErrorHandling(async (request: Request) => {
@@ -20,6 +21,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   if ("response" in parsed) return parsed.response;
   try {
     const [created] = await getDb().insert(kasaSections).values(parsed.data).returning();
+    await logActivity(session.user, { category: "workspace", action: "create", summary: `Çalışma alanı oluşturuldu: ${created.name}`, workspace: created.name });
     return json({ section: { id: created.id, scope: created.scope, name: created.name, color: created.color } }, { status: 201 });
   } catch (error) {
     const e = error as { code?: string; cause?: { code?: string } };

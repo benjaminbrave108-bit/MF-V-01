@@ -11,6 +11,8 @@ import { excelImportSchema, parseBody } from "../../_lib/validate";
 // Excel aktarım sihirbazı: seçilen kasaya gelir/gider kayıtlarını (isteğe bağlı detay tablosuyla) toplu ekler.
 // Kasa yoksa oluşturulur. Aynı importKey'e sahip kayıtlar zaten varsa atlanır (aynı dosya ikinci kez yüklenince
 // çift kayıt olmaz). Her kayıt bir aktarım numarası (batchId) taşır; DELETE ile tüm aktarım geri alınabilir.
+import { logActivity } from "../../_lib/activity";
+
 export const POST = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
@@ -87,6 +89,13 @@ export const POST = withErrorHandling(async (request: Request) => {
   });
 
   if (result.forbidden) return json({ error: "Forbidden" }, { status: 403 });
+  await logActivity(session.user, {
+    category: "report",
+    action: "import",
+    summary: `Excel aktarımı: ${result.inserted} kayıt eklendi${result.skipped ? `, ${result.skipped} tekrar atlandı` : ""} — ${payload.kasaName}`,
+    kasa: payload.kasaName,
+    meta: { batchId: payload.batchId },
+  });
   return json({ inserted: result.inserted, skipped: result.skipped }, { status: 201 });
 });
 
@@ -104,5 +113,6 @@ export const DELETE = withErrorHandling(async (request: Request) => {
     if (kasaId != null && !(await canWriteCashAccount(session.user, kasaId, db))) return json({ error: "Forbidden" }, { status: 403 });
   }
   await db.delete(records).where(eq(records.importBatch, batchId));
+  await logActivity(session.user, { category: "report", action: "undo-import", summary: `Excel aktarımı geri alındı: ${rows.length} kayıt silindi`, meta: { batchId } });
   return json({ deleted: rows.length });
 });

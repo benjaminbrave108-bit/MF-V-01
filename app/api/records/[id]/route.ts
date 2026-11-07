@@ -10,6 +10,7 @@ import { cashAccounts } from "../../../../db/schema";
 import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
+import { formatAmount, logActivity } from "../../_lib/activity";
 
 function canAccessKind(user: { isAdmin: boolean; permissions: string[] }, kind: string): boolean {
   return user.isAdmin || user.permissions.includes(kind as Kind);
@@ -118,6 +119,14 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   });
 
   if (result.forbidden) return json({ error: "Forbidden" }, { status: 403 });
+  const changed = result.record;
+  await logActivity(session.user, {
+    category: changed.kind,
+    action: "update",
+    summary: `${({ income: "Gelir", expense: "Gider", cash: "Kasa" } as Record<string, string>)[changed.kind]} düzenlendi: ${changed.source} — ${formatAmount(changed.amount, changed.currency)}`,
+    kasa: changed.kind === "cash" ? changed.source : changed.cashAccount,
+    meta: { id: changed.id },
+  });
   return json({ record: result.record, archiveEntry: toClientArchiveItem(result.archiveEntry), ensuredCash: result.ensuredCash });
 });
 
@@ -153,5 +162,12 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
       .returning();
   });
 
+  await logActivity(session.user, {
+    category: old.kind,
+    action: "delete",
+    summary: `${({ income: "Gelir", expense: "Gider", cash: "Kasa" } as Record<string, string>)[old.kind]} silindi: ${old.source} — ${formatAmount(old.amount, old.currency)}`,
+    kasa: old.kind === "cash" ? old.source : old.cashAccount,
+    meta: { id: old.id },
+  });
   return json({ archiveEntry: toClientArchiveItem(archiveEntry) });
 });

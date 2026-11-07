@@ -7,6 +7,7 @@ import { Dashboard } from "./components/Dashboard";
 import { Records, RecordModal } from "./components/Records";
 import { useDraggableModals, DeleteConfirmModal } from "./components/shared";
 import { Archive } from "./components/Archive";
+import { Activity } from "./components/Activity";
 import { ReportBuilder } from "./components/ReportBuilder";
 import { Notes } from "./components/Notes";
 import { Comments } from "./components/Comments";
@@ -895,6 +896,7 @@ export default function Home() {
             />
           )}
           {page === "comments" && <Comments language={language} onRead={refreshUnreadCommentsCount} />}
+          {page === "activity" && <Activity language={language} />}
           {page === "archive" && (
             <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} onUnarchiveNote={(id) => archiveNote(id, false)} />
           )}

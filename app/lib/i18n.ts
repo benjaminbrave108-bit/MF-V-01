@@ -59,6 +59,11 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
     icon: "💬",
   },
   {
+    id: "activity",
+    label: { tr: "Son İşlemler", en: "Recent Activity", ku: "Çalakiyên Dawî" },
+    icon: "⏱",
+  },
+  {
     id: "archive",
     label: { tr: "Arşiv", en: "Archive", ku: "Arşîv" },
     icon: "◴",

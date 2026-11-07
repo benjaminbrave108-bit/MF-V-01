@@ -14,6 +14,8 @@ export const GET = withErrorHandling(async (request: Request) => {
   return json({ preparedReports: rows });
 });
 
+import { logActivity } from "../_lib/activity";
+
 export const POST = withErrorHandling(async (request: Request) => {
   const session = await requirePermission(request, "reportBuilder");
   if ("response" in session) return session.response;
@@ -39,5 +41,6 @@ export const POST = withErrorHandling(async (request: Request) => {
     })
     .returning();
 
+  await logActivity(session.user, { category: "report", action: "create", summary: `Rapor hazırlandı: ${report.title}`, kasa: report.cashAccount ?? "" });
   return json({ preparedReport: report }, { status: 201 });
 });

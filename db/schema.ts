@@ -364,6 +364,22 @@ export const archive = pgTable("archive", {
   index("archive_at_idx").on(table.at.desc()),
 ]);
 
+// Son İşlemler: kullanıcıların yaptığı işlemlerin kronolojik kaydı (kayıt, kasa, çalışma alanı, kullanıcı, rapor, giriş…).
+export const activityLog = pgTable("activity_log", {
+  id: serial("id").primaryKey(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  userId: integer("user_id"),
+  userName: text("user_name").notNull(),
+  category: text("category").notNull(),
+  action: text("action").notNull(),
+  summary: text("summary").notNull(),
+  kasa: text("kasa").notNull().default(""),
+  workspace: text("workspace").notNull().default(""),
+  meta: jsonb("meta"),
+}, (table) => [
+  index("activity_log_at_idx").on(table.at.desc()),
+]);
+
 export const financeNotes = pgTable("finance_notes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),

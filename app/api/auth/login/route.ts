@@ -7,6 +7,7 @@ import { json, withErrorHandling } from "../../_lib/http";
 import { clearAttempts, getClientIp, isRateLimited, recordFailedAttempt } from "../../_lib/rate-limit";
 import { blockIp, isIpBlocked, lockUserAccount } from "../../_lib/security";
 import type { Page } from "../../_lib/types";
+import { logActivity } from "../../_lib/activity";
 
 const LOCK_REASON = "5 ardışık başarısız giriş denemesi";
 
@@ -73,6 +74,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   clearAttempts(`login-acct:${username.toLowerCase()}`);
 
   const { token, expiresAt } = await createSession(account.id);
+  await logActivity({ id: account.id, name: account.name }, { category: "auth", action: "login", summary: "Oturum açıldı" });
 
   return json(
     {

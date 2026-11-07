@@ -4,6 +4,7 @@ import { users } from "../../../../db/schema";
 import { hashPassword, validatePasswordPolicy } from "../../../../db/passwords";
 import { requireSession, requireSuperAdmin } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
+import { logActivity } from "../../_lib/activity";
 import { parseBody, userUpdateSchema } from "../../_lib/validate";
 
 function toClientUser(row: typeof users.$inferSelect) {
@@ -86,6 +87,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
     .where(eq(users.id, id))
     .returning();
 
+  await logActivity(session.user, { category: "user", action: "update", summary: `Kullanıcı / yetki güncellendi: ${account.name} (@${account.username})${password ? " — şifre değiştirildi" : ""}` });
   return json({ user: toClientUser(account) });
 });
 
@@ -120,5 +122,6 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
   }
 
   await db.delete(users).where(eq(users.id, id));
+  await logActivity(session.user, { category: "user", action: "delete", summary: `Kullanıcı silindi: ${existing.name} (@${existing.username})` });
   return json({ ok: true });
 });

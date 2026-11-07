@@ -9,6 +9,7 @@ import { markListKasa, resolveRecordList, setRjKasa, unmarkListKasa } from "../_
 import { cashAccounts } from "../../../db/schema";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
+import { formatAmount, logActivity } from "../_lib/activity";
 
 const RECORD_KINDS: Kind[] = ["cash", "income", "expense"];
 
@@ -104,5 +105,13 @@ export const POST = withErrorHandling(async (request: Request) => {
   });
 
   if (result.forbidden) return json({ error: "Forbidden" }, { status: 403 });
+  const created = result.record;
+  await logActivity(session.user, {
+    category: created.kind,
+    action: "create",
+    summary: `${({ income: "Gelir", expense: "Gider", cash: "Kasa" } as Record<string, string>)[created.kind]} eklendi: ${created.source} — ${formatAmount(created.amount, created.currency)}`,
+    kasa: created.kind === "cash" ? created.source : created.cashAccount,
+    meta: { id: created.id },
+  });
   return json({ record: result.record, ensuredCash: result.ensuredCash }, { status: 201 });
 });

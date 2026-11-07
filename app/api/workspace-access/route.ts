@@ -5,6 +5,7 @@ import { cashAccountAccess, cashAccounts, users } from "../../../db/schema";
 import { requireSuperAdmin } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
 import { parseBody } from "../_lib/validate";
+import { logActivity } from "../_lib/activity";
 
 const bodySchema = z.object({
   cashAccountIds: z.array(z.number().int().positive()).min(1).max(5000),
@@ -61,5 +62,8 @@ export const PUT = withErrorHandling(async (request: Request) => {
       if (wanted.size) await tx.insert(cashAccountAccess).values([...wanted].map((cashAccountId) => ({ cashAccountId, userId })));
     }
   });
+  const targetIds = Object.keys(parsed.data.grants).map(Number).filter(Number.isInteger);
+  const targets = targetIds.length ? await db.select({ name: users.name }).from(users).where(inArray(users.id, targetIds)) : [];
+  await logActivity(session.user, { category: "user", action: "access", summary: `Kasa erişimi güncellendi: ${targets.map((t) => t.name).join(", ") || "-"}` });
   return json({ ok: true });
 });

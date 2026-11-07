@@ -6,6 +6,7 @@ export type Page =
   | "notes"
   | "comments"
   | "archive"
+  | "activity"
   | "users"
   | "settings"
   | "guide"
@@ -170,7 +171,7 @@ export type CashTransfer = {
   toRecordId: number | null;
   createdAt: string;
 };
-export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "comments", "archive", "lists"];
+export const restrictablePages: Page[] = ["cash", "income", "expense", "reportBuilder", "notes", "comments", "activity", "archive", "lists"];
 // A comment thread on one records row — added from the "💬" action on its
 // Kasalar/Gelir/Gider row, or replied to from Mali Özel Notlar > Yorumlar
 // (see Comments.tsx), which lists every record that has at least one.

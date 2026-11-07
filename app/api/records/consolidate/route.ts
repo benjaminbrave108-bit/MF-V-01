@@ -6,6 +6,7 @@ import { requireSession } from "../../_lib/auth";
 import { canWriteCashAccount } from "../../_lib/cash-access";
 import { json, withErrorHandling } from "../../_lib/http";
 import { parseBody } from "../../_lib/validate";
+import { logActivity } from "../../_lib/activity";
 
 // Önceki Excel aktarımlarını "aylık tek kalem"e toplar: aktarımdaki her (kasa, gelir/gider, ay, para birimi) grubu tek
 // kayıt olur; eski satırların hepsi o kaydın Detay tablosunda (tarih, başlık, kalem, adet, birim fiyat, kişi, proje, tutar) durur.
@@ -141,5 +142,6 @@ export const POST = withErrorHandling(async (request: Request) => {
     }
     return { created, removed };
   });
+  await logActivity(session.user, { category: "report", action: "consolidate", summary: `Excel kayıtları aylığa toplandı: ${applied.removed} satır → ${applied.created} aylık kayıt`, kasa: rows[0]?.cashAccount ?? "", meta: { batchId } });
   return json({ dryRun: false, ...applied, groups: summary });
 });

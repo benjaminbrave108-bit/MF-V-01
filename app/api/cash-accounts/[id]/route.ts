@@ -26,6 +26,8 @@ function parseId(value: string): number | null {
 
 // PUT /api/cash-accounts/:id — kasayı düzenle (ad, Liste/RJ işareti, bölüm).
 // Ad değişirse kasaya bağlı tüm kayıtların kasa adı da güncellenir.
+import { logActivity } from "../../_lib/activity";
+
 export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
@@ -56,6 +58,13 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
     if (payload.listKasa) await markListKasa(id, tx);
     else if (payload.listKasa === false) await unmarkListKasa(id, tx);
     if (payload.rjKasa !== undefined) await setRjKasa(id, payload.rjKasa, tx);
+  });
+  await logActivity(session.user, {
+    category: "cash",
+    action: "update",
+    summary: payload.name !== account.name ? `Kasa düzenlendi: ${account.name} → ${payload.name}` : `Kasa düzenlendi: ${payload.name}`,
+    kasa: payload.name,
+    meta: { id },
   });
   return json({ ok: true });
 });
@@ -100,5 +109,6 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
     await tx.delete(cashAccounts).where(eq(cashAccounts.id, id));
     return rows.length;
   });
+  await logActivity(session.user, { category: "cash", action: "delete", summary: `Kasa silindi: ${account.name} (${deleted} kayıt Arşiv'e taşındı)`, workspace: "", meta: { id } });
   return json({ ok: true, deletedRecords: deleted });
 });
