@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
-import { Title, ConfirmModal, DeleteConfirmModal } from "./shared";
+import { Title, ConfirmModal, DeleteConfirmModal, PersonChip } from "./shared";
 import { RecordCommentsModal } from "./Comments";
-import { KasaDeleteModal, KasaEditModal, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
+import { KasaDeleteModal, KasaEditModal, parentWorkspaceOptions, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import { WorkspaceAccessModal, type AccessKasa } from "./WorkspaceAccess";
 import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
@@ -874,9 +874,9 @@ function TagsInput({
 // (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
 // kimliklerini hem de varsayılan genişliklerini taşır; sırası
 // DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
-type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "usd" | "location" | "tags" | "action";
+type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
 // Ana görünüm: Tarih, Kasa Adı, Çalışma Alanı, Kişi, Belgeler, Miktar, Etiket, İşlem. Detay/Not, Mesajlar ve Kasa Yeri ana tabloda yok.
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "usd", "tags", "action"];
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "tags", "action"];
 // Detay/Not ve Mesajlar öntanımlı olarak en dar iki sütun — uzun metin
 // satıra sığmayınca satırı büyütmek yerine tek satırda "..." ile kesilir
 // (bkz. renderCell'deki .cellDetailText ve .messagesCellText), böylece
@@ -892,7 +892,6 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   messages: 110,
   person: 80,
   amount: 110,
-  usd: 110,
   location: 120,
   tags: 110,
   action: 110,
@@ -901,7 +900,7 @@ const MIN_COLUMN_WIDTH = 64;
 // v2: Detay/Not ve Mesajlar öntanımlı genişlikleri daraltıldı — anahtar
 // sürümü artırılmasa, daha önce kaydedilmiş (geniş) genişlikler yeni
 // varsayılanları maskeler ve kullanıcı hiçbir fark görmez.
-const COLUMNS_STORAGE_KEY = "mf-records-columns-v4";
+const COLUMNS_STORAGE_KEY = "mf-records-columns-v5";
 
 // Kasalar sayfasındaki kasa kartı verisi (kasa kaydı + bağlı gelir/gider).
 type CardGroup = {
@@ -943,7 +942,7 @@ export function Records({
   kind: Kind;
   records: RecordItem[];
   allRecords: RecordItem[];
-  onAdd: (kind?: Kind, cashAccount?: string) => void;
+  onAdd: (kind?: Kind, cashAccount?: string, workspaceKey?: string) => void;
   onEdit: (x: RecordItem) => void;
   onDelete: (x: RecordItem, reason: string) => void;
   onImport: (rows: Omit<RecordItem, "id">[]) => void;
@@ -1135,8 +1134,6 @@ export function Records({
         return tx(language, "Kişi", "Person", "Kes");
       case "amount":
         return tx(language, "Miktar", "Amount", "Meblağ");
-      case "usd":
-        return tx(language, "USD Karşılığı", "USD Equivalent", "Wekheva USD");
       case "location":
         return kind === "cash"
           ? tx(language, "Kasa Yeri", "Cash Location", "Cihê Qaseyê")
@@ -1262,16 +1259,18 @@ export function Records({
           </button>
         );
       case "person":
-        return localizeData(x.person, language);
-      case "usd": {
-        // USD dışındaki tutarlar için ayarlardaki kurla otomatik USD karşılığı.
-        if (x.currency === "USD") return <span className="usdCell usdCellSame">—</span>;
-        const usd = toUsd(x.amount, x.currency, exchangeRates);
-        if (usd === null) return <span className="usdCell usdCellMissing" title={tx(language, "Bu para birimi için kur tanımlı değil (Ayarlar > Döviz Kurları)", "No rate set for this currency (Settings > Exchange Rates)", "Ji bo vê diravê kur nehatiye danîn")}>?</span>;
-        return <span className={`usdCell ${x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : ""}`} title={`1 USD = ${exchangeRates[x.currency]} ${x.currency}`}>≈ {money(usd, "USD")}</span>;
-      }
+        return <PersonChip name={x.person}>{localizeData(x.person, language)}</PersonChip>;
       case "amount":
-        return <span className={x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : undefined}>{money(x.amount, x.currency)}</span>;
+        {
+          // USD dışı tutarın üzerine gelince, o günün kuruyla USD karşılığı açılır kutuda görünür.
+          const usd = x.currency === "USD" ? null : toUsd(x.amount, x.currency, exchangeRates);
+          const tip = x.currency === "USD"
+            ? undefined
+            : usd === null
+              ? tx(language, "Bu para birimi için kur bulunamadı (Ayarlar > Döviz Kurları)", "No rate available for this currency (Settings > Exchange Rates)", "Ji bo vê diravê kur nehat dîtin")
+              : `≈ ${money(usd, "USD")}\n1 USD = ${exchangeRates[x.currency]} ${x.currency}\n${tx(language, "Günlük kur", "Daily rate", "Kurê rojane")}`;
+          return <span className={`${x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : ""}${tip ? " hasRateTip" : ""}`} title={tip}>{money(x.amount, x.currency)}</span>;
+        }
       case "location":
         return (
           <>
@@ -1347,6 +1346,8 @@ export function Records({
   const [accessTarget, setAccessTarget] = useState<{ title: string; kasas: AccessKasa[]; section?: KasaSection } | null>(null);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  // Doluysa yeni alan bu çalışma alanının içinde "bölüm" olarak oluşturulur ("" = ana çalışma alanı).
+  const [newWorkspaceParent, setNewWorkspaceParent] = useState("");
   const [newWorkspaceBusy, setNewWorkspaceBusy] = useState(false);
   const [newWorkspaceError, setNewWorkspaceError] = useState("");
   // Seçili kasa kartında "Kasayı Düzenle" ve "Kasayı Sil" (şifreli onay) düğmeleri.
@@ -1695,7 +1696,7 @@ export function Records({
       const response = await fetch("/api/sections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "cash", name, color: workspacePalette[cashSections.length % workspacePalette.length] }),
+        body: JSON.stringify({ scope: "cash", name, color: workspacePalette[cashSections.length % workspacePalette.length], ...(newWorkspaceParent ? { parentKey: newWorkspaceParent } : {}) }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -1703,13 +1704,14 @@ export function Records({
           response.status === 403
             ? tx(language, "Çalışma alanını yalnızca yönetici oluşturabilir.", "Only an administrator can create a workspace.", "Qada xebatê tenê rêvebir dikare çêke.")
             : response.status === 409
-              ? tx(language, "Bu adla bir çalışma alanı zaten var.", "A workspace with this name already exists.", "Qada xebatê bi vî navî heye.")
+              ? tx(language, "Bu adla bir çalışma alanı / bölüm zaten var.", "A workspace / section with this name already exists.", "Qada xebatê / beşa bi vî navî heye.")
               : body.error || tx(language, "Çalışma alanı oluşturulamadı.", "The workspace could not be created.", "Qada xebatê nehat çêkirin."),
         );
         return;
       }
       setNewWorkspaceOpen(false);
       setNewWorkspaceName("");
+      setNewWorkspaceParent("");
       onRefreshData?.();
     } catch {
       setNewWorkspaceError(tx(language, "Çalışma alanı oluşturulamadı.", "The workspace could not be created.", "Qada xebatê nehat çêkirin."));
@@ -2432,7 +2434,7 @@ export function Records({
             </button>
           )}
           {kind === "cash" && !readOnly && (
-            <button className="light" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceOpen(true); }}>
+            <button className="light" onClick={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceParent(""); setNewWorkspaceOpen(true); }}>
               ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
             </button>
           )}
@@ -2449,9 +2451,19 @@ export function Records({
                   <button onClick={() => { setNewMenuOpen(false); onAdd("expense", kasaSplitActive ? source : undefined); }}>
                     ↘ {tx(language, "Gider Ekle", "Add Expense", "Mesref Zêde Bike")}
                   </button>
-                  <button onClick={() => { setNewMenuOpen(false); onAdd("cash"); }}>
+                  <button onClick={() => { setNewMenuOpen(false); onAdd("cash", undefined, activeSub ?? (activeWs && activeWs !== "__all" ? activeWs : undefined)); }}>
                     ▣ {tx(language, "Kasa Ekle", "Add Cash Account", "Qase Zêde Bike")}
                   </button>
+                  {kind === "cash" && (
+                    <>
+                      <button onClick={() => { setNewMenuOpen(false); setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceParent(activeWs && activeWs !== "__all" && !activeSub ? activeWs : "genel"); setNewWorkspaceOpen(true); }}>
+                        ▤ {tx(language, "Bölüm Ekle", "Add Section", "Beş Zêde Bike")}
+                      </button>
+                      <button onClick={() => { setNewMenuOpen(false); setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceParent(""); setNewWorkspaceOpen(true); }}>
+                        ＋ {tx(language, "Çalışma Alanı Ekle", "Add Workspace", "Qada Xebatê Zêde Bike")}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -2486,14 +2498,14 @@ export function Records({
           <div className="modal kasaManageModal" onClick={(e) => e.stopPropagation()}>
             <div className="modalHead">
               <div>
-                <h2>{tx(language, "Yeni Çalışma Alanı", "New Workspace", "Qada Xebatê ya Nû")}</h2>
-                <p>{tx(language, "ör. Proje Kasaları, Şirketler", "e.g. Project Cash Accounts, Companies", "mînak Qaseyên Projeyê, Şirket")}</p>
+                <h2>{newWorkspaceParent ? tx(language, "Yeni Bölüm", "New Section", "Beşa Nû") : tx(language, "Yeni Çalışma Alanı", "New Workspace", "Qada Xebatê ya Nû")}</h2>
+                <p>{newWorkspaceParent ? tx(language, "Seçtiğiniz çalışma alanının içinde, kasaların önünde görünür.", "Appears inside the chosen workspace, before its cash accounts.", "Di nav qada hilbijartî de, li pêşiya qaseyan xuya dibe.") : tx(language, "ör. Proje Kasaları, Şirketler", "e.g. Project Cash Accounts, Companies", "mînak Qaseyên Projeyê, Şirket")}</p>
               </div>
               <button type="button" onClick={() => setNewWorkspaceOpen(false)}>×</button>
             </div>
             <div className="kasaManageBody">
               <label>
-                {tx(language, "Çalışma alanı adı", "Workspace name", "Navê qada xebatê")}
+                {newWorkspaceParent ? tx(language, "Bölüm adı", "Section name", "Navê beşê") : tx(language, "Çalışma alanı adı", "Workspace name", "Navê qada xebatê")}
                 <input
                   value={newWorkspaceName}
                   maxLength={120}
@@ -2503,6 +2515,18 @@ export function Records({
                     if (e.key === "Enter") createWorkspace();
                   }}
                 />
+              </label>
+              <label>
+                {tx(language, "Tür", "Type", "Cure")}
+                <select value={newWorkspaceParent} onChange={(e) => setNewWorkspaceParent(e.target.value)}>
+                  <option value="">{tx(language, "Çalışma alanı (kasaları doğrudan bağlanır)", "Workspace (cash accounts attach directly)", "Qada xebatê (qase rasterast girêdide)")}</option>
+                  {parentWorkspaceOptions(sections, language).map((o) => (
+                    <option key={o.key} value={o.key}>{tx(language, "Bölüm → ", "Section in → ", "Beş li → ")}{o.label}</option>
+                  ))}
+                </select>
+                <small className="kasaManageHint">
+                  {tx(language, "Bölüm oluşturursanız kasaları bölümün içinde açabilirsiniz (Kasa Ekle'de \"Üst › Bölüm\" olarak seçilir).", "If you create a section, you can add cash accounts inside it (pick \"Parent › Section\" in Add Cash Account).", "Heke beş çêkin, qase dikarin di nav de çêbin.")}
+                </small>
               </label>
               {newWorkspaceError && <p className="kasaManageError">{newWorkspaceError}</p>}
             </div>
@@ -3114,7 +3138,7 @@ export function Records({
                   <i />
                   <span>
                     <b>{localizeData(x.source, language)}</b>
-                    <small>{date(x.date, language)} · {localizeData(x.person, language)}</small>
+                    <small>{date(x.date, language)} · <PersonChip name={x.person}>{localizeData(x.person, language)}</PersonChip></small>
                   </span>
                   <strong>{x.kind === "expense" ? "−" : "+"}{money(x.amount, x.currency)}</strong>
                 </article>
@@ -3605,6 +3629,14 @@ function KasaResultModal({
 }
 
 // Belgeler hücresi: üzerine gelince belge özeti tablo kutusunun dışında (portal) görünür; böylece kaydırma alanında kesilmez.
+// Belge adını kısaltır, uzantıyı korur: "çok-uzun-belge-adı.pdf" → "çok-uzun-be….pdf"
+function shortDocName(name: string, max = 14): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : "";
+  return `${name.slice(0, Math.max(4, max - ext.length - 1))}…${ext}`;
+}
+
 function DocCell({ language, docs, tableRows, onOpen, onOpenDetail }: { language: Language; docs: { name: string; data: string }[]; tableRows: number; onOpen: () => void; onOpenDetail: () => void }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [excelView, setExcelView] = useState<{ name: string; data: string } | null>(null);
@@ -3654,7 +3686,8 @@ function DocCell({ language, docs, tableRows, onOpen, onOpenDetail }: { language
     <span className="docCell" onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={scheduleHide}>
       {docs.length > 0 && (
         <button type="button" className="docChip" onFocus={(e) => show(e.currentTarget)} onClick={onOpen}>
-          📎 {docs.length}
+          📎 {shortDocName(docs[0].name)}
+          {docs.length > 1 && <b className="docMore"> +{docs.length - 1}</b>}
         </button>
       )}
       {tableRows > 0 && (
@@ -3764,6 +3797,8 @@ export function RecordModal({
   kind,
   initial,
   prefillCashAccount,
+  prefillWorkspaceKey,
+  onSectionsChanged,
   records,
   onCreateNote,
   onClose,
@@ -3777,6 +3812,8 @@ export function RecordModal({
   kind: Kind;
   initial?: RecordItem;
   prefillCashAccount?: string;
+  prefillWorkspaceKey?: string;
+  onSectionsChanged?: () => void;
   sections?: KasaSection[];
   records: RecordItem[];
   onCreateNote: (input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt" | "isArchived" | "archivedAt">) => void;
@@ -3838,9 +3875,41 @@ export function RecordModal({
   // matching and silently corrupting data across languages.
   const [form, setForm] = useState<Omit<RecordItem, "id">>(base);
   // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
-  const [sectionId, setSectionId] = useState<number | null>(() => (kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
-  const [rjKasa, setRjKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa));
-  const [listKasa, setListKasa] = useState(() => kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace));
+  const [sectionId, setSectionId] = useState<number | null>(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).sectionId : kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
+  const [rjKasa, setRjKasa] = useState(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).rjKasa : kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa)));
+  const [listKasa, setListKasa] = useState(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).listKasa : kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace)));
+  // Kasa formundan, seçili çalışma alanının içinde hızlıca yeni bölüm oluşturur ve onu seçer.
+  const [inlineSectionOpen, setInlineSectionOpen] = useState(false);
+  const [inlineSectionName, setInlineSectionName] = useState("");
+  const [inlineSectionError, setInlineSectionError] = useState("");
+  async function createInlineSection() {
+    const name = inlineSectionName.trim();
+    if (!name) return;
+    const key = workspaceKeyOf({ sectionId, rjKasa, listKasa }, sections);
+    const selected = key.startsWith("sec-") ? sections.find((x) => `sec-${x.id}` === key) : undefined;
+    const parentKey = selected?.parentKey ?? key; // bölümün içine bölüm yok: üst alanını kullan
+    try {
+      const response = await fetch("/api/sections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "cash", name, color: "#7b52bf", parentKey }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setInlineSectionError(response.status === 403 ? tx(language, "Bölümü yalnızca yönetici oluşturabilir.", "Only an administrator can create a section.", "Beşê tenê rêvebir dikare çêke.") : response.status === 409 ? tx(language, "Bu adla bir bölüm zaten var.", "A section with this name already exists.", "Beşa bi vî navî heye.") : body.error || tx(language, "Bölüm oluşturulamadı.", "The section could not be created.", "Beş nehat çêkirin."));
+        return;
+      }
+      setSectionId(body.section.id);
+      setRjKasa(false);
+      setListKasa(false);
+      setInlineSectionOpen(false);
+      setInlineSectionName("");
+      setInlineSectionError("");
+      onSectionsChanged?.();
+    } catch {
+      setInlineSectionError(tx(language, "Bölüm oluşturulamadı.", "The section could not be created.", "Beş nehat çêkirin."));
+    }
+  }
   // Yeni kasa kaydında mevcut bir kasanın adı yazılırsa o kasanın çalışma alanı yüklenir (yanlışlıkla değiştirilmesin).
   useEffect(() => {
     if (kind !== "cash" || initial) return;
@@ -3872,6 +3941,8 @@ export function RecordModal({
   // seviyede burada da erken uyarı verilir.
   const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
   const MAX_ATTACHMENTS = 5;
+  // Dosya okunurken (FileReader eşzamansız) Kaydet'e basılırsa belge kayda girmiyordu: okuma bitene kadar Kaydet bekletilir.
+  const [readingFiles, setReadingFiles] = useState(0);
   function pickAttachments(files: FileList | null) {
     if (!files || !files.length) return;
     const room = MAX_ATTACHMENTS - (form.attachments?.length ?? 0);
@@ -3900,14 +3971,21 @@ export function RecordModal({
         continue;
       }
       const reader = new FileReader();
+      setReadingFiles((n) => n + 1);
+      reader.onerror = () => {
+        setReadingFiles((n) => Math.max(0, n - 1));
+        alert(tx(language, `"${file.name}" okunamadı.`, `"${file.name}" could not be read.`, `"${file.name}" nehat xwendin.`));
+      };
       // Functional update — birden çok dosya aynı anda seçildiğinde her
       // FileReader kendi temposunda tamamlanır; kapalı (closure) bir
       // `form` üzerinden yazmak eş zamanlı okumalardan birini kaybettirir.
-      reader.onload = () =>
+      reader.onload = () => {
         setForm((f) => ({
           ...f,
           attachments: [...(f.attachments ?? []), { name: file.name, data: String(reader.result) }],
         }));
+        setReadingFiles((n) => Math.max(0, n - 1));
+      };
       reader.readAsDataURL(file);
     }
   }
@@ -4172,8 +4250,24 @@ export function RecordModal({
                     <option key={o.key} value={o.key}>{o.label}</option>
                   ))}
                 </select>
-                <small className="listKasaHint">{tx(language, "Her kasa mutlaka bir çalışma alanına bağlıdır.", "Every cash account belongs to a workspace.", "Her qase girêdayî qada xebatê ye.")}</small>
+                <small className="listKasaHint">{tx(language, "Her kasa mutlaka bir çalışma alanına (ya da onun bir bölümüne) bağlıdır.", "Every cash account belongs to a workspace (or one of its sections).", "Her qase girêdayî qada xebatê (an beşekî wê) ye.")}</small>
             </label>
+            {!initial && (
+              <div className="inlineSectionRow">
+                {!inlineSectionOpen ? (
+                  <button type="button" className="light compact" onClick={() => setInlineSectionOpen(true)}>
+                    ＋ {tx(language, "Bölüm oluştur (seçili çalışma alanında)", "Create section (in selected workspace)", "Beş çêke (di qada hilbijartî de)")}
+                  </button>
+                ) : (
+                  <>
+                    <input value={inlineSectionName} autoFocus maxLength={80} placeholder={tx(language, "Bölüm adı", "Section name", "Navê beşê")} onChange={(e) => setInlineSectionName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInlineSection(); } }} />
+                    <button type="button" className="primary compact" disabled={!inlineSectionName.trim()} onClick={createInlineSection}>{tx(language, "Oluştur", "Create", "Çêke")}</button>
+                    <button type="button" className="light compact" onClick={() => { setInlineSectionOpen(false); setInlineSectionError(""); }}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+                  </>
+                )}
+                {inlineSectionError && <small className="kasaManageError">{inlineSectionError}</small>}
+              </div>
+            )}
           </fieldset>
           )}
           <label className="wide">
@@ -4444,8 +4538,10 @@ export function RecordModal({
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Vazgeç", "Cancel", "Betal")}
           </button>
-          <button className="primary">
-            {initial
+          <button className="primary" disabled={readingFiles > 0} title={readingFiles > 0 ? tx(language, "Dosya okunuyor, lütfen bekleyin", "Reading file, please wait", "Pel tê xwendin, ji kerema xwe bisekine") : undefined}>
+            {readingFiles > 0
+              ? tx(language, "⏳ Dosya yükleniyor…", "⏳ Loading file…", "⏳ Pel tê barkirin…")
+              : initial
               ? tx(
                   language,
                   "Değişiklikleri Kaydet",

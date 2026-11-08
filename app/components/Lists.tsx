@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { date as formatDate, money } from "../lib/finance";
 import { tx } from "../lib/i18n";
+import { PersonChip } from "./shared";
 import { TableTools } from "./TableTools";
 import type { Language } from "../lib/types";
 
@@ -979,7 +980,7 @@ function ExpensesGrid({
                 <td className="lgMuted">{formatDate(e.date, language)}</td>
                 <td><span className="listNameLink">{e.source}</span></td>
                 <td className="lgMuted">{ws.kasaName}</td>
-                <td>{e.person || "—"}</td>
+                <td><PersonChip name={e.person || ""}>{e.person || "—"}</PersonChip></td>
                 <td>{e.listName ? <span className="lgListTag">{e.listName}</span> : "—"}</td>
                 <td className="listGridNote lgMuted lgCenter" title={e.note || e.detail}>{e.note || e.detail || "—"}</td>
                 <td className="listsGridAmount lgT1">{money(e.amount, e.currency)}</td>

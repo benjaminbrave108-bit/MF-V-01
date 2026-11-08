@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { kasaSections } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
@@ -19,9 +20,19 @@ export const POST = withErrorHandling(async (request: Request) => {
   if (!session.user.isAdmin) return json({ error: "Forbidden" }, { status: 403 });
   const parsed = await parseBody(request, sectionInputSchema);
   if ("response" in parsed) return parsed.response;
+  const { parentKey, ...input } = parsed.data;
+  if (parentKey) {
+    // Yalnızca kasa çalışma alanları bölüm olabilir; tek seviye iç içe.
+    if (input.scope !== "cash") return json({ error: "Yalnızca kasa çalışma alanları bölüm olabilir" }, { status: 400 });
+    if (parentKey.startsWith("sec-")) {
+      const [parent] = await getDb().select().from(kasaSections).where(eq(kasaSections.id, Number(parentKey.slice(4)))).limit(1);
+      if (!parent || parent.scope !== "cash") return json({ error: "Üst çalışma alanı bulunamadı" }, { status: 404 });
+      if (parent.parentKey) return json({ error: "Bölümün içine başka bölüm eklenemez" }, { status: 400 });
+    }
+  }
   try {
-    const [created] = await getDb().insert(kasaSections).values(parsed.data).returning();
-    await logActivity(session.user, { category: "workspace", action: "create", summary: `Çalışma alanı oluşturuldu: ${created.name}`, workspace: created.name });
+    const [created] = await getDb().insert(kasaSections).values({ ...input, parentKey: parentKey ?? null }).returning();
+    await logActivity(session.user, { category: "workspace", action: "create", summary: `${created.parentKey ? "Bölüm" : "Çalışma alanı"} oluşturuldu: ${created.name}`, workspace: created.name });
     return json({ section: { id: created.id, scope: created.scope, name: created.name, color: created.color, parentKey: created.parentKey } }, { status: 201 });
   } catch (error) {
     const e = error as { code?: string; cause?: { code?: string } };

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { money } from "../lib/finance";
 import { tx } from "../lib/i18n";
+import { PersonChip } from "./shared";
 import type { CashAccountSummary, KasaSection, Language } from "../lib/types";
 import { workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import {
@@ -316,7 +317,7 @@ export function ExcelImportModal({
                       <td>{r.kind === "income" ? kindLabel("income") : kindLabel("expense")}</td>
                       <td>{r.date}</td>
                       <td>{r.source}{r.detailTable.length > 1 && <em className="xiTag">▦ {r.detailTable.length - 1}</em>}</td>
-                      <td>{r.person || "—"}</td>
+                      <td><PersonChip name={r.person || ""}>{r.person || "—"}</PersonChip></td>
                       <td>{r.project || "—"}</td>
                       <td className="r">{money(r.amount, r.currency)}</td>
                     </tr>

@@ -520,5 +520,8 @@ export const settings = pgTable("settings", {
   language: text("language").notNull().default("tr"),
   // Döviz kurları: "1 USD = X birim" (EUR, TRY, IQD, SYP) — tablolarda USD karşılığı sütununu besler.
   exchangeRates: jsonb("exchange_rates").notNull().default({}),
+  // Günlük otomatik kurlar (internetten, günde bir kez çekilir) ve çekildikleri gün (YYYY-MM-DD). Elle girilen kurlar bunların önüne geçer.
+  autoExchangeRates: jsonb("auto_exchange_rates").notNull().default({}),
+  autoExchangeRatesDate: text("auto_exchange_rates_date"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

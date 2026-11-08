@@ -61,10 +61,11 @@ export default function Home() {
   const [notes, setNotes] = useState<FinanceNote[]>([]);
   const [noteColumns, setNoteColumns] = useState<NoteColumn[]>([]);
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
+  const [rateInfo, setRateInfo] = useState<{ manual: Record<string, number>; auto: Record<string, number>; date: string | null }>({ manual: {}, auto: {}, date: null });
   const [noteDeleteId, setNoteDeleteId] = useState<number | null>(null);
   const [logo, setLogo] = useState("");
   const [company, setCompany] = useState("Maliye-Finans");
-  const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem; cashAccount?: string } | null>(
+  const [modal, setModal] = useState<{ kind: Kind; item?: RecordItem; cashAccount?: string; workspaceKey?: string } | null>(
     null,
   );
   const [recordsSearch, setRecordsSearch] = useState("");
@@ -246,7 +247,6 @@ export default function Home() {
         refreshNotes();
         if (Array.isArray(data.noteColumns)) setNoteColumns(data.noteColumns);
         if (data.settings) {
-          setExchangeRates(data.settings.exchangeRates ?? {});
           setCompany(data.settings.company ?? "Maliye-Finans");
           setLogo(data.settings.logo ?? "");
           // Language is per-user now (applied at sign-in from
@@ -393,6 +393,7 @@ export default function Home() {
       if (!response.ok) return;
       const data = await response.json();
       if (data.rates) setExchangeRates(data.rates);
+      setRateInfo({ manual: data.manual ?? {}, auto: data.auto ?? {}, date: data.date ?? null });
     } catch {}
   }
   async function refreshNoteColumns() {
@@ -869,7 +870,7 @@ export default function Home() {
                   (page === "income" && x.kind === "cash"),
               )}
               allRecords={contextRecords}
-              onAdd={(addKind, cashAccount) => setModal({ kind: addKind ?? (page as Kind), cashAccount })}
+              onAdd={(addKind, cashAccount, workspaceKey) => setModal({ kind: addKind ?? (page as Kind), cashAccount, workspaceKey })}
               onEdit={(item) => setModal({ kind: item.kind, item })}
               onDelete={removeRecord}
               onImport={importRecords}
@@ -956,8 +957,8 @@ export default function Home() {
               onSectionsChanged={() => { refreshSections(); refreshCashAccounts(); refreshRecords(); }}
               noteColumns={noteColumns}
               onNoteColumnsChanged={refreshNoteColumns}
-              exchangeRates={exchangeRates}
-              onExchangeRatesChanged={setExchangeRates}
+              rateInfo={rateInfo}
+              onExchangeRatesChanged={() => refreshExchangeRates()}
               usersPanel={
                 <Users
                   language={language}
@@ -983,6 +984,8 @@ export default function Home() {
           kind={modal.kind}
           initial={modal.item}
           prefillCashAccount={modal.cashAccount}
+          prefillWorkspaceKey={modal.workspaceKey}
+          onSectionsChanged={refreshSections}
           records={records}
           onCreateNote={createNote}
           onClose={() => setModal(null)}

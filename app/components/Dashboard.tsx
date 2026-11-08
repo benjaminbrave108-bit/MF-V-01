@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Title } from "./shared";
+import { Title, PersonChip } from "./shared";
 import { localizeData, tx } from "../lib/i18n";
 import { combineByCurrency, date, money, moneyBreakdown, total } from "../lib/finance";
 import type { Language, Page, RecordItem } from "../lib/types";
@@ -251,7 +251,7 @@ export function Dashboard({
                   <b>{localizeData(x.source, language)}</b>
                   <small>
                     {date(x.date, language)} ·{" "}
-                    {localizeData(x.person, language)}
+                    <PersonChip name={x.person}>{localizeData(x.person, language)}</PersonChip>
                   </small>
                 </span>
                 <strong>

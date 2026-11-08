@@ -6,13 +6,27 @@ import { tx } from "../lib/i18n";
 
 // Çalışma alanı seçenekleri: hazır alanlar (Genel / Liste / RJ) + Ayarlar'dan oluşturulan kasa çalışma alanları.
 // Her kasa mutlaka tek bir alana bağlıdır; "alansız" seçenek yoktur (varsayılan Genel Kasalar).
-export function workspaceOptions(sections: KasaSection[], language: Language): { key: string; label: string }[] {
-  return [
+export function workspaceOptions(sections: KasaSection[], language: Language): { key: string; label: string; isSub?: boolean }[] {
+  const cash = sections.filter((x) => x.scope === "cash");
+  const ids = new Set(cash.map((x) => `sec-${x.id}`));
+  const builtin = [
     { key: "genel", label: tx(language, "Diğer", "Other", "Yên din") },
     { key: "liste", label: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê") },
     { key: "rj", label: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ") },
-    ...sections.filter((x) => x.scope === "cash").map((x) => ({ key: `sec-${x.id}`, label: x.name })),
   ];
+  const known = new Set([...builtin.map((b) => b.key), ...ids]);
+  const isChild = (x: KasaSection) => Boolean(x.parentKey) && known.has(x.parentKey as string);
+  const tops = [...builtin, ...cash.filter((x) => !isChild(x)).map((x) => ({ key: `sec-${x.id}`, label: x.name }))];
+  // Her çalışma alanının hemen altında bölümleri: "Üst Alan › Bölüm".
+  return tops.flatMap((t) => [
+    t as { key: string; label: string; isSub?: boolean },
+    ...cash.filter((x) => isChild(x) && x.parentKey === t.key).map((x) => ({ key: `sec-${x.id}`, label: `${t.label} › ${x.name}`, isSub: true })),
+  ]);
+}
+
+// Bölüm oluştururken seçilebilecek üst çalışma alanları (bölümün içine bölüm eklenemez).
+export function parentWorkspaceOptions(sections: KasaSection[], language: Language): { key: string; label: string }[] {
+  return workspaceOptions(sections, language).filter((o) => !o.isSub);
 }
 
 export function workspaceKeyOf(state: { sectionId: number | null; rjKasa: boolean; listKasa: boolean }, sections: KasaSection[]): string {

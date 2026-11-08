@@ -166,6 +166,8 @@ export const sectionInputSchema = z.object({
   scope: z.enum(["cash", "income", "expense"]),
   name: z.string().trim().min(1, "Ad gerekli").max(80),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().default("#7b52bf"),
+  // Doluysa yeni alan, üstündekinin içinde "bölüm" olarak oluşturulur.
+  parentKey: z.string().regex(/^(genel|liste|rj|sec-\d+)$/).nullable().optional(),
 });
 // parentKey: "genel" | "liste" | "rj" | "sec-<id>" ya da null (üst alandan çıkar).
 export const sectionUpdateSchema = z.object({

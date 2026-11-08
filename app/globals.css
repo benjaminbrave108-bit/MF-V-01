@@ -3100,11 +3100,12 @@ body.noSelectDragging { user-select: none; }
 }
 .settings {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 19px;
 }
 .settingsPage { display: flex; flex-direction: column; gap: 18px; }
-.settingsMainTabs { display: flex; gap: 8px; padding: 6px; width: fit-content; background: #e5edf0; border-radius: 12px; }
+.settingsMainTabs { display: flex; gap: 8px; padding: 6px; width: 100%; background: #e5edf0; border-radius: 12px; overflow-x: auto; }
+.settingsMainTabs button { flex: 1 0 auto; }
 .settingsMainTabs button { border: 0; border-radius: 9px; padding: 11px 16px; background: transparent; color: #526b75; font-size: 11px; font-weight: 800; cursor: pointer; }
 .settingsMainTabs button.active { color: white; background: #176b87; box-shadow: 0 5px 14px #176b8730; }
 /* Yorumlar sayfasında iki sekmelik pill çok dar kalıp yanında biçimsiz bir
@@ -4297,6 +4298,8 @@ td[data-calc-sel] { background: #dbeafe !important; outline: 1px solid #5b8def; 
 .docCell { position: relative; display: inline-block; }
 .docChip { border: 1px solid #c8dfe5; background: #eef6f8; border-radius: 999px; padding: 2px 9px; font-size: 11px; cursor: pointer; color: #1f5a6b; }
 .docEmpty { color: #9aa9ae; }
+.docChip { white-space: nowrap; }
+.docMore { font-weight: 800; color: #176b87; }
 .docTooltip { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 60; min-width: 200px; max-width: 320px; padding: 8px 10px; border-radius: 10px; background: #fff; border: 1px solid #d8e2e5; box-shadow: 0 10px 24px rgba(20,40,45,.16); font-size: 11px; color: #1f2e33; text-align: left; }
 .docTooltip ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .docTooltip small { color: #74868c; }
@@ -4463,11 +4466,13 @@ tr.rowSelected > td { background: #fff4d6; }
 .commentCreateBody textarea { width: 100%; resize: vertical; }
 
 /* USD Karşılığı sütunu */
-.usdCell { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.usdCellSame { color: #aab6bb; }
-.usdCellMissing { color: #c98a1d; font-weight: 800; cursor: help; }
+.hasRateTip { cursor: help; border-bottom: 1px dotted #8aa0a8; }
 
 /* Bölümler (çalışma alanı içinde çalışma alanı) */
 .subSectionCard > button.selected { box-shadow: 0 0 0 2px #1d7a8c55; }
 .subGroups { margin-top: 8px; position: relative; padding-top: 22px; }
 .subGroupsTitle { position: absolute; top: 4px; left: 10px; font-size: 10px; font-weight: 800; color: #5b7d89; text-transform: uppercase; letter-spacing: .04em; }
+.inlineSectionRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.inlineSectionRow input { flex: 1 1 160px; min-width: 0; }
+
+.personChip { display: inline-block; max-width: 100%; padding: 2px 9px; border: 1px solid transparent; border-radius: 999px; font-weight: 600; font-size: 11px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }

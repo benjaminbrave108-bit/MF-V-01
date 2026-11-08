@@ -302,6 +302,8 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
   const [removedIdx, setRemovedIdx] = useState<number[]>([]);
   const [newFiles, setNewFiles] = useState<RecordAttachment[]>([]);
   const [fileError, setFileError] = useState("");
+  // Dosya okunurken Kaydet'e basılırsa belge kayda girmiyordu: okuma bitene kadar Kaydet bekletilir.
+  const [readingFiles, setReadingFiles] = useState(0);
   const relationOptions: NoteRelation[] = ["none", "cash", "income", "expense", "reports", "archive", "other"];
   const keptCount = existingNames.length - removedIdx.length;
   function toggleAssignee(userId: number, checked: boolean) {
@@ -316,7 +318,13 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
         continue;
       }
       const reader = new FileReader();
-      reader.onload = () =>
+      setReadingFiles((n) => n + 1);
+      reader.onerror = () => {
+        setReadingFiles((n) => Math.max(0, n - 1));
+        setFileError(tx(language, `"${file.name}" okunamadı.`, `"${file.name}" could not be read.`, `"${file.name}" nehat xwendin.`));
+      };
+      reader.onload = () => {
+        setReadingFiles((n) => Math.max(0, n - 1));
         setNewFiles((current) => {
           if (keptCount + current.length >= MAX_NOTE_ATTACHMENTS) {
             setFileError(tx(language, `En fazla ${MAX_NOTE_ATTACHMENTS} belge eklenebilir.`, `You can attach at most ${MAX_NOTE_ATTACHMENTS} files.`, `Herî zêde ${MAX_NOTE_ATTACHMENTS} pel dikarin werin pêvekirin.`));
@@ -324,6 +332,7 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
           }
           return [...current, { name: file.name, data: String(reader.result) }];
         });
+      };
       reader.readAsDataURL(file);
     }
   }
@@ -375,6 +384,6 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
         )}
         {fileError && <small className="redText">{fileError}</small>}
       </label></div>
-    <div className="modalActions"><button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal Bike")}</button><button className="primary" disabled={!title.trim() || !content.trim()}>{initialNote ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Notu Kaydet", "Save Note", "Nîşeyê Tomar Bike")}</button></div>
+    <div className="modalActions"><button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal Bike")}</button><button className="primary" disabled={!title.trim() || !content.trim() || readingFiles > 0}>{readingFiles > 0 ? tx(language, "⏳ Dosya yükleniyor…", "⏳ Loading file…", "⏳ Pel tê barkirin…") : initialNote ? tx(language, "Değişiklikleri Kaydet", "Save Changes", "Guherînan Tomar Bike") : tx(language, "Notu Kaydet", "Save Note", "Nîşeyê Tomar Bike")}</button></div>
   </form></div>;
 }

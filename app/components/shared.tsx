@@ -4,6 +4,34 @@ import { useEffect, useState } from "react";
 import { tx } from "../lib/i18n";
 import type { Language } from "../lib/types";
 
+// Kişi adına göre otomatik, sabit hafif arka plan rengi. Her kişi ayrı bir renk alır: ad önce bir renk dilimine
+// dağıtılır, dilim başka bir kişiye aitse bir sonraki boş dilim kullanılır (24 dilim; aşılırsa tekrar kullanılır).
+const PERSON_SLOTS = 24;
+const personSlots = new Map<string, number>();
+export function personColors(name: string): { background: string; color: string; borderColor: string } {
+  const key = name.trim().toLocaleLowerCase("tr");
+  let slot = personSlots.get(key);
+  if (slot === undefined) {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    const used = new Set(personSlots.values());
+    slot = h % PERSON_SLOTS;
+    for (let i = 0; i < PERSON_SLOTS && used.has(slot); i++) slot = (slot + 1) % PERSON_SLOTS;
+    personSlots.set(key, slot);
+  }
+  // Altın açı: ardışık dilimler renk çemberinde birbirinden uzak düşer; tek/çift dilimlerde açıklık da değişir.
+  const hue = Math.round((slot * 137.508) % 360);
+  const light = slot % 2 === 0 ? 93 : 96;
+  return { background: `hsl(${hue} 55% ${light}%)`, color: `hsl(${hue} 22% 34%)`, borderColor: `hsl(${hue} 40% 90%)` };
+}
+
+// Kişi etiketi: boş / "—" ise renklendirilmez.
+export function PersonChip({ name, children }: { name: string; children?: React.ReactNode }) {
+  const text = (name ?? "").trim();
+  if (!text || text === "—") return <>{children ?? "—"}</>;
+  return <span className="personChip" style={personColors(text)}>{children ?? text}</span>;
+}
+
 // Projedeki her pencere (.overlay > .modal, modalHead'iyle) fare ile
 // sürüklenebilir olsun — her modalın kendi JSX'ine tek tek dokunmak yerine,
 // document seviyesinde tek bir olay delegasyonu ile çalışan paylaşılan bir

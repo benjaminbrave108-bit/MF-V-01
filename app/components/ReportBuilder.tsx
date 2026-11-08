@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import ExcelJS from "exceljs";
-import { Title, DeleteConfirmModal } from "./shared";
+import { Title, DeleteConfirmModal, PersonChip } from "./shared";
 import { TableTools } from "./TableTools";
 import { tx, localizeData } from "../lib/i18n";
 import { date, money, moneyBreakdown, total } from "../lib/finance";
@@ -624,7 +624,7 @@ export function AnnualReports({
                 <td>{date(item.date, language)}</td>
                 <td><b>{localizeData(item.source, language)}</b></td>
                 <td>{localizeData(item.detail, language)}</td>
-                <td>{localizeData(item.person, language)}</td>
+                <td><PersonChip name={item.person}>{localizeData(item.person, language)}</PersonChip></td>
                 <td className="amount">{money(item.amount)} {item.currency}</td>
               </tr>
             ))}

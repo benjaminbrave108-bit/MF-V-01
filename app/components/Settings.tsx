@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Title, DeleteConfirmModal } from "./shared";
+import { parentWorkspaceOptions } from "./KasaManage";
 import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
 import type { BlockedIp, KasaSection, NoteColumn, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
@@ -24,7 +25,7 @@ export function Settings({
   usersPanel,
   noteColumns = [],
   onNoteColumnsChanged,
-  exchangeRates = {},
+  rateInfo = { manual: {}, auto: {}, date: null },
   onExchangeRatesChanged,
 }: {
   language: Language;
@@ -42,8 +43,8 @@ export function Settings({
   usersPanel?: ReactNode;
   noteColumns?: NoteColumn[];
   onNoteColumnsChanged?: () => void;
-  exchangeRates?: Record<string, number>;
-  onExchangeRatesChanged?: (rates: Record<string, number>) => void;
+  rateInfo?: { manual: Record<string, number>; auto: Record<string, number>; date: string | null };
+  onExchangeRatesChanged?: () => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
@@ -353,7 +354,7 @@ export function Settings({
       )}
 
       {tab === "sections" && <SectionsPanel language={language} sections={sections} onChanged={onSectionsChanged} checkPassword={checkPassword} />}
-      {tab === "rates" && <ExchangeRatesPanel language={language} rates={exchangeRates} onSaved={onExchangeRatesChanged} />}
+      {tab === "rates" && <ExchangeRatesPanel language={language} info={rateInfo} onSaved={onExchangeRatesChanged} />}
       {tab === "noteTasks" && <NoteColumnsPanel language={language} columns={noteColumns} onChanged={onNoteColumnsChanged} />}
       {tab === "users" && (
         <div className="settings">
@@ -456,7 +457,8 @@ const SECTION_COLORS = ["#7b52bf", "#1d9e75", "#d85a30", "#378add", "#ba7517", "
 
 // Ayarlar > Döviz Kurları: "1 USD = X birim". Kasalar/Gelir/Gider tablolarındaki "USD Karşılığı"
 // sütunu USD dışındaki tutarları bu kurlarla otomatik çevirir (tutar / kur).
-function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; rates: Record<string, number>; onSaved?: (rates: Record<string, number>) => void }) {
+function ExchangeRatesPanel({ language, info, onSaved }: { language: Language; info: { manual: Record<string, number>; auto: Record<string, number>; date: string | null }; onSaved?: () => void }) {
+  const rates = info.manual;
   const CODES: { code: string; name: [string, string, string] }[] = [
     { code: "EUR", name: ["Euro", "Euro", "Euro"] },
     { code: "TRY", name: ["Türk Lirası", "Turkish Lira", "Lîreya Tirkî"] },
@@ -472,6 +474,17 @@ function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; 
     if (!dirty) setDraft(toText(rates));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rates]);
+  async function refreshNow() {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/exchange-rates?refresh=1");
+      setMessage(response.ok ? tx(language, "Günlük kur güncellendi.", "Daily rates updated.", "Kurê rojane nû bû.") : tx(language, "Kur alınamadı.", "Could not fetch rates.", "Kur nehat girtin."));
+      onSaved?.();
+    } catch {
+      setMessage(tx(language, "Kur alınamadı.", "Could not fetch rates.", "Kur nehat girtin."));
+    }
+    setBusy(false);
+  }
   async function save() {
     const out: Record<string, number> = {};
     for (const c of CODES) {
@@ -492,7 +505,7 @@ function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; 
       else {
         setDirty(false);
         setMessage(tx(language, "Kaydedildi.", "Saved.", "Hat tomarkirin."));
-        onSaved?.(data.rates ?? out);
+        onSaved?.();
       }
     } catch {
       setMessage(tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
@@ -504,7 +517,7 @@ function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; 
       <div className="panel">
         <Title
           title={tx(language, "Döviz Kurları", "Exchange Rates", "Kurên Diravan")}
-          sub={tx(language, "USD dışındaki para birimleri için 1 USD karşılığını girin. Tablolardaki \"USD Karşılığı\" sütunu bu kurlarla otomatik hesaplanır.", "Enter how much of each currency equals 1 USD. The \"USD Equivalent\" column in the tables is calculated from these rates.", "Ji bo diravên din 1 USD çiqas e binivîse. Stûna \"Wekheva USD\" bi van kuran bixwe tê hesibandin.")}
+          sub={tx(language, "Kurlar her gün internetten otomatik alınır. Tablolarda USD dışı bir tutarın üzerine gelince o günün kuruyla USD karşılığı görünür. Elle kur girerseniz otomatik kurun yerine o kullanılır.", "Rates are fetched automatically every day. Hover a non-USD amount to see its USD value at the daily rate. A rate you enter overrides the automatic one.", "Kur her roj bixwe têne girtin. Li ser diravekî ne-USD bisekine, wekheva USD xuya dibe.")}
         />
         <div className="noteColumnsEditor">
           {CODES.map((c) => (
@@ -513,16 +526,18 @@ function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; 
               <input
                 inputMode="decimal"
                 value={draft[c.code]}
-                placeholder="—"
+                placeholder={info.auto[c.code] ? String(info.auto[c.code]) : "—"}
                 aria-label={c.code}
                 onChange={(e) => { setDraft({ ...draft, [c.code]: e.target.value }); setDirty(true); setMessage(""); }}
               />
-              <span style={{ width: 190 }}>{c.code} · {tx(language, ...c.name)}</span>
+              <span style={{ width: 190 }}>{c.code} · {tx(language, ...c.name)}{!draft[c.code] && info.auto[c.code] ? " · " + tx(language, "otomatik", "auto", "xweber") : ""}</span>
             </div>
           ))}
         </div>
         <div className="noteColumnsActions">
           <button type="button" className="primary" disabled={!dirty || busy} onClick={save}>{tx(language, "Kaydet", "Save", "Tomar Bike")}</button>
+          <button type="button" disabled={busy} onClick={refreshNow}>{tx(language, "Günlük kuru şimdi güncelle", "Update daily rates now", "Kurê rojane niha nû bike")}</button>
+          <small>{info.date ? tx(language, "Son otomatik güncelleme: ", "Last automatic update: ", "Nûvekirina dawî: ") + info.date : tx(language, "Henüz otomatik kur alınmadı.", "No automatic rates yet.", "Hê kur nehatiye girtin.")}</small>
           {message && <small>{message}</small>}
         </div>
         <small className="listKasaHint">{tx(language, "Kuru tanımlı olmayan para birimlerinin karşılığı tabloda \"?\" görünür. USD tutarlar için dönüşüm gerekmez.", "Currencies without a rate show \"?\" in the table. USD amounts need no conversion.", "Diravên bê kur di tabloyê de \"?\" xuya dikin.")}</small>
@@ -624,6 +639,9 @@ function SectionsPanel({ language, sections, onChanged, checkPassword }: { langu
     expense: { name: "", color: SECTION_COLORS[2] },
   });
   const [error, setError] = useState("");
+  // Kasa çalışma alanı eklerken doluysa yeni alan bu alanın içinde "bölüm" olur.
+  const [cashParent, setCashParent] = useState("");
+  const parentLabel = (x: KasaSection) => (x.parentKey ? parentWorkspaceOptions(sections, language).find((o) => o.key === x.parentKey)?.label : undefined);
   const groups: [SectionScope, string, string][] = [
     ["cash", tx(language, "Çalışma alanları (Proje Kasaları, Şirketler…)", "Workspaces (Project cash accounts, Companies…)", "Qadên xebatê (Qaseyên Projeyê, Şirket…)"), tx(language, "Kasalar sayfasında kasalar çalışma alanları başlığı altında görünür. Burada oluşturduğunuz her alan Kasalar sayfasına kendi renginde bir başlık ve kutu satırı ekler; kasa kaydında “Çalışma alanı” ile seçilir. Diğer, Liste Kasaları ve RJ-Kasaları hazır alanlardır.", "On the Kasalar page cash accounts appear under workspace headings. Each workspace created here adds a colored heading and box row; chosen with “Workspace” on a cash record. General, List and RJ cash accounts are built-in workspaces.", "Di rûpela Qase de qase di bin sernavên qadên xebatê de xuya dibin. Her qada ku li vir çêdikin sernavek û rêzeke qutiyê ya rengîn zêde dike; di tomara qaseyê de bi “Qada xebatê” tê hilbijartin. Qaseyên Giştî, Lîste û RJ qadên amade ne.")],
     ["income", tx(language, "Gelir bölümleri", "Income sections", "Beşên dahatê"), tx(language, "Gelir sayfasına yeni bir kutu ekler; gelir kaydında “Bölüm” ile seçilir.", "Adds a new box to the Income page; chosen with “Section” on an income record.", "Qutiyeke nû li rûpela Dahat zêde dike; di tomara dahatê de bi “Beş” tê hilbijartin.")],
@@ -656,7 +674,7 @@ function SectionsPanel({ language, sections, onChanged, checkPassword }: { langu
             {sections.filter((x) => x.scope === scope).map((x) => (
               <span key={x.id} className="sectionChip" style={{ borderColor: x.color, background: `${x.color}18` }}>
                 <i style={{ background: x.color }} />
-                {x.name}
+                {parentLabel(x) ? `${parentLabel(x)} › ${x.name}` : x.name}
                 <button
                   type="button"
                   title={tx(language, "Yeniden adlandır", "Rename", "Nav biguherîne")}
@@ -680,10 +698,18 @@ function SectionsPanel({ language, sections, onChanged, checkPassword }: { langu
               e.preventDefault();
               const d = drafts[scope];
               if (!d.name.trim()) return;
-              if (await call("/api/sections", "POST", { scope, name: d.name.trim(), color: d.color })) setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], name: "" } }));
+              if (await call("/api/sections", "POST", { scope, name: d.name.trim(), color: d.color, ...(scope === "cash" && cashParent ? { parentKey: cashParent } : {}) })) setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], name: "" } }));
             }}
           >
             <input value={drafts[scope].name} maxLength={80} placeholder={tx(language, "Yeni bölüm adı", "New section name", "Navê beşa nû")} onChange={(e) => setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], name: e.target.value } }))} />
+            {scope === "cash" && (
+              <select value={cashParent} onChange={(e) => setCashParent(e.target.value)} aria-label={tx(language, "Tür", "Type", "Cure")}>
+                <option value="">{tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")}</option>
+                {parentWorkspaceOptions(sections, language).map((o) => (
+                  <option key={o.key} value={o.key}>{tx(language, "Bölüm → ", "Section in → ", "Beş li → ")}{o.label}</option>
+                ))}
+              </select>
+            )}
             <span className="sectionColors">
               {SECTION_COLORS.map((c) => (
                 <button key={c} type="button" className={drafts[scope].color === c ? "active" : ""} style={{ background: c }} aria-label={c} onClick={() => setDrafts((prev) => ({ ...prev, [scope]: { ...prev[scope], color: c } }))} />
