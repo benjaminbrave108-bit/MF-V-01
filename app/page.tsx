@@ -27,6 +27,8 @@ import type {
   Kind,
   Language,
   NoteRelation,
+  NoteColumn,
+  RecordAttachment,
   NoteStatus,
   Page,
   PreparedReport,
@@ -57,6 +59,8 @@ export default function Home() {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [archive, setArchive] = useState<ArchiveItem[]>([]);
   const [notes, setNotes] = useState<FinanceNote[]>([]);
+  const [noteColumns, setNoteColumns] = useState<NoteColumn[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [noteDeleteId, setNoteDeleteId] = useState<number | null>(null);
   const [logo, setLogo] = useState("");
   const [company, setCompany] = useState("Maliye-Finans");
@@ -240,7 +244,9 @@ export default function Home() {
         refreshSections();
         refreshCashTransfers();
         refreshNotes();
+        if (Array.isArray(data.noteColumns)) setNoteColumns(data.noteColumns);
         if (data.settings) {
+          setExchangeRates(data.settings.exchangeRates ?? {});
           setCompany(data.settings.company ?? "Maliye-Finans");
           setLogo(data.settings.logo ?? "");
           // Language is per-user now (applied at sign-in from
@@ -381,6 +387,22 @@ export default function Home() {
   async function refreshAfterCashTransfer() {
     await Promise.all([refreshRecords(), refreshCashAccounts(), refreshCashTransfers()]);
   }
+  async function refreshExchangeRates() {
+    try {
+      const response = await fetch("/api/exchange-rates");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.rates) setExchangeRates(data.rates);
+    } catch {}
+  }
+  async function refreshNoteColumns() {
+    try {
+      const response = await fetch("/api/note-columns");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.columns)) setNoteColumns(data.columns);
+    } catch {}
+  }
   async function refreshNotes() {
     try {
       const response = await fetch("/api/notes");
@@ -413,6 +435,8 @@ export default function Home() {
       refreshCashTransfers();
       refreshSections();
       refreshNotes();
+      refreshNoteColumns();
+      refreshExchangeRates();
       refreshArchive();
     };
     const interval = setInterval(sync, 5000);
@@ -483,7 +507,7 @@ export default function Home() {
   }
 
   const noteSaveError = tx(language, "Not kaydedilemedi.", "The note could not be saved.", "Nîşe nehat tomarkirin.");
-  async function createNote(input: Omit<FinanceNote, "id" | "createdAt" | "updatedAt" | "isArchived" | "archivedAt">) {
+  async function createNote(input: Partial<FinanceNote>) {
     try {
       const response = await fetch("/api/notes", {
         method: "POST",
@@ -497,7 +521,7 @@ export default function Home() {
       alert(noteSaveError);
     }
   }
-  async function updateNote(note: FinanceNote) {
+  async function updateNote(note: FinanceNote & { addAttachments?: RecordAttachment[]; removeAttachmentIndexes?: number[] }) {
     try {
       const response = await fetch(`/api/notes/${note.id}`, {
         method: "PUT",
@@ -864,6 +888,7 @@ export default function Home() {
               onCommentsRead={refreshUnreadCommentsCount}
               readOnly={false}
               notes={notes}
+              exchangeRates={exchangeRates}
             />
           )}
           {page === "reportBuilder" && (
@@ -887,6 +912,8 @@ export default function Home() {
             <Notes
               language={language}
               notes={notes}
+              noteColumns={noteColumns}
+              currentUserId={users.find((u) => u.username === profile.username)?.id ?? 0}
               users={users}
               onCreateNote={createNote}
               onUpdateNote={updateNote}
@@ -895,7 +922,7 @@ export default function Home() {
               onMarkAllRead={markNotesRead}
             />
           )}
-          {page === "comments" && <Comments language={language} onRead={refreshUnreadCommentsCount} />}
+          {page === "comments" && <Comments language={language} records={records} onRead={refreshUnreadCommentsCount} />}
           {page === "activity" && <Activity language={language} />}
           {page === "archive" && (
             <Archive language={language} rows={archive} notes={notes} preparedReports={preparedReports} onUnarchiveNote={(id) => archiveNote(id, false)} />
@@ -927,6 +954,10 @@ export default function Home() {
               isSuperAdmin={profile.isSuperAdmin}
               sections={sections}
               onSectionsChanged={() => { refreshSections(); refreshCashAccounts(); refreshRecords(); }}
+              noteColumns={noteColumns}
+              onNoteColumnsChanged={refreshNoteColumns}
+              exchangeRates={exchangeRates}
+              onExchangeRatesChanged={setExchangeRates}
               usersPanel={
                 <Users
                   language={language}

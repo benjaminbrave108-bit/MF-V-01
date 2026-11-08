@@ -4,9 +4,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Title, DeleteConfirmModal } from "./shared";
 import { tx, kbGroupLogo } from "../lib/i18n";
 import { defaultTypography, typographyNames, colorSwatches } from "../lib/typography";
-import type { BlockedIp, KasaSection, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
+import type { BlockedIp, KasaSection, NoteColumn, Language, SectionScope, TypographyKey, TypographyRule, TypographySettings } from "../lib/types";
 
-type SettingsTab = "general" | "typography" | "sections" | "users" | "access" | "database";
+type SettingsTab = "general" | "typography" | "sections" | "rates" | "noteTasks" | "users" | "access" | "database";
 
 export function Settings({
   language,
@@ -22,6 +22,10 @@ export function Settings({
   sections,
   onSectionsChanged,
   usersPanel,
+  noteColumns = [],
+  onNoteColumnsChanged,
+  exchangeRates = {},
+  onExchangeRatesChanged,
 }: {
   language: Language;
   company: string;
@@ -36,6 +40,10 @@ export function Settings({
   sections: KasaSection[];
   onSectionsChanged: () => void;
   usersPanel?: ReactNode;
+  noteColumns?: NoteColumn[];
+  onNoteColumnsChanged?: () => void;
+  exchangeRates?: Record<string, number>;
+  onExchangeRatesChanged?: (rates: Record<string, number>) => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
@@ -182,6 +190,12 @@ export function Settings({
         </button>
         <button type="button" role="tab" aria-selected={tab === "sections"} className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")}>
           {tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "rates"} className={tab === "rates" ? "active" : ""} onClick={() => setTab("rates")}>
+          {tx(language, "Döviz Kurları", "Exchange Rates", "Kurên Diravan")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "noteTasks"} className={tab === "noteTasks" ? "active" : ""} onClick={() => setTab("noteTasks")}>
+          {tx(language, "Not Görevleri", "Note Tasks", "Erkên Nîşeyan")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
@@ -339,6 +353,8 @@ export function Settings({
       )}
 
       {tab === "sections" && <SectionsPanel language={language} sections={sections} onChanged={onSectionsChanged} checkPassword={checkPassword} />}
+      {tab === "rates" && <ExchangeRatesPanel language={language} rates={exchangeRates} onSaved={onExchangeRatesChanged} />}
+      {tab === "noteTasks" && <NoteColumnsPanel language={language} columns={noteColumns} onChanged={onNoteColumnsChanged} />}
       {tab === "users" && (
         <div className="settings">
           <div className="panel">
@@ -437,6 +453,168 @@ function TypographyControl({ language, typeKey, value, onChange }: { language: L
 // Ayarlar > Bölümler: Genel Kasa / Liste Kasası / RJ-Kasası eksenlerine ek olarak yöneticinin kasa, gelir ve gider
 // bölümleri oluşturması. Her bölüm ilgili sayfadaki kutu düzenine yeni bir kutu (satır) ekler.
 const SECTION_COLORS = ["#7b52bf", "#1d9e75", "#d85a30", "#378add", "#ba7517", "#d4537e", "#0f6e56", "#5f5e5a"];
+
+// Ayarlar > Döviz Kurları: "1 USD = X birim". Kasalar/Gelir/Gider tablolarındaki "USD Karşılığı"
+// sütunu USD dışındaki tutarları bu kurlarla otomatik çevirir (tutar / kur).
+function ExchangeRatesPanel({ language, rates, onSaved }: { language: Language; rates: Record<string, number>; onSaved?: (rates: Record<string, number>) => void }) {
+  const CODES: { code: string; name: [string, string, string] }[] = [
+    { code: "EUR", name: ["Euro", "Euro", "Euro"] },
+    { code: "TRY", name: ["Türk Lirası", "Turkish Lira", "Lîreya Tirkî"] },
+    { code: "SYP", name: ["Suriye Lirası", "Syrian Pound", "Lîreya Sûrî"] },
+    { code: "IQD", name: ["Irak Dinarı", "Iraqi Dinar", "Dînarê Iraqî"] },
+  ];
+  const toText = (r: Record<string, number>) => Object.fromEntries(CODES.map((c) => [c.code, r[c.code] ? String(r[c.code]) : ""]));
+  const [draft, setDraft] = useState<Record<string, string>>(toText(rates));
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!dirty) setDraft(toText(rates));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rates]);
+  async function save() {
+    const out: Record<string, number> = {};
+    for (const c of CODES) {
+      const raw = draft[c.code].trim().replace(",", ".");
+      if (!raw) continue;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) {
+        setMessage(tx(language, c.code + " kuru geçerli bir sayı olmalı.", c.code + " rate must be a valid number.", "Kurê " + c.code + " divê jimarek rast be."));
+        return;
+      }
+      out[c.code] = n;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/exchange-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rates: out }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) setMessage(data.error || tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
+      else {
+        setDirty(false);
+        setMessage(tx(language, "Kaydedildi.", "Saved.", "Hat tomarkirin."));
+        onSaved?.(data.rates ?? out);
+      }
+    } catch {
+      setMessage(tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
+    }
+    setBusy(false);
+  }
+  return (
+    <div className="settings">
+      <div className="panel">
+        <Title
+          title={tx(language, "Döviz Kurları", "Exchange Rates", "Kurên Diravan")}
+          sub={tx(language, "USD dışındaki para birimleri için 1 USD karşılığını girin. Tablolardaki \"USD Karşılığı\" sütunu bu kurlarla otomatik hesaplanır.", "Enter how much of each currency equals 1 USD. The \"USD Equivalent\" column in the tables is calculated from these rates.", "Ji bo diravên din 1 USD çiqas e binivîse. Stûna \"Wekheva USD\" bi van kuran bixwe tê hesibandin.")}
+        />
+        <div className="noteColumnsEditor">
+          {CODES.map((c) => (
+            <div className="noteColumnRow" key={c.code}>
+              <b style={{ width: 150 }}>1 USD =</b>
+              <input
+                inputMode="decimal"
+                value={draft[c.code]}
+                placeholder="—"
+                aria-label={c.code}
+                onChange={(e) => { setDraft({ ...draft, [c.code]: e.target.value }); setDirty(true); setMessage(""); }}
+              />
+              <span style={{ width: 190 }}>{c.code} · {tx(language, ...c.name)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="noteColumnsActions">
+          <button type="button" className="primary" disabled={!dirty || busy} onClick={save}>{tx(language, "Kaydet", "Save", "Tomar Bike")}</button>
+          {message && <small>{message}</small>}
+        </div>
+        <small className="listKasaHint">{tx(language, "Kuru tanımlı olmayan para birimlerinin karşılığı tabloda \"?\" görünür. USD tutarlar için dönüşüm gerekmez.", "Currencies without a rate show \"?\" in the table. USD amounts need no conversion.", "Diravên bê kur di tabloyê de \"?\" xuya dikin.")}</small>
+      </div>
+    </div>
+  );
+}
+
+// Ayarlar > Not Görevleri: Notlar panosundaki sütunları (Önemli, Acil, Bekleyen, Tamamlanmış…)
+// ekleme, yeniden adlandırma, renklendirme, sıralama ve silme. Silinen sütundaki notlar ilk sütuna taşınır.
+function NoteColumnsPanel({ language, columns, onChanged }: { language: Language; columns: NoteColumn[]; onChanged?: () => void }) {
+  type Draft = { key?: string; label: string; color: string };
+  const toDraft = (cols: NoteColumn[]): Draft[] => cols.map((c) => ({ key: c.key, label: c.label, color: c.color }));
+  const [draft, setDraft] = useState<Draft[]>(toDraft(columns));
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!dirty) setDraft(toDraft(columns));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns]);
+  const change = (next: Draft[]) => {
+    setDraft(next);
+    setDirty(true);
+    setMessage("");
+  };
+  const move = (i: number, d: number) => {
+    const j = i + d;
+    if (j < 0 || j >= draft.length) return;
+    const next = [...draft];
+    [next[i], next[j]] = [next[j], next[i]];
+    change(next);
+  };
+  async function save() {
+    if (draft.some((c) => !c.label.trim())) {
+      setMessage(tx(language, "Her sütunun bir adı olmalı.", "Every column needs a name.", "Her stûnek divê nav hebe."));
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/note-columns", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ columns: draft.map((c) => ({ ...c, label: c.label.trim() })) }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(data.error || tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
+      } else {
+        setDirty(false);
+        setDraft(toDraft(data.columns ?? []));
+        setMessage(tx(language, "Kaydedildi.", "Saved.", "Hat tomarkirin."));
+        onChanged?.();
+      }
+    } catch {
+      setMessage(tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."));
+    }
+    setBusy(false);
+  }
+  return (
+    <div className="settings">
+      <div className="panel">
+        <Title
+          title={tx(language, "Not Görevleri", "Note Tasks", "Erkên Nîşeyan")}
+          sub={tx(language, "Notlar sayfasındaki sütunları (Önemli, Acil, Bekleyen, Tamamlanmış…) ekleyin, düzenleyin veya silin.", "Add, edit or remove the columns on the Notes page (Important, Urgent, Pending, Completed…).", "Stûnên rûpela Nîşeyan lê zêde bike, biguherîne an jê bibe.")}
+        />
+        <div className="noteColumnsEditor">
+          {draft.map((c, i) => (
+            <div className="noteColumnRow" key={c.key ?? "new-" + i}>
+              <input type="color" value={c.color} aria-label={tx(language, "Renk", "Color", "Reng")} onChange={(e) => change(draft.map((x, k) => (k === i ? { ...x, color: e.target.value } : x)))} />
+              <input value={c.label} maxLength={60} aria-label={tx(language, "Sütun adı", "Column name", "Navê stûnê")} onChange={(e) => change(draft.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} />
+              <button type="button" className="light compact" disabled={i === 0} onClick={() => move(i, -1)} title={tx(language, "Yukarı", "Up", "Jor")}>↑</button>
+              <button type="button" className="light compact" disabled={i === draft.length - 1} onClick={() => move(i, 1)} title={tx(language, "Aşağı", "Down", "Jêr")}>↓</button>
+              <button type="button" className="light compact redText" disabled={draft.length <= 1} onClick={() => change(draft.filter((_, k) => k !== i))} title={tx(language, "Sil", "Delete", "Jêbibe")}>🗑</button>
+            </div>
+          ))}
+        </div>
+        <div className="noteColumnsActions">
+          <button type="button" className="light" disabled={draft.length >= 12} onClick={() => change([...draft, { label: "", color: "#7b52bf" }])}>
+            ＋ {tx(language, "Yeni Sütun Ekle", "Add Column", "Stûna Nû Zêde Bike")}
+          </button>
+          <button type="button" className="primary" disabled={!dirty || busy} onClick={save}>
+            {tx(language, "Kaydet", "Save", "Tomar Bike")}
+          </button>
+          {dirty && (
+            <button type="button" className="light" onClick={() => { setDraft(toDraft(columns)); setDirty(false); setMessage(""); }}>
+              {tx(language, "Vazgeç", "Cancel", "Betal Bike")}
+            </button>
+          )}
+          {message && <small>{message}</small>}
+        </div>
+        <small className="listKasaHint">{tx(language, "Bir sütun silinirse içindeki notlar ilk sütuna taşınır.", "If a column is deleted, its notes move to the first column.", "Heke stûnek were jêbirin, nîşeyên wê diçin stûna yekem.")}</small>
+      </div>
+    </div>
+  );
+}
 
 function SectionsPanel({ language, sections, onChanged, checkPassword }: { language: Language; sections: KasaSection[]; onChanged: () => void; checkPassword: (password: string) => Promise<boolean> }) {
   const [deleteTarget, setDeleteTarget] = useState<KasaSection | null>(null);

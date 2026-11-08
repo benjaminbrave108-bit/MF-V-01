@@ -167,7 +167,9 @@ export const sectionInputSchema = z.object({
   name: z.string().trim().min(1, "Ad gerekli").max(80),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().default("#7b52bf"),
 });
+// parentKey: "genel" | "liste" | "rj" | "sec-<id>" ya da null (üst alandan çıkar).
 export const sectionUpdateSchema = z.object({
+  parentKey: z.string().regex(/^(genel|liste|rj|sec-\d+)$/).nullable().optional(),
   name: z.string().trim().min(1).max(80).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
@@ -186,7 +188,8 @@ export const cashTransferInputSchema = z.object({
   recipientUserId: z.number().int().positive().optional(),
 });
 
-const noteStatusSchema = z.enum(["important", "urgent", "pending", "completed"]);
+// Sütun anahtarı (note_columns.key) — Ayarlar > Not Görevleri'nde düzenlenebilir.
+const noteStatusSchema = z.string().trim().min(1).max(60);
 const noteRelationSchema = z.enum(["none", "cash", "income", "expense", "reports", "archive", "other"]);
 
 export const noteInputSchema = z.object({
@@ -197,7 +200,19 @@ export const noteInputSchema = z.object({
   relationDetail: shortText(300),
   assignedUserIds: z.array(z.number().int().positive()).max(50).optional().default([]),
   isArchived: z.boolean().optional().default(false),
+  // Belgeler: yeni eklenenler tam veriyle gelir; mevcutlardan kaldırılacaklar sıra numarasıyla bildirilir.
+  addAttachments: attachmentsSchema,
+  removeAttachmentIndexes: z.array(z.number().int().min(0)).max(MAX_ATTACHMENTS).optional().default([]),
 });
+
+export const noteColumnsInputSchema = z.object({
+  columns: z
+    .array(z.object({ key: z.string().trim().min(1).max(60).optional(), label: z.string().trim().min(1, "Ad gerekli").max(60), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#398db1") }))
+    .min(1, "En az bir sütun gerekli")
+    .max(12, "En fazla 12 sütun olabilir"),
+});
+
+export const noteCommentInputSchema = z.object({ text: z.string().trim().min(1).max(2000) });
 
 // Proje Aşaması 2 — Liste defteri girdileri (çalışma alanı = kasa).
 const listCodeSchema = z.string().trim().min(1, "Kod gerekli").max(40);

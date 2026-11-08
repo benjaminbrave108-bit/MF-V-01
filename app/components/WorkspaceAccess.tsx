@@ -34,6 +34,10 @@ export function WorkspaceAccessModal({
 }) {
   const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
+  // Üst çalışma alanı: seçilirse bu alan onun içinde "bölüm" olarak görünür ("" = ana seviye).
+  const [parentKey, setParentKey] = useState(section?.parentKey ?? "");
+  const hasChildren = Boolean(section && sections.some((x) => x.parentKey === `sec-${section.id}`));
+  const parentChoices = workspaceOptions(sections, language).filter((o) => section && o.key !== `sec-${section.id}` && !sections.some((x) => `sec-${x.id}` === o.key && x.parentKey));
   const [people, setPeople] = useState<AccessUser[]>([]);
   const [grants, setGrants] = useState<Record<string, Set<number>>>({});
   const [loading, setLoading] = useState(true);
@@ -86,17 +90,18 @@ export function WorkspaceAccessModal({
     setBusy(true);
     setError("");
     try {
-      if (section && name.trim() && name.trim() !== section.name) {
+      const parentChanged = Boolean(section) && (parentKey || null) !== (section?.parentKey ?? null);
+      if (section && ((name.trim() && name.trim() !== section.name) || parentChanged)) {
         const renamed = await fetch(`/api/sections/${section.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim() }),
+          body: JSON.stringify({ ...(name.trim() && name.trim() !== section.name ? { name: name.trim() } : {}), ...(parentChanged ? { parentKey: parentKey || null } : {}) }),
         });
         if (!renamed.ok) {
           setError(
             renamed.status === 409
               ? tx(language, "Bu adla bir çalışma alanı zaten var.", "A workspace with this name already exists.", "Qada xebatê bi vî navî heye.")
-              : tx(language, "Ad kaydedilemedi.", "The name could not be saved.", "Nav nehat tomarkirin."),
+              : tx(language, "Kaydedilemedi.", "Could not be saved.", "Nehat tomarkirin."),
           );
           return;
         }
@@ -139,6 +144,22 @@ export function WorkspaceAccessModal({
             <label>
               {tx(language, "Çalışma alanı adı", "Workspace name", "Navê qada xebatê")}
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+            </label>
+          )}
+          {section && (
+            <label>
+              {tx(language, "Başka bir çalışma alanının bölümü olarak taşı", "Move into another workspace as a section", "Wekî beşa qadeke din bipêçe")}
+              <select value={parentKey} disabled={hasChildren} onChange={(e) => setParentKey(e.target.value)}>
+                <option value="">{tx(language, "— Ana seviye (bölüm değil)", "— Top level (not a section)", "— Asta bilind (ne beş e)")}</option>
+                {parentChoices.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+              <small className="kasaManageHint">
+                {hasChildren
+                  ? tx(language, "Bu alanın altında bölümler olduğu için başka alana taşınamaz.", "This workspace has sections under it, so it cannot be moved into another.", "Ev qad beşên wê hene, nikare bê guhastin.")
+                  : tx(language, "Seçilen alanda, kasaların önünde solda \"Bölüm\" olarak görünür; basınca içindeki kasalar açılır.", "It appears as a \"Section\" before the cash accounts; click it to open its accounts.", "Wekî \"Beş\" li pêşiya qaseyan xuya dibe.")}
+              </small>
             </label>
           )}
           {loading ? (

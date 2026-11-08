@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "exchange_rates" jsonb DEFAULT '{}'::jsonb NOT NULL;

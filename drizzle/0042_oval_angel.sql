@@ -1,0 +1,1 @@
+ALTER TABLE "kasa_sections" ADD COLUMN "parent_key" text;

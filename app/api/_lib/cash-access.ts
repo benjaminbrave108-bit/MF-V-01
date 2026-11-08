@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb, type DbClient } from "../../../db";
 import { cashAccountAccess, cashAccounts } from "../../../db/schema";
 import type { SessionUser } from "./auth";
@@ -26,11 +26,13 @@ export async function accessibleCashAccountIds(
   db: DbClient = getDb(),
 ): Promise<number[] | null> {
   if (user.isSuperAdmin) return null;
-  const rows = await db
-    .select({ id: cashAccountAccess.cashAccountId })
-    .from(cashAccountAccess)
-    .where(eq(cashAccountAccess.userId, user.id));
-  return rows.map((r) => r.id);
+  // Kullanıcı kendi oluşturduğu (sahibi olduğu) kasayı HER ZAMAN görür: paylaşım satırı
+  // silinmiş/eksik olsa bile sahiplik tek başına yeterlidir.
+  const [granted, owned] = await Promise.all([
+    db.select({ id: cashAccountAccess.cashAccountId }).from(cashAccountAccess).where(eq(cashAccountAccess.userId, user.id)),
+    db.select({ id: cashAccounts.id }).from(cashAccounts).where(eq(cashAccounts.ownerUserId, user.id)),
+  ]);
+  return [...new Set([...granted.map((r) => r.id), ...owned.map((r) => r.id)])];
 }
 
 export async function canAccessCashAccount(
@@ -39,6 +41,12 @@ export async function canAccessCashAccount(
   db: DbClient = getDb(),
 ): Promise<boolean> {
   if (user.isSuperAdmin) return true;
+  const owner = await db
+    .select({ id: cashAccounts.id })
+    .from(cashAccounts)
+    .where(and(eq(cashAccounts.id, cashAccountId), eq(cashAccounts.ownerUserId, user.id)))
+    .limit(1);
+  if (owner.length > 0) return true;
   const rows = await db
     .select({ id: cashAccountAccess.cashAccountId })
     .from(cashAccountAccess)
@@ -119,7 +127,7 @@ export async function accessibleCashAccountNames(
   const rows = await db
     .select({ name: cashAccounts.name })
     .from(cashAccounts)
-    .innerJoin(cashAccountAccess, eq(cashAccountAccess.cashAccountId, cashAccounts.id))
-    .where(eq(cashAccountAccess.userId, user.id));
-  return rows.map((r) => r.name);
+    .leftJoin(cashAccountAccess, and(eq(cashAccountAccess.cashAccountId, cashAccounts.id), eq(cashAccountAccess.userId, user.id)))
+    .where(or(eq(cashAccounts.ownerUserId, user.id), eq(cashAccountAccess.userId, user.id)));
+  return [...new Set(rows.map((r) => r.name))];
 }

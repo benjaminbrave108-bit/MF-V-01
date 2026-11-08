@@ -281,6 +281,27 @@
       "when": 1794047615047,
       "tag": "0039_lush_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794134067299,
+      "tag": "0040_magenta_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794135563469,
+      "tag": "0041_whole_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794136046521,
+      "tag": "0042_oval_angel",
+      "breakpoints": true
     }
   ]
 }

@@ -137,6 +137,130 @@ export function CommentThread({
   );
 }
 
+// Yorumlar sayfasından yeni yorum: önce bir kayıt (kasa / gelir / gider) seçilir, sonra yorum yazılır.
+// Yorum, o kaydın mevcut ipliğine eklenir (kayıt üzerindeki 💬 ile aynı yer).
+function CreateCommentModal({
+  language,
+  records,
+  onClose,
+  onCreated,
+}: {
+  language: Language;
+  records: RecordItem[];
+  onClose: () => void;
+  onCreated: (recordId: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [recordId, setRecordId] = useState<number | null>(null);
+  const [text, setText] = useState("");
+  const [isAttention, setIsAttention] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const q = query.trim().toLocaleLowerCase("tr-TR");
+  const matches = records
+    .filter((r) => {
+      if (!q) return true;
+      const hay = [r.source, r.cashAccount, r.person, r.project, ...(r.tags ?? []), String(r.amount), r.date].join(" ").toLocaleLowerCase("tr-TR");
+      return hay.includes(q);
+    })
+    .slice(0, 40);
+  const chosen = records.find((r) => r.id === recordId) ?? null;
+  const kindLabel = (k: string) => nav.find((n) => n.id === k)?.label[language] ?? k;
+
+  async function submit() {
+    if (!chosen || !text.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/records/${chosen.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim(), isAttention }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        setError(body.error || tx(language, "Yorum gönderilemedi.", "The comment could not be sent.", "Şîrove nehat şandin."));
+        setBusy(false);
+        return;
+      }
+      onCreated(chosen.id);
+    } catch {
+      setError(tx(language, "Yorum gönderilemedi.", "The comment could not be sent.", "Şîrove nehat şandin."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal commentCreateModal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>{tx(language, "Yorum Oluştur", "Create Comment", "Şîrove Çêke")}</h2>
+            <small>{tx(language, "Önce yorum yapılacak kaydı seçin.", "First pick the record to comment on.", "Pêşî qeyda ku şîrove lê bê kirin hilbijêre.")}</small>
+          </div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        {chosen ? (
+          <div className="commentChosenRecord">
+            <div>
+              <strong>{localizeData(chosen.source, language)}</strong>
+              <small>{date(chosen.date, language)} · {kindLabel(chosen.kind)}{chosen.kind !== "cash" && chosen.cashAccount ? ` · ${chosen.cashAccount}` : ""}</small>
+            </div>
+            <span className="amount">{money(chosen.amount, chosen.currency)}</span>
+            <button type="button" className="light compact" onClick={() => setRecordId(null)}>{tx(language, "Değiştir", "Change", "Biguherîne")}</button>
+          </div>
+        ) : (
+          <>
+            <input
+              autoFocus
+              className="commentRecordSearch"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={tx(language, "Kayıt ara (ad, kasa, kişi, etiket, tutar…)", "Search records (name, cash account, person, tag, amount…)", "Li qeydê bigere (nav, qase, kes, etîket, mîqdar…)")}
+            />
+            <div className="commentRecordList">
+              {matches.length === 0 ? (
+                <small className="commentEmpty">{tx(language, "Eşleşen kayıt yok.", "No matching record.", "Qeyda lihevhatî tune.")}</small>
+              ) : (
+                matches.map((r) => (
+                  <button type="button" key={r.id} className="commentRecordOption" onClick={() => setRecordId(r.id)}>
+                    <span>
+                      <strong>{localizeData(r.source, language)}</strong>
+                      <small>{date(r.date, language)} · {kindLabel(r.kind)}{r.kind !== "cash" && r.cashAccount ? ` · ${r.cashAccount}` : ""}</small>
+                    </span>
+                    <span className="amount">{money(r.amount, r.currency)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </>
+        )}
+        {chosen && (
+          <div className="commentCreateBody">
+            <textarea
+              rows={4}
+              autoFocus
+              value={text}
+              disabled={busy}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={tx(language, "Yorumunuzu yazın…", "Write your comment…", "Şîroveya xwe binivîse…")}
+            />
+            <label className="commentAttentionToggle">
+              <input type="checkbox" checked={isAttention} onChange={(e) => setIsAttention(e.target.checked)} disabled={busy} />
+              ⚠️ {tx(language, "Dikkat", "Attention", "Balkêşî")}
+            </label>
+          </div>
+        )}
+        {error && <small className="redText">{error}</small>}
+        <div className="modalActions">
+          <button type="button" className="light" onClick={onClose}>{tx(language, "Vazgeç", "Cancel", "Betal Bike")}</button>
+          <button type="button" className="primary" disabled={!chosen || !text.trim() || busy} onClick={submit}>{tx(language, "Yorumu Gönder", "Send Comment", "Şîrove Bişîne")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function postReactionToggle(commentId: number, emoji: string): Promise<RecordComment["reactions"] | null> {
   try {
     const response = await fetch(`/api/comments/${commentId}/reactions`, {
@@ -252,7 +376,7 @@ export function RecordCommentsModal({
 // as a card carrying that record's own info (kasa/kind, tag, amount) with
 // its full thread inline — replying here posts to the exact same thread the
 // "💬" row action on Kasalar/Gelir/Gider opens.
-export function Comments({ language, onRead }: { language: Language; onRead?: () => void }) {
+export function Comments({ language, records = [], onRead }: { language: Language; records?: RecordItem[]; onRead?: () => void }) {
   const [threads, setThreads] = useState<{ record: RecordItem; comments: RecordComment[]; hasUnread: boolean }[] | null>(null);
   const [busyRecordId, setBusyRecordId] = useState<number | null>(null);
   const [tab, setTab] = useState<"all" | "attention">("all");
@@ -260,6 +384,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
   // ana/detay görünümü. Sekme değişince veya seçili başlık artık listede
   // yoksa (attention filtresine takılınca vs.) ilk görünen başlığa döner.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     load();
@@ -363,15 +488,33 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
 
   return (
     <div className="panel">
-      <Title
-        title={tx(language, "Yorumlar", "Comments", "Şîrove")}
-        sub={tx(
-          language,
-          "Kasa, gelir ve gider kayıtlarına yapılan yorumlar — soldan bir başlık seçin, o kaydın yorum ipliği sağda açılır.",
-          "Comments made on cash, income and expense records — pick a title on the left, its thread opens on the right.",
-          "Şîroveyên li ser qeydên qase, dahat û mesrefan — ji milê çepê sernavekê hilbijêre, riştê şîroveyê li rastê vebe.",
-        )}
-      />
+      <div className="toolbar">
+        <Title
+          title={tx(language, "Yorumlar", "Comments", "Şîrove")}
+          sub={tx(
+            language,
+            "Kasa, gelir ve gider kayıtlarına yapılan yorumlar — soldan bir başlık seçin, o kaydın yorum ipliği sağda açılır.",
+            "Comments made on cash, income and expense records — pick a title on the left, its thread opens on the right.",
+            "Şîroveyên li ser qeydên qase, dahat û mesrefan — ji milê çepê sernavekê hilbijêre, riştê şîroveyê li rastê vebe.",
+          )}
+        />
+        <button type="button" className="primary" onClick={() => setCreating(true)}>
+          ＋ {tx(language, "Yorum Oluştur", "Create Comment", "Şîrove Çêke")}
+        </button>
+      </div>
+      {creating && (
+        <CreateCommentModal
+          language={language}
+          records={records}
+          onClose={() => setCreating(false)}
+          onCreated={async (recordId) => {
+            setCreating(false);
+            setTab("all");
+            await load();
+            setSelectedId(recordId);
+          }}
+        />
+      )}
       <div className="settingsMainTabs commentsMainTabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
           {tx(language, "Tüm Yorumlar", "All Comments", "Hemû Şîrove")}
@@ -403,7 +546,7 @@ export function Comments({ language, onRead }: { language: Language; onRead?: ()
         <small>
           {tx(
             language,
-            "Henüz yorum yapılmış bir kayıt yok. Kasalar, Gelir veya Gider sayfasındaki bir satırın 💬 simgesinden başlayabilirsiniz.",
+            "Henüz yorum yapılmış bir kayıt yok. Yukarıdaki \"Yorum Oluştur\" düğmesiyle veya Kasalar, Gelir ya da Gider sayfasındaki bir satırın 💬 simgesinden başlayabilirsiniz.",
             "No record has a comment yet. Start one from the 💬 icon on a row in Kasalar, Gelir or Gider.",
             "Hîn qeydek bi şîrove tune. Hûn dikarin ji sembola 💬 ya rêzek li Kasalar, Gelir an Gider dest pê bikin.",
           )}

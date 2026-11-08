@@ -9,7 +9,7 @@ import { KasaDeleteModal, KasaEditModal, workspaceKeyOf, workspaceOptions, works
 import { WorkspaceAccessModal, type AccessKasa } from "./WorkspaceAccess";
 import { TableTools } from "./TableTools";
 import { tx, localizeData, noteRelationLabel } from "../lib/i18n";
-import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, total } from "../lib/finance";
+import { combineByCurrency, date, money, moneyBreakdown, normalizeRecord, parseImportDate, toUsd, total, type ExchangeRates } from "../lib/finance";
 import type { CashAccountSummary, CashTransfer, FinanceNote, KasaSection, Kind, Language, NoteRelation, NoteStatus, RecordItem, UserAccount } from "../lib/types";
 
 // Gider detay tablosu sınırları — sunucudaki detailTableSchema ile aynı olmalı
@@ -874,9 +874,9 @@ function TagsInput({
 // (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
 // kimliklerini hem de varsayılan genişliklerini taşır; sırası
 // DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
-type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
+type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "usd" | "location" | "tags" | "action";
 // Ana görünüm: Tarih, Kasa Adı, Çalışma Alanı, Kişi, Belgeler, Miktar, Etiket, İşlem. Detay/Not, Mesajlar ve Kasa Yeri ana tabloda yok.
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "tags", "action"];
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "usd", "tags", "action"];
 // Detay/Not ve Mesajlar öntanımlı olarak en dar iki sütun — uzun metin
 // satıra sığmayınca satırı büyütmek yerine tek satırda "..." ile kesilir
 // (bkz. renderCell'deki .cellDetailText ve .messagesCellText), böylece
@@ -892,6 +892,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   messages: 110,
   person: 80,
   amount: 110,
+  usd: 110,
   location: 120,
   tags: 110,
   action: 110,
@@ -900,7 +901,7 @@ const MIN_COLUMN_WIDTH = 64;
 // v2: Detay/Not ve Mesajlar öntanımlı genişlikleri daraltıldı — anahtar
 // sürümü artırılmasa, daha önce kaydedilmiş (geniş) genişlikler yeni
 // varsayılanları maskeler ve kullanıcı hiçbir fark görmez.
-const COLUMNS_STORAGE_KEY = "mf-records-columns-v3";
+const COLUMNS_STORAGE_KEY = "mf-records-columns-v4";
 
 // Kasalar sayfasındaki kasa kartı verisi (kasa kaydı + bağlı gelir/gider).
 type CardGroup = {
@@ -932,6 +933,7 @@ export function Records({
   onCommentsRead,
   readOnly,
   notes,
+  exchangeRates = {},
   onRefreshData,
   sections = [],
   isSuperAdmin = false,
@@ -955,6 +957,7 @@ export function Records({
   onTransfersChanged: () => void;
   onCommentsRead?: () => void;
   readOnly: boolean;
+  exchangeRates?: ExchangeRates;
   notes: FinanceNote[];
   onRefreshData?: () => void;
   sections?: KasaSection[];
@@ -1132,6 +1135,8 @@ export function Records({
         return tx(language, "Kişi", "Person", "Kes");
       case "amount":
         return tx(language, "Miktar", "Amount", "Meblağ");
+      case "usd":
+        return tx(language, "USD Karşılığı", "USD Equivalent", "Wekheva USD");
       case "location":
         return kind === "cash"
           ? tx(language, "Kasa Yeri", "Cash Location", "Cihê Qaseyê")
@@ -1258,6 +1263,13 @@ export function Records({
         );
       case "person":
         return localizeData(x.person, language);
+      case "usd": {
+        // USD dışındaki tutarlar için ayarlardaki kurla otomatik USD karşılığı.
+        if (x.currency === "USD") return <span className="usdCell usdCellSame">—</span>;
+        const usd = toUsd(x.amount, x.currency, exchangeRates);
+        if (usd === null) return <span className="usdCell usdCellMissing" title={tx(language, "Bu para birimi için kur tanımlı değil (Ayarlar > Döviz Kurları)", "No rate set for this currency (Settings > Exchange Rates)", "Ji bo vê diravê kur nehatiye danîn")}>?</span>;
+        return <span className={`usdCell ${x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : ""}`} title={`1 USD = ${exchangeRates[x.currency]} ${x.currency}`}>≈ {money(usd, "USD")}</span>;
+      }
       case "amount":
         return <span className={x.kind === "income" ? "amountIncome" : x.kind === "expense" ? "amountExpense" : undefined}>{money(x.amount, x.currency)}</span>;
       case "location":
@@ -1804,12 +1816,12 @@ export function Records({
     const names = [...new Set([...cashAccounts.map((a) => a.name), ...records.map((x) => x.source)].filter(Boolean))].sort((a, b) => a.localeCompare(b));
     const accountOf = new Map(cashAccounts.map((a) => [a.name, a]));
     type Card = CardGroup & { direct: RecordItem[]; inc: RecordItem[]; exp: RecordItem[] };
-    type Ws = { key: string; name: string; color: string; kasas: Card[] };
+    type Ws = { key: string; name: string; color: string; kasas: Card[]; parentKey?: string | null };
     const buckets: Ws[] = [
       { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#287b98", kasas: [] },
       { key: "liste", name: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê"), color: "#b9951c", kasas: [] },
       { key: "rj", name: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ"), color: "#7b52bf", kasas: [] },
-      ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, kasas: [] as Card[] })),
+      ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, parentKey: section.parentKey ?? null, kasas: [] as Card[] })),
     ];
     for (const name of names) {
       const direct = records.filter((x) => x.source === name);
@@ -1832,20 +1844,33 @@ export function Records({
         : account?.isListWorkspace ? "liste" : account?.isRjKasa ? "rj" : "genel";
       buckets.find((b) => b.key === key)?.kasas.push(card);
     }
+    // Bölümler: başka bir çalışma alanının içine taşınan alanlar ana listede ayrı kutu olmaz; üst alanın içinde "bölüm" olarak görünür
+    // ve toplamları üst alana dahil edilir.
+    const calc = (kasas: Card[]) => {
+      const parts = kasas.flatMap((k) => [{ rows: k.direct }, { rows: k.inc }]);
+      return {
+        count: kasas.reduce((a, k) => a + k.count, 0),
+        inBy: combineByCurrency(parts),
+        outBy: combineByCurrency(kasas.map((k) => ({ rows: k.exp }))),
+        totalBy: combineByCurrency([...parts, ...kasas.map((k) => ({ rows: k.exp, sign: -1 }))]),
+      };
+    };
+    const known = new Set(buckets.map((b) => b.key));
+    const isChild = (b: Ws) => Boolean(b.parentKey) && known.has(b.parentKey as string);
     return buckets
-      .filter((b) => b.kasas.length > 0 || b.key.startsWith("sec-") || b.key === "genel")
+      .filter((b) => !isChild(b))
+      .filter((b) => b.kasas.length > 0 || b.key.startsWith("sec-") || b.key === "genel" || buckets.some((s) => s.parentKey === b.key))
       .map((b) => {
-        const parts = b.kasas.flatMap((k) => [{ rows: k.direct }, { rows: k.inc }]);
-        return {
-          ...b,
-          count: b.kasas.reduce((a, k) => a + k.count, 0),
-          inBy: combineByCurrency(parts),
-          outBy: combineByCurrency(b.kasas.map((k) => ({ rows: k.exp }))),
-          totalBy: combineByCurrency([...parts, ...b.kasas.map((k) => ({ rows: k.exp, sign: -1 }))]),
-        };
+        const subs = buckets.filter((s) => s.parentKey === b.key).map((s) => ({ ...s, ...calc(s.kasas) }));
+        const allKasas = [...b.kasas, ...subs.flatMap((s) => s.kasas)];
+        return { ...b, subs, allKasas, ...calc(allKasas) };
       });
   }, [records, allRecords, kind, cashAccounts, sections, language]);
-  const activeWsNames = new Set((cashWorkspaces.find((w) => w.key === activeWs)?.kasas ?? []).map((k) => k.name));
+  const [activeSub, setActiveSub] = useState<string | null>(null);
+  useEffect(() => setActiveSub(null), [activeWs]);
+  const activeWsObj = cashWorkspaces.find((w) => w.key === activeWs);
+  const activeSubObj = activeSub ? activeWsObj?.subs.find((s) => s.key === activeSub) ?? null : null;
+  const activeWsNames = new Set((activeSubObj ? activeSubObj.kasas : activeWsObj?.allKasas ?? []).map((k) => k.name));
   // Gelir/Gider sayfaları: kasa kutuları çalışma alanlarına göre gruplanır; üstte yalnızca alan kutuları görünür (ekran şişmesin),
   // bir alana basınca o alanın kasaları altta açılır. Bu sayfadaki türde (gelir/gider) kaydı olmayan alanlar gösterilmez.
   const ieWorkspaces = useMemo(() => {
@@ -1894,7 +1919,7 @@ export function Records({
     kind !== "cash" || !activeWs
       ? []
       : activeWs === "__all"
-        ? cashWorkspaces.flatMap((w) => w.kasas.map((g) => ({ g, color: w.color }))).sort((a, b) => a.g.name.localeCompare(b.g.name))
+        ? cashWorkspaces.flatMap((w) => [...w.kasas.map((g) => ({ g, color: w.color })), ...w.subs.flatMap((s) => s.kasas.map((g) => ({ g, color: s.color })))]).sort((a, b) => a.g.name.localeCompare(b.g.name))
         : (activeWorkspace?.kasas ?? []).map((g) => ({ g, color: activeWorkspace!.color }));
   const overallListInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && isListLinked(x)) : [];
@@ -2560,7 +2585,7 @@ export function Records({
             </span>
           )}
         </button>
-        {kind === "cash" && cashWorkspaces.filter((w) => isSuperAdmin || w.kasas.length > 0).map((w) => {
+        {kind === "cash" && cashWorkspaces.filter((w) => isSuperAdmin || w.allKasas.length > 0).map((w) => {
           const tone = { background: `${w.color}14`, borderColor: `${w.color}66` };
           return (
             <div className="groupCard" key={w.key}>
@@ -2577,7 +2602,7 @@ export function Records({
                 }}
               >
                 <b>{w.name} <span className="groupCount" style={{ color: w.color }}>({w.count})</span></b>
-                <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+                <em className="groupKasaTag" style={{ background: `${w.color}22`, color: w.color }}>◆ {tx(language, "Çalışma alanı", "Workspace", "Qada xebatê")} · {w.allKasas.length} {tx(language, "kasa", "accounts", "qase")}{w.subs.length ? ` · ${w.subs.length} ${tx(language, "bölüm", "sections", "beş")}` : ""}</em>
                 <strong style={{ color: w.color }}>{moneyBreakdown(w.totalBy)}</strong>
                 <span className="groupInOut">
                   <span className="in">↗ {moneyBreakdown(w.inBy)}</span>
@@ -2593,7 +2618,7 @@ export function Records({
                     onClick={() =>
                       setAccessTarget({
                         title: `${w.name} — ${tx(language, "Çalışma alanını düzenle", "Edit workspace", "Qada xebatê biguherîne")}`,
-                        kasas: w.kasas
+                        kasas: w.allKasas
                           .map((k) => {
                             const acc = cashAccounts.find((c) => c.name === k.name);
                             return { id: acc?.id ?? 0, name: k.name, ownerUserId: acc?.ownerUserId ?? null };
@@ -2840,9 +2865,62 @@ export function Records({
       )}
       {kind === "cash" && activeWs && (
         <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#287b98"}` }}>
+          {activeWorkspace?.subs.map((s) => (
+            <div className="groupCard subSectionCard" key={s.key}>
+              <button
+                className={activeSub === s.key ? "selected" : ""}
+                style={{ background: `${s.color}14`, borderColor: `${s.color}66`, borderLeft: `4px solid ${s.color}` }}
+                onClick={() => {
+                  setActiveSub(activeSub === s.key ? null : s.key);
+                  setSource("Tümü");
+                  setActiveKasa("");
+                }}
+              >
+                <b>{s.name} <span className="groupCount" style={{ color: s.color }}>({s.count})</span></b>
+                <em className="groupKasaTag" style={{ background: `${s.color}22`, color: s.color }}>{activeSub === s.key ? "▾" : "▸"} {tx(language, "Bölüm", "Section", "Beş")} · {s.kasas.length} {tx(language, "kasa", "accounts", "qase")}</em>
+                <strong style={{ color: s.color }}>{moneyBreakdown(s.totalBy)}</strong>
+                <span className="groupInOut">
+                  <span className="in">↗ {moneyBreakdown(s.inBy)}</span>
+                  <span className="out">↘ {moneyBreakdown(s.outBy)}</span>
+                </span>
+              </button>
+              {isSuperAdmin && (
+                <span className="kasaActions">
+                  <button
+                    type="button"
+                    title={tx(language, "Bölümü düzenle", "Edit section", "Beşê biguherîne")}
+                    aria-label={tx(language, "Bölümü düzenle", "Edit section", "Beşê biguherîne")}
+                    onClick={() =>
+                      setAccessTarget({
+                        title: `${s.name} — ${tx(language, "Bölümü düzenle", "Edit section", "Beşê biguherîne")}`,
+                        kasas: s.kasas
+                          .map((k) => {
+                            const acc = cashAccounts.find((c) => c.name === k.name);
+                            return { id: acc?.id ?? 0, name: k.name, ownerUserId: acc?.ownerUserId ?? null };
+                          })
+                          .filter((k) => k.id > 0),
+                        section: sections.find((x) => x.id === Number(s.key.slice(4))),
+                      })
+                    }
+                  >
+                    ✎
+                  </button>
+                </span>
+              )}
+            </div>
+          ))}
           {activeKasaCards.map(({ g, color }) => renderKasaCard(g, { background: `${color}14`, borderColor: `${color}66` }))}
-          {activeKasaCards.length === 0 && (
+          {activeKasaCards.length === 0 && !activeWorkspace?.subs.length && (
             <small className="workspaceEmpty">{tx(language, "Bu çalışma alanında henüz kasa yok — kasa kaydında “Çalışma alanı” seçin.", "No cash accounts yet — pick “Workspace” on a cash record.", "Hê qase tune — di tomara qaseyê de “Qada xebatê” hilbijêre.")}</small>
+          )}
+        </div>
+      )}
+      {kind === "cash" && activeSubObj && (
+        <div className="groups workspaceGroups subGroups" style={{ borderLeft: `4px solid ${activeSubObj.color}` }}>
+          <small className="subGroupsTitle">{activeSubObj.name}</small>
+          {activeSubObj.kasas.map((g) => renderKasaCard(g, { background: `${activeSubObj.color}14`, borderColor: `${activeSubObj.color}66` }))}
+          {activeSubObj.kasas.length === 0 && (
+            <small className="workspaceEmpty">{tx(language, "Bu bölümde henüz kasa yok.", "No cash accounts in this section yet.", "Di vê beşê de hê qase tune.")}</small>
           )}
         </div>
       )}

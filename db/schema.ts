@@ -64,6 +64,8 @@ export const kasaSections = pgTable("kasa_sections", {
   scope: text("scope").notNull(),
   name: text("name").notNull(),
   color: text("color").notNull().default("#7b52bf"),
+  // Üst çalışma alanı anahtarı (genel / liste / rj / sec-<id>): doluysa bu alan, üstündekinin içinde "bölüm" olarak görünür.
+  parentKey: text("parent_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check("kasa_sections_scope_check", sql`${table.scope} IN ('cash', 'income', 'expense')`),
@@ -402,10 +404,32 @@ export const financeNotes = pgTable("finance_notes", {
   // "birikme") önlemek için var.
   isArchived: boolean("is_archived").notNull().default(false),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  // Nota eklenen belgeler (kayıt ekleriyle aynı biçim: { name, data(base64 data URL) }).
+  attachments: jsonb("attachments").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Not panosunun sütunları (Ayarlar > Not Görevleri): eklenebilir, silinebilir, yeniden adlandırılabilir.
+// finance_notes.status bu tablodaki `key` değerini taşır.
+export const noteColumns = pgTable("note_columns", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  color: text("color").notNull().default("#398db1"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// Notla ilişkili (atanmış) kullanıcıların not üzerindeki yorum / mesajları.
+export const noteComments = pgTable("note_comments", {
+  id: serial("id").primaryKey(),
+  noteId: integer("note_id").notNull().references(() => financeNotes.id, { onDelete: "cascade" }),
+  userId: integer("user_id"),
+  userName: text("user_name").notNull(),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check("finance_notes_status_check", sql`${table.status} IN ('important', 'urgent', 'pending', 'completed')`),
+  index("note_comments_note_id_idx").on(table.noteId),
 ]);
 
 // Per-user "read up to" marker for one finance note — aynı commentReads
@@ -494,5 +518,7 @@ export const settings = pgTable("settings", {
   logo: text("logo").notNull().default(""),
   typography: jsonb("typography").notNull(),
   language: text("language").notNull().default("tr"),
+  // Döviz kurları: "1 USD = X birim" (EUR, TRY, IQD, SYP) — tablolarda USD karşılığı sütununu besler.
+  exchangeRates: jsonb("exchange_rates").notNull().default({}),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

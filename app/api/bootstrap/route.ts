@@ -1,10 +1,11 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { archive, financeNotes, preparedReports, records, settings, users } from "../../../db/schema";
+import { archive, noteColumns, preparedReports, records, settings, users } from "../../../db/schema";
 import { requireSession } from "../_lib/auth";
 import { accessibleCashAccountIds, accessibleCashAccountNames } from "../_lib/cash-access";
 import { json, withErrorHandling } from "../_lib/http";
 import { toClientArchiveItem } from "../_lib/archive";
+import { listClientNotes } from "../_lib/notes";
 import type { Kind } from "../_lib/types";
 
 const SETTINGS_ID = 1;
@@ -55,20 +56,21 @@ export const GET = withErrorHandling(async (request: Request) => {
   const canArchive = user.isAdmin || user.permissions.includes("archive");
 
   const db = getDb();
-  const [accessibleIds, accessibleNames, recordRows, archiveRows, noteRows, reportRows, settingsRows, userRows] = await Promise.all([
+  const [accessibleIds, accessibleNames, recordRows, archiveRows, noteRows, reportRows, settingsRows, userRows, noteColumnRows] = await Promise.all([
     accessibleCashAccountIds(user, db),
     accessibleCashAccountNames(user, db),
     allowedKinds.length
       ? db.select().from(records).where(inArray(records.kind, allowedKinds)).orderBy(desc(records.date), desc(records.id))
       : Promise.resolve([]),
     canArchive ? db.select().from(archive).orderBy(desc(archive.at), desc(archive.id)) : Promise.resolve([]),
-    canNotes ? db.select().from(financeNotes).orderBy(desc(financeNotes.updatedAt), desc(financeNotes.id)) : Promise.resolve([]),
+    canNotes ? listClientNotes(user.id, db) : Promise.resolve([]),
     canReports ? db.select().from(preparedReports).orderBy(desc(preparedReports.createdAt)) : Promise.resolve([]),
     db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).limit(1),
     // Every user gets their own row here even when not admin — Kullanıcılar
     // is open to everyone so they can view/edit their own account, just
     // scoped to themselves (see app/components/Users.tsx).
     user.isAdmin ? db.select().from(users).orderBy(users.id) : db.select().from(users).where(eq(users.id, user.id)).limit(1),
+    db.select().from(noteColumns).orderBy(noteColumns.sortOrder, noteColumns.id),
   ]);
 
   const allowedNames = accessibleNames === null ? null : new Set(accessibleNames);
@@ -86,6 +88,7 @@ export const GET = withErrorHandling(async (request: Request) => {
     records: scopeRecordsToAccessibleKasas(recordRows, accessibleIds),
     archive: scopedArchive.map(toClientArchiveItem),
     notes: noteRows,
+    noteColumns: noteColumnRows.map((c) => ({ id: c.id, key: c.key, label: c.label, color: c.color })),
     preparedReports: scopedReports,
     settings: settingsRows[0] ?? null,
     users: userRows.map(toClientUser),

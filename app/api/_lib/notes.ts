@@ -1,5 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { financeNotes, noteReads } from "../../../db/schema";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { financeNotes, noteColumns, noteComments, noteReads, users } from "../../../db/schema";
 import type { DbClient } from "../../../db";
 
 // Same "read up to" idea as commentReads, but per-note instead of
@@ -59,4 +59,51 @@ export async function markAllNotesRead(userId: number, db: DbClient): Promise<vo
     .insert(noteReads)
     .values(rows.map((r) => ({ userId, noteId: r.id, lastReadAt: now })))
     .onConflictDoUpdate({ target: [noteReads.userId, noteReads.noteId], set: { lastReadAt: now } });
+}
+
+// ---- Not listesi (istemciye giden biçim) ----------------------------------
+// Ekler (base64) liste yanıtında ASLA gönderilmez — 5 sn'lik arka plan
+// yenilemesini şişirmesin diye yalnızca dosya adları gider; içerik
+// GET /api/notes/:id/attachments/:index ile tıklandığında indirilir.
+export async function listClientNotes(userId: number, db: DbClient) {
+  const [rows, userRows, commentRows] = await Promise.all([
+    db.select().from(financeNotes).orderBy(desc(financeNotes.updatedAt), desc(financeNotes.id)),
+    db.select({ id: users.id, name: users.name }).from(users),
+    db.select({ noteId: noteComments.noteId, n: sql<number>`count(*)::int` }).from(noteComments).groupBy(noteComments.noteId),
+  ]);
+  const unreadIds = await unreadNoteIdSet(userId, rows, db);
+  const nameById = new Map(userRows.map((u) => [u.id, u.name]));
+  const countByNote = new Map(commentRows.map((c) => [c.noteId, c.n]));
+  return rows.map((row) => toClientNote(row, nameById, unreadIds.has(row.id), countByNote.get(row.id) ?? 0));
+}
+
+export function toClientNote(
+  row: typeof financeNotes.$inferSelect,
+  nameById: Map<number, string>,
+  isUnread: boolean,
+  commentCount: number,
+) {
+  const { attachments, ...rest } = row;
+  return {
+    ...rest,
+    assignedUserNames: (row.assignedUserIds as number[]).map((id) => nameById.get(id)).filter((name): name is string => Boolean(name)),
+    attachmentNames: ((attachments as { name: string }[]) ?? []).map((a) => a.name),
+    commentCount,
+    isUnread,
+  };
+}
+
+// Yalnızca atanmış kullanıcılar ve yöneticiler nota mesaj yazabilir.
+export function canPostNoteComment(
+  user: { id: number; isAdmin: boolean; isSuperAdmin: boolean },
+  note: { assignedUserIds: unknown },
+): boolean {
+  return user.isAdmin || user.isSuperAdmin || (note.assignedUserIds as number[]).includes(user.id);
+}
+
+// Bilinmeyen / silinmiş bir sütun anahtarı gelirse notu ilk sütuna koyar.
+export async function resolveNoteStatus(status: string, db: DbClient): Promise<string> {
+  const cols = await db.select({ key: noteColumns.key }).from(noteColumns).orderBy(noteColumns.sortOrder, noteColumns.id);
+  if (cols.some((c) => c.key === status)) return status;
+  return cols[0]?.key ?? status;
 }

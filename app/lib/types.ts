@@ -63,7 +63,10 @@ export type ArchiveItem = {
   old: RecordItem;
   reason?: string;
 };
-export type NoteStatus = "important" | "urgent" | "pending" | "completed";
+// Not sütununun anahtarı (note_columns.key) — Ayarlar > Not Görevleri'nde düzenlenebilir; varsayılanlar: important / urgent / pending / completed.
+export type NoteStatus = string;
+export type NoteColumn = { id: number; key: string; label: string; color: string };
+export type NoteComment = { id: number; noteId: number; userId: number | null; userName: string; text: string; createdAt: string };
 export type NoteRelation = "none" | "cash" | "income" | "expense" | "reports" | "archive" | "other";
 export type FinanceNote = {
   id: number;
@@ -76,6 +79,9 @@ export type FinanceNote = {
   // atanmamışsa boş dizi.
   assignedUserIds: number[];
   assignedUserNames?: string[];
+  // Ekli belgelerin adları (içerik tıklanınca /api/notes/:id/attachments/:index ile gelir) ve mesaj sayısı.
+  attachmentNames?: string[];
+  commentCount?: number;
   isArchived: boolean;
   archivedAt: string | null;
   // Oturum açan kullanıcı için bu not okunmamış mı — sunucu hesaplar,
@@ -210,4 +216,4 @@ export type TypographySettings = Record<TypographyKey, TypographyRule>;
 
 // Ayarlar > Bölümler: yönetici tanımlı kasa / gelir / gider bölümleri (her biri sayfalarda yeni bir kutu ekler).
 export type SectionScope = "cash" | "income" | "expense";
-export type KasaSection = { id: number; scope: SectionScope; name: string; color: string };
+export type KasaSection = { id: number; scope: SectionScope; name: string; color: string; parentKey?: string | null };

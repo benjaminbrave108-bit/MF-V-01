@@ -23,6 +23,13 @@ export function money(v: number, currency: string = "USD") {
     currency,
   }).format(v);
 }
+// Döviz kurları "1 USD = X birim" biçimindedir. USD ise kendisi, kur tanımsızsa null döner.
+export type ExchangeRates = Record<string, number>;
+export function toUsd(amount: number, currency: string, rates: ExchangeRates): number | null {
+  if (currency === "USD") return amount;
+  const rate = rates[currency];
+  return rate && rate > 0 ? amount / rate : null;
+}
 export function moneyBreakdown(byCurrency: Record<string, number>): string {
   const entries = Object.entries(byCurrency).filter(([, v]) => v !== 0);
   if (!entries.length) return money(0);
