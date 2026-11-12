@@ -30,13 +30,17 @@ export function toUsd(amount: number, currency: string, rates: ExchangeRates): n
   const rate = rates[currency];
   return rate && rate > 0 ? amount / rate : null;
 }
+// Gösterge sırası: önce $ (USD), sonra Euro, sonra diğer para birimleri (tutarı büyükten küçüğe).
+const CURRENCY_RANK: Record<string, number> = { USD: 0, EUR: 1 };
+export function orderedMoney(byCurrency: Record<string, number>): [string, number][] {
+  return Object.entries(byCurrency)
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => (CURRENCY_RANK[a[0]] ?? 2) - (CURRENCY_RANK[b[0]] ?? 2) || Math.abs(b[1]) - Math.abs(a[1]));
+}
 export function moneyBreakdown(byCurrency: Record<string, number>): string {
-  const entries = Object.entries(byCurrency).filter(([, v]) => v !== 0);
+  const entries = orderedMoney(byCurrency);
   if (!entries.length) return money(0);
-  return entries
-    .sort((a, b) => b[1] - a[1])
-    .map(([currency, v]) => money(v, currency))
-    .join(" + ");
+  return entries.map(([currency, v]) => money(v, currency)).join(" + ");
 }
 export function date(v: string, _language: Language = "tr") {
   const stored = parseStoredDate(v);

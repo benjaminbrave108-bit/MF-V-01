@@ -10,8 +10,8 @@ import { logActivity } from "../_lib/activity";
 export const GET = withErrorHandling(async (request: Request) => {
   const session = await requireSession(request);
   if ("response" in session) return session.response;
-  const rows = await getDb().select().from(kasaSections).orderBy(kasaSections.id);
-  return json({ sections: rows.map((r) => ({ id: r.id, scope: r.scope, name: r.name, color: r.color, parentKey: r.parentKey })) });
+  const rows = await getDb().select().from(kasaSections).orderBy(kasaSections.sortOrder, kasaSections.id);
+  return json({ sections: rows.map((r) => ({ id: r.id, scope: r.scope, name: r.name, color: r.color, parentKey: r.parentKey, sortOrder: r.sortOrder })) });
 });
 
 export const POST = withErrorHandling(async (request: Request) => {

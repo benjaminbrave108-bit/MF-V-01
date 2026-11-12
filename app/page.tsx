@@ -10,6 +10,9 @@ import { Archive } from "./components/Archive";
 import { Activity } from "./components/Activity";
 import { ReportBuilder } from "./components/ReportBuilder";
 import { Notes } from "./components/Notes";
+import { DebtDetail } from "./components/DebtDetail";
+import { Analysis, type AnalysisTab } from "./components/Analysis";
+import { AreaDetails } from "./components/AreaDetails";
 import { Comments } from "./components/Comments";
 import { Users } from "./components/Users";
 import { Settings } from "./components/Settings";
@@ -45,6 +48,12 @@ export default function Home() {
   const [page, setPage] = useState<Page>("dashboard");
   const [pageHistory, setPageHistory] = useState<Page[]>([]);
   const [reportTab, setReportTab] = useState<"prepare" | "upload">("prepare");
+  // Ana Sayfa kartlarından Analiz sayfasına geçerken hangi sekme ve dönemin açılacağı.
+  const [analysisFocus, setAnalysisFocus] = useState<{ tab: AnalysisTab; period: string | null; nonce: number }>({ tab: "summary", period: null, nonce: 0 });
+  function openAnalysis(tab: AnalysisTab, period: string | null) {
+    setAnalysisFocus((f) => ({ tab, period, nonce: f.nonce + 1 }));
+    goPage("analysis");
+  }
   function goPage(next: Page) {
     if (next === page) return;
     setPageHistory((h) => [...h.slice(-29), page]);
@@ -91,6 +100,8 @@ export default function Home() {
   const [cashAccounts, setCashAccounts] = useState<CashAccountSummary[]>([]);
   // Ayarlar > Bölümler: yönetici tanımlı kasa/gelir/gider bölümleri (her biri sayfalarda yeni bir kutu ekler).
   const [sections, setSections] = useState<KasaSection[]>([]);
+  // Kasa Kontrol Merkezi: çalışma alanlarının elle sıralaması (genel / liste / rj / sec-<id> anahtarları).
+  const [workspaceOrder, setWorkspaceOrder] = useState<string[]>([]);
   const [cashTransfers, setCashTransfers] = useState<CashTransfer[]>([]);
   // Badge next to "Yorumlar" in the sidebar — comments on records this user
   // can see that they haven't opened yet (see app/api/comments/unread-count
@@ -313,6 +324,11 @@ export default function Home() {
     // Kullanım Kılavuzu is pure static help content, no real data — every
     // signed-in user can open it regardless of their page permissions.
     if (pageId === "guide") return true;
+    // Borç Detay: borçlar Gider/Kasa kayıtlarından türetilir; bu sayfalardan birine izni olan görebilir.
+    // Analiz: kasa/gelir/gider kayıtlarından türetilir; bu sayfalardan birine izni olan görebilir.
+    if (pageId === "areaDetails") return profile.permissions.includes("income") || profile.permissions.includes("expense") || profile.permissions.includes("cash");
+    if (pageId === "analysis") return profile.permissions.includes("income") || profile.permissions.includes("expense") || profile.permissions.includes("cash");
+    if (pageId === "debts") return profile.permissions.includes("expense") || profile.permissions.includes("cash");
     if (adminOnlyPages.includes(pageId)) return false;
     return profile.permissions.includes(pageId);
   }
@@ -348,6 +364,8 @@ export default function Home() {
       });
       if (data.archiveEntry) setArchive((a) => [data.archiveEntry, ...a]);
       setModal(null);
+      // Borç verme/ödeme başka kasalardaki kayıtları da değiştirir (otomatik giriş, azalan gider): listeyi yenile.
+      if (next.debtMode) refreshRecords();
     } catch {
       alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
     }
@@ -358,6 +376,12 @@ export default function Home() {
       if (!response.ok) return;
       const data = await response.json();
       if (Array.isArray(data.sections)) setSections(data.sections);
+    } catch {}
+    try {
+      const response = await fetch("/api/cash-order");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data.workspaceOrder)) setWorkspaceOrder(data.workspaceOrder);
     } catch {}
   }
   async function refreshCashAccounts() {
@@ -479,6 +503,8 @@ export default function Home() {
       const data = await response.json();
       if (data.archiveEntry) setArchive((a) => [data.archiveEntry, ...a]);
       setRecords((r) => r.filter((x) => x.id !== item.id));
+      // Borç ödemesi/verilen borç silinince ilgili kayıtlar da değişir: listeyi yenile.
+      if (item.debtRole) refreshRecords();
     } catch {
       alert(tx(language, "Kayıt silinemedi. Lütfen tekrar deneyin.", "The record could not be deleted. Please try again.", "Qeyd nehat jêbirin. Ji kerema xwe dîsa biceribîne."));
     }
@@ -677,24 +703,48 @@ export default function Home() {
             </small>
           </div>
         </div>
-        <nav>
-          {nav.filter((n) => n.id !== "lists" && n.id !== "income" && n.id !== "expense" && n.id !== "users" && canAccess(n.id)).map((n) => (
-            <div key={n.id}>
-              <button
-                className={page === n.id ? "active" : ""}
-                onClick={() => goPage(n.id)}
-              >
-                <i>{n.icon}</i>
-                <span>{n.label[language]}</span>
-                {n.id === "comments" && unreadCommentsCount > 0 && (
-                  <b className="navBadge">{unreadCommentsCount}</b>
-                )}
-                {n.id === "notes" && unreadNotesCount > 0 && (
-                  <b className="navBadge">{unreadNotesCount}</b>
-                )}
-              </button>
-            </div>
-          ))}
+        <nav aria-label={tx(language, "Bölümler", "Sections", "Beş")}>
+          {(() => {
+            // Lacivert Prestij: menü Yönetim / Operasyon / Belgeler / Sistem gruplarına ayrılır.
+            const groups: { key: string; label: string; ids: string[] }[] = [
+              { key: "management", label: tx(language, "Yönetim", "Management", "Rêvebirin"), ids: ["dashboard", "analysis", "cash", "areaDetails"] },
+              { key: "operations", label: tx(language, "Operasyon", "Operations", "Operasyon"), ids: ["income", "expense", "debts"] },
+              { key: "documents", label: tx(language, "Belgeler", "Documents", "Belge"), ids: ["reportBuilder", "notes", "comments", "activity", "archive"] },
+              { key: "system", label: tx(language, "Sistem", "System", "Pergal"), ids: ["settings", "guide"] },
+            ];
+            const hidden = ["lists", "income", "expense", "users"];
+            const visible = nav.filter((n) => !hidden.includes(n.id) && canAccess(n.id));
+            const placed = new Set(groups.flatMap((g) => g.ids));
+            const rest = visible.filter((n) => !placed.has(n.id)).map((n) => n.id);
+            if (rest.length) groups[groups.length - 1].ids.push(...rest);
+            return groups.map((g) => {
+              const items = g.ids.map((id) => visible.find((n) => n.id === id)).filter((n): n is NonNullable<typeof n> => Boolean(n));
+              if (!items.length) return null;
+              return (
+                <div key={g.key} className="navGroup">
+                  <span className="navGroupLabel">{g.label}</span>
+                  {items.map((n) => (
+                    <div key={n.id}>
+                      <button
+                        className={page === n.id ? "active" : ""}
+                        aria-current={page === n.id ? "page" : undefined}
+                        onClick={() => goPage(n.id)}
+                      >
+                        <i>{n.icon}</i>
+                        <span>{n.label[language]}</span>
+                        {n.id === "comments" && unreadCommentsCount > 0 && (
+                          <b className="navBadge">{unreadCommentsCount}</b>
+                        )}
+                        {n.id === "notes" && unreadNotesCount > 0 && (
+                          <b className="navBadge">{unreadNotesCount}</b>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            });
+          })()}
         </nav>
         <div className="developerCredit">
           <img src={kbGroupLogo} alt={tx(language, "KB Group logosu", "KB Group logo", "Logoya KB Group")} />
@@ -729,8 +779,8 @@ export default function Home() {
               <p className="pageHint">
                 {tx(
                   language,
-                  "Çalışma alanları içinde birden fazla kasa bulunabilir. Her kasa mutlaka bir çalışma alanına bağlıdır; kasayı seçip “⇄ Çalışma alanına taşı” ile başka bir alana taşıyabilirsiniz.",
-                  "A workspace can contain several cash accounts. Every cash account belongs to a workspace; select a cash account and use “⇄ Move to workspace” to move it.",
+                  "Her kasa bir çalışma alanına bağlıdır; kasanın ⋯ menüsünden başka alana taşıyabilirsiniz.",
+                  "Every cash account belongs to a workspace; use the ⋯ menu on a card to move it.",
                   "Di nav qada xebatê de çend qase hene. Her qase girêdayî qada xebatê ye; qaseyê hilbijêre û bi “⇄ Bibe qada xebatê” bibe cihekî din.",
                 )}
               </p>
@@ -858,7 +908,7 @@ export default function Home() {
         </header>
         <section className="content">
           {page === "dashboard" && (
-            <Dashboard records={dashboardRecords} language={language} goTo={goPage} />
+            <Dashboard records={dashboardRecords} language={language} goTo={goPage} onOpenAnalysis={openAnalysis} exchangeRates={exchangeRates} rateInfo={rateInfo} cashTransfers={cashTransfers} myCashAccountIds={cashAccounts.map((a) => a.id)} profileName={profile.name} onTransfersChanged={refreshAfterCashTransfer} />
           )}
           {(["cash", "income", "expense"] as Page[]).includes(page) && (
             <Records
@@ -876,6 +926,7 @@ export default function Home() {
               onImport={importRecords}
               onRefreshData={() => { refreshRecords(); refreshCashAccounts(); refreshSections(); }}
               sections={sections}
+              workspaceOrder={workspaceOrder}
               isSuperAdmin={profile.isSuperAdmin}
               onGoUpload={() => { setReportTab("upload"); goPage("reportBuilder"); }}
               checkPassword={checkPassword}
@@ -909,6 +960,30 @@ export default function Home() {
               onDataChanged={() => { refreshRecords(); refreshCashAccounts(); refreshSections(); }}
             />
           )}
+          {page === "areaDetails" && (
+            <AreaDetails
+              records={contextRecords}
+              cashAccounts={contextCashAccounts}
+              sections={sections}
+              workspaceOrder={workspaceOrder}
+              language={language}
+              exchangeRates={exchangeRates}
+              isSuperAdmin={profile.isSuperAdmin}
+              goTo={goPage}
+            />
+          )}
+          {page === "analysis" && (
+            <Analysis
+              key={analysisFocus.nonce}
+              records={dashboardRecords}
+              language={language}
+              exchangeRates={exchangeRates}
+              initialTab={analysisFocus.tab}
+              initialPeriod={analysisFocus.period}
+              goTo={goPage}
+            />
+          )}
+          {page === "debts" && <DebtDetail records={dashboardRecords} language={language} />}
           {page === "notes" && (
             <Notes
               language={language}

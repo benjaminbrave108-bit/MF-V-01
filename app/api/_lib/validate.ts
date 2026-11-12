@@ -91,6 +91,9 @@ export const recordInputSchema = z.object({
   listKasa: z.boolean().optional(),
   rjKasa: z.boolean().optional(),
   sectionId: z.number().int().positive().nullable().optional(),
+  // Gider eklerken borç işareti: lent = başka bir kasaya borç verdim, repay = borcumu ödüyorum (debtCashAccountId = karşı kasa).
+  debtMode: z.enum(["lent", "repay"]).optional(),
+  debtCashAccountId: z.number().int().positive().nullable().optional(),
   attachments: attachmentsSchema,
   detailTable: detailTableSchema.optional().default([]),
   detailTableLayout: detailTableLayoutSchema.optional().default({ cols: [], rows: [], colAlign: [], cellAlign: {} }),

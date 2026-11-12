@@ -47,6 +47,31 @@ export function Settings({
   onExchangeRatesChanged?: () => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>("general");
+  const [navQuery, setNavQuery] = useState("");
+  const navQ = navQuery.trim().toLocaleLowerCase("tr");
+  const rateDay = rateInfo.date ? rateInfo.date.split("-").reverse().join(".") : "";
+  const cashSectionCount = sections.filter((x) => x.scope === "cash").length;
+  // Kategoriler: gruplanmış sol menü (Ayarlar merkezi).
+  const navGroups: { label: string; items: { id: SettingsTab; label: string; badge?: string; show: boolean }[] }[] = [
+    { label: tx(language, "KURULUM", "SETUP", "avakirin"), items: [
+      { id: "general", label: tx(language, "Şirket ve marka", "Company and brand", "Pargîdanî û marka"), show: true },
+      { id: "rates", label: tx(language, "Para ve kurlar", "Currency and rates", "Diravî û kur"), badge: rateDay, show: true },
+    ] },
+    { label: tx(language, "GÖRÜNÜM", "APPEARANCE", "XUYANÎ"), items: [
+      { id: "typography", label: tx(language, "Yazı ve renk", "Typography and color", "Nivîs û reng"), show: true },
+    ] },
+    { label: tx(language, "ORGANİZASYON", "ORGANIZATION", "SAZÎ"), items: [
+      { id: "sections", label: tx(language, "Çalışma alanları", "Workspaces", "Qadên xebatê"), badge: cashSectionCount ? String(cashSectionCount) : "", show: true },
+      { id: "access", label: tx(language, "Kullanıcılar ve yetkiler", "Users and permissions", "Bikarhêner û destûr"), show: isSuperAdmin },
+      { id: "noteTasks", label: tx(language, "Not görevleri", "Note tasks", "Erkên nîşeyan"), show: true },
+    ] },
+    { label: tx(language, "VERİ", "DATA", "DANE"), items: [
+      { id: "database", label: tx(language, "Yedekleme ve veritabanı", "Backup and database", "Paşvexistin û danegeh"), show: true },
+    ] },
+    { label: tx(language, "HESABIM", "MY ACCOUNT", "HESABÊ MIN"), items: [
+      { id: "users", label: tx(language, "Kullanıcı ayarlarım", "My user settings", "Mîhengên min"), show: true },
+    ] },
+  ];
   const [activeTypographyKey, setActiveTypographyKey] = useState<TypographyKey>("pageTitle");
   const [typographyDraft, setTypographyDraft] = useState<TypographySettings>(typography);
   const [typographyApproved, setTypographyApproved] = useState(false);
@@ -182,35 +207,29 @@ export function Settings({
 
   return (
     <div className="settingsPage">
-      <div className="settingsMainTabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "general"} className={tab === "general" ? "active" : ""} onClick={() => setTab("general")}>
-          {tx(language, "Genel Ayarlar", "General Settings", "Mîhengên Giştî")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "typography"} className={tab === "typography" ? "active" : ""} onClick={() => setTab("typography")}>
-          {tx(language, "Yazı ve Renk Ayarları", "Typography & Color", "Mîhengên Nivîs û Rengê")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "sections"} className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")}>
-          {tx(language, "Çalışma Alanları", "Workspaces", "Qadên Xebatê")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "rates"} className={tab === "rates" ? "active" : ""} onClick={() => setTab("rates")}>
-          {tx(language, "Döviz Kurları", "Exchange Rates", "Kurên Diravan")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "noteTasks"} className={tab === "noteTasks" ? "active" : ""} onClick={() => setTab("noteTasks")}>
-          {tx(language, "Not Görevleri", "Note Tasks", "Erkên Nîşeyan")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
-          {tx(language, "Kullanıcı Ayarları", "User Settings", "Mîhengên Bikarhêner")}
-        </button>
-        {isSuperAdmin && (
-          <button type="button" role="tab" aria-selected={tab === "access"} className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}>
-            {tx(language, "Kullanıcılar ve Yetkiler", "Users & Permissions", "Bikarhêner û Destûr")}
-          </button>
-        )}
-        <button type="button" role="tab" aria-selected={tab === "database"} className={tab === "database" ? "active" : ""} onClick={() => setTab("database")}>
-          {tx(language, "Veri (Database) Ayarları", "Database Settings", "Mîhengên Danegehê")}
-        </button>
-      </div>
-
+      <div className="setLayout">
+        <nav className="setNav" aria-label={tx(language, "Ayar kategorileri", "Settings categories", "Beşên mîhengan")}>
+          <div className="setSearch">
+            <i aria-hidden="true">⌕</i>
+            <input value={navQuery} onChange={(e) => setNavQuery(e.target.value)} placeholder={tx(language, "Ayar ara…", "Search settings…", "Mîheng bigere…")} aria-label={tx(language, "Ayar ara", "Search settings", "Mîheng bigere")} />
+          </div>
+          {navGroups.map((g) => {
+            const items = g.items.filter((it) => it.show && (!navQ || it.label.toLocaleLowerCase("tr").includes(navQ) || g.label.toLocaleLowerCase("tr").includes(navQ)));
+            if (!items.length) return null;
+            return (
+              <div key={g.label} className="setNavGroup">
+                <span className="setNavLabel">{g.label}</span>
+                {items.map((it) => (
+                  <button key={it.id} type="button" role="tab" aria-selected={tab === it.id} className={tab === it.id ? "active" : ""} onClick={() => setTab(it.id)}>
+                    <span>{it.label}</span>
+                    {it.badge && <em>{it.badge}</em>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="setBody">
       {tab === "general" && (
         <div className="settings">
           <div className="panel">
@@ -434,6 +453,8 @@ export function Settings({
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

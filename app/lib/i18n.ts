@@ -12,9 +12,19 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
     icon: "⌂",
   },
   {
+    id: "analysis",
+    label: { tr: "Analiz", en: "Analysis", ku: "Analîz" },
+    icon: "◔",
+  },
+  {
     id: "cash",
-    label: { tr: "Kasalar", en: "Cash Accounts", ku: "Qasayên Pere" },
+    label: { tr: "Kasa Kontrol Merkezi", en: "Cash Control Center", ku: "Navenda Kontrola Qaseyan" },
     icon: "▣",
+  },
+  {
+    id: "areaDetails",
+    label: { tr: "Kasa-Gelir-Gider Detayları", en: "Cash-Income-Expense Details", ku: "Hûrguliyên Qase-Dahat-Mesref" },
+    icon: "◫",
   },
   {
     id: "income",
@@ -48,6 +58,11 @@ export const nav: { id: Page; label: Record<Language, string>; icon: string }[] 
       ku: "Nîşeyên Darayî",
     },
     icon: "✎",
+  },
+  {
+    id: "debts",
+    label: { tr: "Borç Detay", en: "Debt Details", ku: "Hûrguliyên Deynê" },
+    icon: "⇄",
   },
   {
     id: "comments",

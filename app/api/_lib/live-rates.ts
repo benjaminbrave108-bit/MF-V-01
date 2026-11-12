@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { settings } from "../../../db/schema";
 
 // Günlük kur: open.er-api.com (anahtarsız, günde bir güncellenir). Kurlar "1 USD = X birim".
-export const RATE_CURRENCIES = ["EUR", "TRY", "IQD", "SYP"] as const;
+export const RATE_CURRENCIES = ["EUR", "TRY", "IQD", "SYP", "AED"] as const;
 
 export type RatesInfo = { manual: Record<string, number>; auto: Record<string, number>; date: string | null; rates: Record<string, number> };
 
@@ -43,7 +43,9 @@ export async function readRatesInfo(force = false): Promise<RatesInfo> {
   const db = getDb();
   const read = async () => (await db.select().from(settings).where(eq(settings.id, 1)).limit(1))[0];
   let row = await read();
-  if (force || (row?.autoExchangeRatesDate ?? null) !== today()) {
+  const haveAuto = (row?.autoExchangeRates as Record<string, number> | null) ?? {};
+  const missingCurrency = RATE_CURRENCIES.some((c) => !(c in haveAuto));
+  if (force || missingCurrency || (row?.autoExchangeRatesDate ?? null) !== today()) {
     if (force || Date.now() - lastAttempt > 10 * 60 * 1000) {
       lastAttempt = Date.now();
       inflight ??= refreshAuto().finally(() => { inflight = null; });

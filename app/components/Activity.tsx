@@ -10,12 +10,12 @@ type Result = { entries: Entry[]; counts: Record<string, number>; users: { id: n
 const CATEGORIES: { id: string; icon: string; color: string; bg: string; label: [string, string, string] }[] = [
   { id: "income", icon: "↗", color: "#0f6e56", bg: "#e3f5ee", label: ["Gelir", "Income", "Dahat"] },
   { id: "expense", icon: "↘", color: "#b4481f", bg: "#fdebe3", label: ["Gider", "Expense", "Mesref"] },
-  { id: "cash", icon: "▣", color: "#1f5a8a", bg: "#e4eefa", label: ["Kasa", "Cash account", "Qase"] },
+  { id: "cash", icon: "▣", color: "#264b83", bg: "#e4eefa", label: ["Kasa", "Cash account", "Qase"] },
   { id: "workspace", icon: "◆", color: "#6a43a8", bg: "#efe8fa", label: ["Çalışma alanı", "Workspace", "Qada xebatê"] },
-  { id: "report", icon: "▥", color: "#14707f", bg: "#e0f3f5", label: ["Excel / Rapor", "Excel / Report", "Excel / Raport"] },
-  { id: "user", icon: "♙", color: "#5b6670", bg: "#eceff2", label: ["Kullanıcı / Yetki", "User / Access", "Bikarhêner / Destûr"] },
+  { id: "report", icon: "▥", color: "#214172", bg: "#e0e8f5", label: ["Excel / Rapor", "Excel / Report", "Excel / Raport"] },
+  { id: "user", icon: "♙", color: "#5b6370", bg: "#eceef2", label: ["Kullanıcı / Yetki", "User / Access", "Bikarhêner / Destûr"] },
   { id: "note", icon: "✎", color: "#8a6a10", bg: "#fbf1d3", label: ["Not", "Note", "Nîşe"] },
-  { id: "auth", icon: "⏻", color: "#5b6670", bg: "#eceff2", label: ["Giriş", "Sign-in", "Têketin"] },
+  { id: "auth", icon: "⏻", color: "#5b6370", bg: "#eceef2", label: ["Giriş", "Sign-in", "Têketin"] },
 ];
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -158,7 +158,7 @@ export function Activity({ language }: { language: Language }) {
               return (
                 <li key={e.id}>
                   <time>{`${pad(new Date(e.at).getHours())}:${pad(new Date(e.at).getMinutes())}`}</time>
-                  <span className="activityBadge" style={{ color: cat?.color ?? "#5b6670", background: cat?.bg ?? "#eceff2" }}>
+                  <span className="activityBadge" style={{ color: cat?.color ?? "#5b6370", background: cat?.bg ?? "#eceef2" }}>
                     {cat?.icon ?? "•"} {cat ? tx(language, ...cat.label) : e.category}
                   </span>
                   <span className="activityText">

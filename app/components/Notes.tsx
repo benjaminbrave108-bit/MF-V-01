@@ -12,7 +12,7 @@ export type NoteSave = FinanceNote & { addAttachments?: RecordAttachment[]; remo
 const DEFAULT_COLUMNS = (language: Language): NoteColumn[] => [
   { id: 1, key: "important", label: tx(language, "Önemli Notlar", "Important Notes", "Nîşeyên Girîng"), color: "#d6a52b" },
   { id: 2, key: "urgent", label: tx(language, "Acil Notlar", "Urgent Notes", "Nîşeyên Acîl"), color: "#df5b5b" },
-  { id: 3, key: "pending", label: tx(language, "Bekleyen Notlar", "Pending Notes", "Nîşeyên Li Bendê"), color: "#398db1" },
+  { id: 3, key: "pending", label: tx(language, "Bekleyen Notlar", "Pending Notes", "Nîşeyên Li Bendê"), color: "#5b86f0" },
   { id: 4, key: "completed", label: tx(language, "Tamamlanmış Notlar", "Completed Notes", "Nîşeyên Qediyayî"), color: "#38a477" },
 ];
 
@@ -81,6 +81,9 @@ export function Notes({
   const [addingTo, setAddingTo] = useState<NoteStatus | null>(null);
   const [editingNote, setEditingNote] = useState<FinanceNote | null>(null);
   const [messagesNote, setMessagesNote] = useState<FinanceNote | null>(null);
+  // Karta tıklayınca sağda açılan okuma panosu (düzenlemeden içeriği görmek için).
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const detailNote = detailId === null ? null : notes.find((n) => n.id === detailId) ?? null;
   const [dragOver, setDragOver] = useState<NoteStatus | null>(null);
   // Okunmamış notlar sayfa açılınca sunucuda "okundu" olur (rozet söner) ama kartlar
   // kullanıcı onlara dokunana kadar renkli kalır — hangi notların yeni olduğu görülebilsin.
@@ -154,12 +157,16 @@ export function Notes({
                 const assignedToMe = currentUserId ? note.assignedUserIds.includes(currentUserId) : false;
                 return (
                   <article
-                    className={`noteCard${isNew ? " noteCardUnread" : ""}`}
+                    className={`noteCard${isNew ? " noteCardUnread" : ""}${detailId === note.id ? " noteCardOpen" : ""}`}
                     style={{ borderLeftColor: isNew ? undefined : column.color }}
                     key={note.id}
                     draggable
                     onMouseEnter={() => isNew && dismissHighlight(note.id)}
-                    onClick={() => dismissHighlight(note.id)}
+                    onClick={(event) => {
+                      dismissHighlight(note.id);
+                      if ((event.target as HTMLElement).closest("button, select, label, a")) return;
+                      setDetailId(note.id);
+                    }}
                     onDragStart={(event) => { if ((event.target as HTMLElement).closest("button, select")) { event.preventDefault(); return; } event.dataTransfer.setData("text/plain", String(note.id)); event.dataTransfer.effectAllowed = "move"; }}
                     onDragEnd={() => setDragOver(null)}
                   >
@@ -193,8 +200,65 @@ export function Notes({
       </div>
       {addingTo && <NoteModal language={language} initialStatus={addingTo} users={users} columns={columns} onClose={() => setAddingTo(null)} onSave={(note) => { onCreateNote(note); setAddingTo(null); }} />}
       {editingNote && <NoteModal language={language} initialStatus={editingNote.status} initialNote={editingNote} users={users} columns={columns} onClose={() => setEditingNote(null)} onSave={(updated) => { onUpdateNote(updated); setEditingNote(null); }} />}
+      {detailNote && createPortal(
+        <NoteDetailPanel
+          language={language}
+          note={detailNote}
+          columns={columns}
+          onClose={() => setDetailId(null)}
+          onEdit={() => { setEditingNote(detailNote); setDetailId(null); }}
+          onMessages={() => setMessagesNote(detailNote)}
+        />,
+        document.body,
+      )}
       {messagesNote && createPortal(<NoteMessagesModal language={language} note={messagesNote} onClose={() => { setMessagesNote(null); onChanged?.(); }} />, document.body)}
     </div>
+  );
+}
+
+// Sağdan açılan okuma panosu: notun tüm içeriği, belgeleri ve ilişkileri.
+function NoteDetailPanel({ language, note, columns, onClose, onEdit, onMessages }: { language: Language; note: FinanceNote; columns: NoteColumn[]; onClose: () => void; onEdit: () => void; onMessages: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const column = columns.find((c) => c.key === note.status);
+  const locale = language === "en" ? "en-GB" : "tr-TR";
+  return (
+    <aside className="noteDrawer" role="dialog" aria-label={note.title}>
+      <header>
+        <div>
+          {column && <span className="noteDrawerStatus"><i style={{ background: column.color }} />{column.label}</span>}
+          <h2>{note.title}</h2>
+          <small>{tx(language, "Güncellendi: ", "Updated: ", "Nûvekirin: ")}{new Date(note.updatedAt).toLocaleString(locale)}</small>
+        </div>
+        <button type="button" onClick={onClose} aria-label={tx(language, "Kapat", "Close", "Bigire")}>×</button>
+      </header>
+      <div className="noteDrawerBody">
+        {note.relation !== "none" && (
+          <p className="noteDrawerRow"><b>{tx(language, "İlişkili bölüm", "Linked section", "Beşa girêdayî")}</b><span>↗ {noteRelationLabel(note.relation, language)}{note.relationDetail ? ` · ${note.relationDetail}` : ""}</span></p>
+        )}
+        <div className="noteDrawerContent">{note.content}</div>
+        {note.attachmentNames && note.attachmentNames.length > 0 && (
+          <div className="noteDrawerSection">
+            <b>{tx(language, "Belgeler", "Documents", "Belge")}</b>
+            <div className="noteAttachments">
+              {note.attachmentNames.map((name, index) => (
+                <button type="button" key={`${name}-${index}`} className="noteAttachmentChip" title={name} onClick={() => openNoteAttachment(note.id, index)}>📎 <span>{name}</span></button>
+              ))}
+            </div>
+          </div>
+        )}
+        {note.assignedUserNames && note.assignedUserNames.length > 0 && (
+          <p className="noteDrawerRow"><b>{tx(language, "Atanan", "Assigned", "Hatiye diyarkirin")}</b><span>👤 {note.assignedUserNames.join(", ")}</span></p>
+        )}
+      </div>
+      <footer>
+        <button type="button" className="light" onClick={onMessages}>💬 {tx(language, "Mesajlar", "Messages", "Peyam")}{note.commentCount ? ` (${note.commentCount})` : ""}</button>
+        <button type="button" className="primary" onClick={onEdit}>✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}</button>
+      </footer>
+    </aside>
   );
 }
 

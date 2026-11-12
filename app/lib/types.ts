@@ -4,6 +4,9 @@ export type Page =
   | Kind
   | "reportBuilder"
   | "notes"
+  | "debts"
+  | "analysis"
+  | "areaDetails"
   | "comments"
   | "archive"
   | "activity"
@@ -51,6 +54,12 @@ export type RecordItem = {
   // shared user's) by matching against CashAccountSummary.id; cashAccount
   // above is only the display-text name.
   cashAccountId?: number | null;
+  // Borç: lent (borç verilen gider) | borrowed (borç alan kasadaki giriş) | repay (borç ödemesi gideri); boş = borç değil.
+  // borrowed/repay kayıtları kasa bakiyesine girer ama Gelir/Gider toplamlarına girmez. debtCashAccountId = karşı kasa.
+  debtRole?: string;
+  debtCashAccountId?: number | null;
+  // Yalnızca yeni Gider kaydı gönderirken: "lent" = borç veriyorum, "repay" = borcumu ödüyorum.
+  debtMode?: "" | "lent" | "repay";
   // Sent back with edits so the server can detect a concurrent change
   // (see saveRecord's 409 handling) — meaningless on a not-yet-saved record.
   updatedAt?: string;
@@ -143,6 +152,8 @@ export type CashAccountSummary = {
   isListWorkspace?: boolean;
   isRjKasa?: boolean;
   sectionId?: number | null;
+  // Kasa Kontrol Merkezi: elle sıralama (küçük olan önce; 0 = sıralanmamış).
+  sortOrder?: number;
   // Owner-controlled opt-in (Kasalar > Paylaş or Ayarlar > Paylaşım): lets a
   // super admin fold this kasa into their own Ana Sayfa via Görüntüle.
   dashboardShareEnabled: boolean;
@@ -216,4 +227,4 @@ export type TypographySettings = Record<TypographyKey, TypographyRule>;
 
 // Ayarlar > Bölümler: yönetici tanımlı kasa / gelir / gider bölümleri (her biri sayfalarda yeni bir kutu ekler).
 export type SectionScope = "cash" | "income" | "expense";
-export type KasaSection = { id: number; scope: SectionScope; name: string; color: string; parentKey?: string | null };
+export type KasaSection = { id: number; scope: SectionScope; name: string; color: string; parentKey?: string | null; sortOrder?: number };

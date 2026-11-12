@@ -11,6 +11,8 @@ import type { Kind } from "../../_lib/types";
 import { toClientArchiveItem } from "../../_lib/archive";
 import { parseBody, recordUpdateSchema } from "../../_lib/validate";
 import { deleteReason, formatAmount, logActivity, withReason } from "../../_lib/activity";
+import { restoreLentExpenses, type DebtMeta } from "../../_lib/debts";
+import { and, eq as eqOp, ne } from "drizzle-orm";
 
 function canAccessKind(user: { isAdmin: boolean; permissions: string[] }, kind: string): boolean {
   return user.isAdmin || user.permissions.includes(kind as Kind);
@@ -52,6 +54,11 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
   // read access, not the right to edit/move a record by id.
   if (old.cashAccountId !== null && !(await canWriteCashAccount(session.user, old.cashAccountId, db))) {
     return json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Borç kayıtlarının tutarı, kasası ve para birimi sabittir (borç bakiyesi buna bağlı): silip yeniden ekleyin.
+  if (old.debtRole && ((payload.amount !== undefined && payload.amount !== old.amount) || (payload.currency !== undefined && payload.currency !== old.currency) || (payload.cashAccount !== undefined && payload.cashAccount !== old.cashAccount) || (payload.kind !== undefined && payload.kind !== old.kind))) {
+    return json({ error: "Borç kaydının tutarı, kasası ve para birimi değiştirilemez; kaydı silip yeniden ekleyin" }, { status: 400 });
   }
 
   const listLink = await resolveRecordList(session.user, { listId: payload.listId, listName: payload.listName }, db);
@@ -153,7 +160,23 @@ export const DELETE = withErrorHandling<{ params: Promise<{ id: string }> }>(asy
     return json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Borç kayıtları: alınan borç girişi doğrudan silinemez; verilen borç ödenmişse önce ödemeler silinmelidir.
+  if (old.debtRole === "borrowed") {
+    return json({ error: "Borç alındı kaydı doğrudan silinemez; borcu veren kasadaki gideri silin" }, { status: 409 });
+  }
+  if (old.debtRole === "lent" && old.debtCashAccountId !== null && old.cashAccountId !== null) {
+    const repays = await db
+      .select({ meta: records.debtMeta })
+      .from(records)
+      .where(and(eqOp(records.debtRole, "repay"), eqOp(records.cashAccountId, old.debtCashAccountId), eqOp(records.debtCashAccountId, old.cashAccountId), ne(records.id, id)));
+    if (repays.some((r) => ((r.meta as DebtMeta) ?? []).some((m) => m.id === old.id))) {
+      return json({ error: "Bu borca ödeme yapılmış; önce borç ödemesi giderlerini silin" }, { status: 409 });
+    }
+  }
+
   const [archiveEntry] = await db.transaction(async (tx) => {
+    if (old.debtRole === "repay") await restoreLentExpenses((old.debtMeta as DebtMeta) ?? [], tx);
+    if (old.debtRole === "lent" && old.debtLinkId !== null) await tx.delete(records).where(eq(records.id, old.debtLinkId));
     await tx.delete(records).where(eq(records.id, id));
     return tx
       .insert(archive)

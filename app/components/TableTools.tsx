@@ -138,9 +138,13 @@ function setupCalc(container: HTMLElement, report: (s: Stats | null) => void): (
         selected.delete(td);
         return;
       }
-      const text = cellText(td);
-      const n = parseCell(text);
-      if (n !== null) values.push({ n, cur: currencyOf(text) });
+      // Alt alta dizilmiş para birimi hücrelerinde (MoneyStack) her satır ayrı sayı olarak hesaplanır.
+      const lines = [...td.querySelectorAll<HTMLElement>(".msLine")];
+      const texts = lines.length ? lines.map((l) => l.innerText) : [cellText(td)];
+      for (const text of texts) {
+        const n = parseCell(text);
+        if (n !== null) values.push({ n, cur: currencyOf(text) });
+      }
     });
     if (!selected.size) return report(null);
     const sums: Record<string, number> = {};

@@ -741,9 +741,9 @@ function WorkspaceView({
   );
 }
 
-const RECIPIENT_TINTS = ["#f1f6fc", "#f2f9f1", "#fef5ee", "#f7f2fb", "#fdf1f4", "#f1f9f9"];
-const RECIPIENT_TEXT = ["#0c447c", "#085041", "#712b13", "#3c3489", "#72243e", "#0f5a5a"];
-const RECIPIENT_COLORS = ["#cfe1f4", "#d5ecd4", "#fbdcc4", "#e6d9f3", "#f8d3de", "#d3ecec"];
+const RECIPIENT_TINTS = ["#f1f6fc", "#f2f9f1", "#fef5ee", "#f7f2fb", "#fdf1f4", "#f1f4f9"];
+const RECIPIENT_TEXT = ["#1f3d69", "#085041", "#712b13", "#3c3489", "#72243e", "#182f51"];
+const RECIPIENT_COLORS = ["#cfe1f4", "#d5ecd4", "#fbdcc4", "#e6d9f3", "#f8d3de", "#d3ddec"];
 
 // Liste kasasının Gider kayıtları: her gider bir satır; solda giderin bilgileri (tarih, gider, not, tutar), sağa doğru
 // her kişi için ayrı sütun (hücreye o kişiye dağıtılan tutar = kişinin bu giderdeki harcaması), Dağıtılan ve Kalan.

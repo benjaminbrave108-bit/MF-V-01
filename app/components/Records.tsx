@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
 import { Title, ConfirmModal, DeleteConfirmModal, PersonChip } from "./shared";
+import { debtPairs, isDebtLeg, kasaDebtByCurrency } from "../lib/debts";
+import { KasaBoard, type BoardAction } from "./KasaBoard";
 import { RecordCommentsModal } from "./Comments";
 import { KasaDeleteModal, KasaEditModal, parentWorkspaceOptions, workspaceKeyOf, workspaceOptions, workspaceState } from "./KasaManage";
 import { WorkspaceAccessModal, type AccessKasa } from "./WorkspaceAccess";
@@ -874,9 +876,9 @@ function TagsInput({
 // (bkz. columnOrder/columnWidths in Records()). Tek bir liste hem sütun
 // kimliklerini hem de varsayılan genişliklerini taşır; sırası
 // DEFAULT_COLUMN_ORDER'ın başlangıç durumudur.
-type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "action";
+type ColumnId = "date" | "title" | "workspace" | "documents" | "detail" | "messages" | "person" | "amount" | "location" | "tags" | "debt" | "action";
 // Ana görünüm: Tarih, Kasa Adı, Çalışma Alanı, Kişi, Belgeler, Miktar, Etiket, İşlem. Detay/Not, Mesajlar ve Kasa Yeri ana tabloda yok.
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "tags", "action"];
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ["date", "title", "workspace", "person", "documents", "amount", "tags", "debt", "action"];
 // Detay/Not ve Mesajlar öntanımlı olarak en dar iki sütun — uzun metin
 // satıra sığmayınca satırı büyütmek yerine tek satırda "..." ile kesilir
 // (bkz. renderCell'deki .cellDetailText ve .messagesCellText), böylece
@@ -893,8 +895,9 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   person: 80,
   amount: 110,
   location: 120,
-  tags: 110,
-  action: 110,
+  tags: 100,
+  debt: 56,
+  action: 104,
 };
 const MIN_COLUMN_WIDTH = 64;
 // v2: Detay/Not ve Mesajlar öntanımlı genişlikleri daraltıldı — anahtar
@@ -935,6 +938,7 @@ export function Records({
   exchangeRates = {},
   onRefreshData,
   sections = [],
+  workspaceOrder = [],
   isSuperAdmin = false,
   onGoUpload,
 }: {
@@ -960,6 +964,8 @@ export function Records({
   notes: FinanceNote[];
   onRefreshData?: () => void;
   sections?: KasaSection[];
+  // Kasa Kontrol Merkezi: çalışma alanlarının elle sıralaması (anahtar listesi).
+  workspaceOrder?: string[];
   isSuperAdmin?: boolean;
   onGoUpload?: () => void;
 }) {
@@ -968,8 +974,12 @@ export function Records({
   // Satırdaki "Detay" göstergesine basınca açılan, yapıştırılmış gider
   // tablosunu salt-okunur gösteren pencere (bkz. DetailTableModal).
   const [detailViewTarget, setDetailViewTarget] = useState<RecordItem | null>(null);
+  // Gelir/Gider satırının başlığına tıklayınca düzenleme yerine açılan salt okunur görünüm kartı.
+  const [viewTarget, setViewTarget] = useState<RecordItem | null>(null);
   const [kasaResultOpen, setKasaResultOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [excelMenuOpen, setExcelMenuOpen] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   // Kasa kartı özet balonu: kartın üzerine binip tıklamayı engellemesin diye sayfa akışına göre kartın altında (yer yoksa üstünde) sabit konumlanır.
@@ -1061,7 +1071,14 @@ export function Records({
         if (Array.isArray(parsed.order)) {
           const valid = parsed.order.filter((id): id is ColumnId => (DEFAULT_COLUMN_ORDER as string[]).includes(id));
           const missing = DEFAULT_COLUMN_ORDER.filter((id) => !valid.includes(id));
-          setColumnOrder([...valid, ...missing]);
+          const merged = [...valid, ...missing];
+          // Yeni "Borç" simge sütunu, kayıtlı sıralarda Etiket ile İşlem arasına konur.
+          if ((missing as string[]).includes("debt")) {
+            const without: ColumnId[] = merged.filter((id) => id !== "debt");
+            const at = without.indexOf("action");
+            without.splice(at < 0 ? without.length : at, 0, "debt");
+            setColumnOrder(without);
+          } else setColumnOrder(merged);
         }
         if (parsed.widths) setColumnWidths((w) => ({ ...w, ...parsed.widths }));
       }
@@ -1112,6 +1129,21 @@ export function Records({
   }
 
   const wsOptions = workspaceOptions(sections, language);
+  // Borç simgesinin üzerine gelince çıkan açıklama: kime/kimden, toplam, ödenen ve kalan.
+  function debtTooltip(x: RecordItem): string {
+    const title = x.debtRole === "lent" ? tx(language, "Borç verildi", "Lent", "Deyn hat dayîn") : x.debtRole === "borrowed" ? tx(language, "Borç alındı", "Borrowed", "Deyn hat girtin") : tx(language, "Borç ödemesi", "Debt payment", "Dravdana deynê");
+    const debtorId = x.debtRole === "lent" ? x.debtCashAccountId : x.cashAccountId;
+    const creditorId = x.debtRole === "lent" ? x.cashAccountId : x.debtCashAccountId;
+    const pair = debtPairs(allRecords).find((p) => p.debtorId === debtorId && p.creditorId === creditorId && p.currency === x.currency);
+    if (!pair) return `${title}: ${money(x.amount, x.currency)}`;
+    const route = `${localizeData(pair.creditorName || "—", language)} → ${localizeData(pair.debtorName || "—", language)}`;
+    return [
+      `${title}: ${route}`,
+      `${tx(language, "Toplam borç", "Total debt", "Deynê giştî")}: ${money(pair.borrowed, pair.currency)}`,
+      `${tx(language, "Ödenen", "Repaid", "Hatî dayîn")}: ${money(pair.repaid, pair.currency)}`,
+      `${tx(language, "Kalan", "Remaining", "Mayî")}: ${money(pair.outstanding, pair.currency)}`,
+    ].join("\n");
+  }
   function columnLabel(id: ColumnId): string {
     switch (id) {
       case "date":
@@ -1122,6 +1154,8 @@ export function Records({
           : tx(language, "Ana Başlık", "Main Category", "Sernavê Sereke");
       case "workspace":
         return tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê");
+      case "debt":
+        return tx(language, "Borç", "Debt", "Deyn");
       case "documents":
         return tx(language, "Belgeler", "Documents", "Belge");
       case "detail":
@@ -1158,7 +1192,7 @@ export function Records({
       case "title":
         return (
           <>
-            {readOnly ? (
+            {readOnly && x.kind === "cash" ? (
               <b className="cellTitle" title={localizeData(x.source, language)}>
                 {localizeData(x.source, language)}
               </b>
@@ -1172,7 +1206,7 @@ export function Records({
                   "Click to view the entered data",
                   "Ji bo dîtina daneyên hatine nivîsandin bitikîne",
                 )}
-                onClick={() => onEdit(x)}
+                onClick={() => (x.kind === "cash" ? onEdit(x) : setViewTarget(x))}
               >
                 {localizeData(x.source, language)}
               </button>
@@ -1284,6 +1318,12 @@ export function Records({
             )}
           </>
         );
+      case "debt":
+        return x.debtRole ? (
+          <span className={`debtIcon ${x.debtRole}`} title={debtTooltip(x)} aria-label={debtTooltip(x)} tabIndex={0}>
+            {x.debtRole === "lent" ? "↗" : x.debtRole === "borrowed" ? "↙" : "✓"}
+          </span>
+        ) : null;
       case "tags":
         return (
           <div className="tagRow">
@@ -1685,7 +1725,7 @@ export function Records({
       </div>
     );
   };
-  const workspacePalette = ["#287b98", "#1f8a5b", "#7b52bf", "#c0562b", "#b9951c", "#3a5fb0", "#a8386b"];
+  const workspacePalette = ["#315fe8", "#1f8a5b", "#7b52bf", "#c0562b", "#b9951c", "#3a5fb0", "#a8386b"];
   // window.prompt masaüstü uygulamasında çalışmadığı için ad uygulama içi pencereden alınır.
   async function createWorkspace() {
     const name = newWorkspaceName.trim();
@@ -1788,7 +1828,7 @@ export function Records({
   const overallInOut = useMemo(() => {
     const incomeRows = kind === "cash" ? allRecords.filter((x) => x.kind === "income" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [];
     const expenseRows = kind === "cash" ? allRecords.filter((x) => x.kind === "expense" && x.cashAccount && !kasaSeparateNames.has(x.cashAccount)) : [];
-    return { inBy: combineByCurrency([{ rows: plainRecords }, { rows: incomeRows }]), outBy: combineByCurrency([{ rows: expenseRows }]) };
+    return { inBy: combineByCurrency([{ rows: plainRecords }, { rows: incomeRows.filter((x) => !isDebtLeg(x)) }]), outBy: combineByCurrency([{ rows: expenseRows.filter((x) => !isDebtLeg(x)) }]) };
   }, [plainRecords, allRecords, kind, cashAccounts]);
   // Gelir/Gider sayfalarında liste kayıtları, genel yönteme uygun olarak liste adına göre değil bağlı oldukları (Liste)
   // kasaya göre kutulanır: "DL-2026 Giderleri" gibi; kutuda o kasanın listeleri etiket olarak görünür.
@@ -1820,7 +1860,7 @@ export function Records({
     type Card = CardGroup & { direct: RecordItem[]; inc: RecordItem[]; exp: RecordItem[] };
     type Ws = { key: string; name: string; color: string; kasas: Card[]; parentKey?: string | null };
     const buckets: Ws[] = [
-      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#287b98", kasas: [] },
+      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#315fe8", kasas: [] },
       { key: "liste", name: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê"), color: "#b9951c", kasas: [] },
       { key: "rj", name: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ"), color: "#7b52bf", kasas: [] },
       ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, parentKey: section.parentKey ?? null, kasas: [] as Card[] })),
@@ -1833,8 +1873,8 @@ export function Records({
         name,
         kind: "cash",
         count: direct.length + inc.length + exp.length,
-        totalInByCurrency: combineByCurrency([{ rows: direct }, { rows: inc }]),
-        totalOutByCurrency: combineByCurrency([{ rows: exp }]),
+        totalInByCurrency: combineByCurrency([{ rows: direct }, { rows: inc.filter((x) => !isDebtLeg(x)) }]),
+        totalOutByCurrency: combineByCurrency([{ rows: exp.filter((x) => !isDebtLeg(x)) }]),
         totalByCurrency: combineByCurrency([{ rows: direct }, { rows: inc }, { rows: exp, sign: -1 }]),
         direct,
         inc,
@@ -1846,14 +1886,18 @@ export function Records({
         : account?.isListWorkspace ? "liste" : account?.isRjKasa ? "rj" : "genel";
       buckets.find((b) => b.key === key)?.kasas.push(card);
     }
+    // Elle sıralama (Kasa Kontrol Merkezi): sortOrder > 0 olan kasalar önce, kendi sırasıyla; kalanlar adla.
+    const orderOf = (name: string) => accountOf.get(name)?.sortOrder || 0;
+    for (const b of buckets) b.kasas.sort((a, c) => (orderOf(a.name) || 1e9) - (orderOf(c.name) || 1e9));
     // Bölümler: başka bir çalışma alanının içine taşınan alanlar ana listede ayrı kutu olmaz; üst alanın içinde "bölüm" olarak görünür
     // ve toplamları üst alana dahil edilir.
     const calc = (kasas: Card[]) => {
       const parts = kasas.flatMap((k) => [{ rows: k.direct }, { rows: k.inc }]);
+      const opParts = kasas.flatMap((k) => [{ rows: k.direct }, { rows: k.inc.filter((x) => !isDebtLeg(x)) }]);
       return {
         count: kasas.reduce((a, k) => a + k.count, 0),
-        inBy: combineByCurrency(parts),
-        outBy: combineByCurrency(kasas.map((k) => ({ rows: k.exp }))),
+        inBy: combineByCurrency(opParts),
+        outBy: combineByCurrency(kasas.map((k) => ({ rows: k.exp.filter((x) => !isDebtLeg(x)) }))),
         totalBy: combineByCurrency([...parts, ...kasas.map((k) => ({ rows: k.exp, sign: -1 }))]),
       };
     };
@@ -1861,13 +1905,20 @@ export function Records({
     const isChild = (b: Ws) => Boolean(b.parentKey) && known.has(b.parentKey as string);
     return buckets
       .filter((b) => !isChild(b))
+      .sort((a, c) => {
+        const ia = workspaceOrder.indexOf(a.key), ic = workspaceOrder.indexOf(c.key);
+        return (ia < 0 ? 1e9 : ia) - (ic < 0 ? 1e9 : ic);
+      })
       .filter((b) => b.kasas.length > 0 || b.key.startsWith("sec-") || b.key === "genel" || buckets.some((s) => s.parentKey === b.key))
       .map((b) => {
-        const subs = buckets.filter((s) => s.parentKey === b.key).map((s) => ({ ...s, ...calc(s.kasas) }));
+        const subs = buckets
+          .filter((s) => s.parentKey === b.key)
+          .sort((x, y) => (sections.find((q) => `sec-${q.id}` === x.key)?.sortOrder || 1e9) - (sections.find((q) => `sec-${q.id}` === y.key)?.sortOrder || 1e9))
+          .map((s) => ({ ...s, ...calc(s.kasas) }));
         const allKasas = [...b.kasas, ...subs.flatMap((s) => s.kasas)];
         return { ...b, subs, allKasas, ...calc(allKasas) };
       });
-  }, [records, allRecords, kind, cashAccounts, sections, language]);
+  }, [records, allRecords, kind, cashAccounts, sections, language, workspaceOrder]);
   const [activeSub, setActiveSub] = useState<string | null>(null);
   useEffect(() => setActiveSub(null), [activeWs]);
   const activeWsObj = cashWorkspaces.find((w) => w.key === activeWs);
@@ -1879,7 +1930,7 @@ export function Records({
     if (kind === "cash") return [];
     const accountOf = new Map(cashAccounts.map((a) => [a.name, a]));
     const buckets = [
-      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#287b98", kasas: [] as typeof kasaBoxes },
+      { key: "genel", name: tx(language, "Diğer", "Other", "Yên din"), color: "#315fe8", kasas: [] as typeof kasaBoxes },
       { key: "liste", name: tx(language, "Liste Kasaları", "List Cash Accounts", "Qaseyên Lîsteyê"), color: "#b9951c", kasas: [] as typeof kasaBoxes },
       { key: "rj", name: tx(language, "RJ-Kasaları", "RJ Cash Accounts", "Qaseyên RJ"), color: "#7b52bf", kasas: [] as typeof kasaBoxes },
       ...cashSections.map((section) => ({ key: `sec-${section.id}`, name: section.name, color: section.color, kasas: [] as typeof kasaBoxes })),
@@ -2063,7 +2114,7 @@ export function Records({
   }, [rowIdsKey]);
   const title =
     kind === "cash"
-      ? tx(language, "Kasalar", "Cash Accounts", "Qasayên Pere")
+      ? tx(language, "Kasa Kontrol Merkezi", "Cash Control Center", "Navenda Kontrola Qaseyan")
       : kind === "income"
         ? tx(language, "Gelirler", "Income", "Dahat")
         : tx(language, "Giderler", "Expenses", "Mesref");
@@ -2250,13 +2301,17 @@ export function Records({
   // Gelir/Gider ayrımında da (bkz. aşağıdaki kasaResultSplit) bu fonksiyon
   // yeniden kullanılıyor, tek bir birleşik tabloda da.
   function renderRecordsTable(tableRows: RecordItem[]) {
+    // Borç simgesi sütunu yalnızca tabloda borç hareketi varsa görünür; kasa sayfasında çalışma alanı sütunu gereksizdir.
+    const cols = columnOrder.filter((id) => (id !== "debt" || tableRows.some((r) => r.debtRole)) && (id !== "workspace" || !kasaSplitActive));
+    const colsTotal = 38 + cols.reduce((t, id) => t + columnWidths[id], 0);
     return (
       <TableTools id={`records-${kind}`} language={language} className="recordsTable resizableTable" resize={false}>
         <table>
           <colgroup>
-            <col style={{ width: 38 }} />
-            {columnOrder.map((id) => (
-              <col key={id} style={{ width: columnWidths[id] }} />
+            {/* Kasa sayfasında sütunlar yüzde olarak ölçeklenir: tablo kutuya sığar, yatay kaydırma çıkmaz. */}
+            <col style={{ width: kasaSplitActive ? `${(38 / colsTotal) * 100}%` : 38 }} />
+            {cols.map((id) => (
+              <col key={id} style={{ width: kasaSplitActive ? `${(columnWidths[id] / colsTotal) * 100}%` : columnWidths[id] }} />
             ))}
           </colgroup>
           <thead>
@@ -2273,7 +2328,7 @@ export function Records({
                   onChange={(e) => toggleMany(tableRows, e.target.checked)}
                 />
               </th>
-              {columnOrder.map((id) => (
+              {cols.map((id) => (
                 <th
                   key={id}
                   className={draggedColumn === id ? "colDragging" : ""}
@@ -2312,7 +2367,7 @@ export function Records({
           <tbody>
             {tableRows.length === 0 && (
               <tr>
-                <td colSpan={columnOrder.length + 1} className="empty">
+                <td colSpan={cols.length + 1} className="empty">
                   {tx(language, "Bu grupta kayıt yok.", "No records in this group.", "Di vê komê de qeyd tune.")}
                 </td>
               </tr>
@@ -2330,7 +2385,7 @@ export function Records({
                   <td className="selectCell">
                     <input type="checkbox" aria-label={tx(language, "Satırı seç", "Select row", "Rêzê hilbijêre")} checked={selectedIds.has(x.id)} onChange={(e) => toggleMany([x], e.target.checked)} />
                   </td>
-                  {columnOrder.map((id) => (
+                  {cols.map((id) => (
                     <td key={id} className={columnCellClassName(id)}>
                       {renderCell(id, x, { pendingTransfer, canApprove })}
                     </td>
@@ -2349,7 +2404,50 @@ export function Records({
   // rengi ve başlığından anlar. "Tümü" görünümünde ve Gelir/Gider
   // sayfalarında (kind !== "cash") tek, birleşik tablo olarak kalır.
   const kasaSplitActive = kind === "cash" && source !== "Tümü";
+  // Kasalar sayfası: açılışta "kasa panosu" (boardMode), bir kasa seçilince kasanın kendi sayfası (detailMode).
+  // Liste bağlamıyla açılan eski görünüm (activeList / showAllLists / activeKasa) olduğu gibi kalır.
+  // Kasa Kontrol Merkezi yönetimi: sıralama kaydı, alan/bölüm düzenleme + yetkiler, bölüm/kasa ekleme.
+  async function saveOrder(payload: { workspaces?: string[]; sections?: number[]; kasas?: number[] }) {
+    try {
+      const response = await fetch("/api/cash-order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        alert(body.error || tx(language, "Sıralama kaydedilemedi.", "The order could not be saved.", "Rêz nehat tomarkirin."));
+        return;
+      }
+      onRefreshData?.();
+    } catch {
+      alert(tx(language, "Sıralama kaydedilemedi.", "The order could not be saved.", "Rêz nehat tomarkirin."));
+    }
+  }
+  function editWorkspaceOrSection(key: string, name: string, kasaNames: string[]) {
+    const title = `${name} — ${tx(language, "Düzenle ve kimler görebilir?", "Edit and who can see it?", "Biguherîne û kî dikare bibîne?")}`;
+    setAccessTarget({
+      title,
+      kasas: kasaNames
+        .map((n) => {
+          const acc = cashAccounts.find((c) => c.name === n);
+          return { id: acc?.id ?? 0, name: n, ownerUserId: acc?.ownerUserId ?? null };
+        })
+        .filter((k) => k.id > 0),
+      section: key.startsWith("sec-") ? sections.find((x) => x.id === Number(key.slice(4))) : undefined,
+    });
+  }
+  const boardMode = kind === "cash" && source === "Tümü" && !activeList && !showAllLists && !activeKasa;
+  const detailMode = kasaSplitActive;
+  const boardActions = (name: string): BoardAction[] => {
+    if (readOnly) return [];
+    const account = cashAccounts.find((a) => a.name === name);
+    if (!account) return [];
+    const list: BoardAction[] = [{ label: tx(language, "Kasayı düzenle", "Edit cash account", "Qaseyê biguherîne"), onClick: () => setKasaEditTarget(account) }];
+    if (isSuperAdmin) list.push({ label: tx(language, "Kimler görebilir?", "Who can see it?", "Kî dikare bibîne?"), onClick: () => setAccessTarget({ title: `${account.name} — ${tx(language, "Kimler görebilir?", "Who can see it?", "Kî dikare bibîne?")}`, kasas: [{ id: account.id, name: account.name, ownerUserId: account.ownerUserId }] }) });
+    list.push({ label: tx(language, "Çalışma alanına taşı", "Move to workspace", "Bibe qada xebatê"), onClick: () => setKasaMoveTarget(account) });
+    list.push({ label: tx(language, "Kasayı sil", "Delete cash account", "Qaseyê jê bibe"), danger: true, onClick: () => setKasaDeleteTarget(account) });
+    return list;
+  };
+  const detailKasa = detailMode ? cashWorkspaces.flatMap((w) => w.allKasas.map((k) => ({ k, w }))).find((x) => x.k.name === source) : undefined;
   const selectedKasaGroup = kasaSplitActive ? groups.find((g) => g.name === source) : undefined;
+  const kasaDebt = kasaSplitActive ? kasaDebtByCurrency(allRecords, source) : {};
   const kasaIncomeRows = kasaSplitActive ? orderedRows.filter((x) => x.kind !== "expense") : [];
   const kasaExpenseRows = kasaSplitActive ? orderedRows.filter((x) => x.kind === "expense") : [];
   // Satır seçimi: seçili satırlar Excel'e çıkarılabilir, kopyalanabilir veya toplu silinebilir.
@@ -2393,9 +2491,9 @@ export function Records({
             kind === "cash"
               ? tx(
                   language,
-                  "Kasa kartını seçerek o kasanın hareketlerini görün",
-                  "Select a cash account card to view its transactions",
-                  "Kartê qaseyê hilbijêre û tevgerên wê bibîne",
+                  "Bir kasaya tıklayarak hareketlerini görün",
+                  "Click a cash account to see its transactions",
+                  "Li qaseyekê bitikîne û tevgerên wê bibîne",
                 )
               : tx(
                   language,
@@ -2406,10 +2504,33 @@ export function Records({
           }
         />
         <div>
-          {!readOnly && (
-            <label className="light fileButton">
-              ⇧ {tx(language, "Excel Ekle", "Import Excel", "Excel Têxe")}
+          <div className="excelMenuWrap" onMouseLeave={() => setExcelMenuOpen(false)}>
+            <button type="button" className="light excelMenuBtn" onClick={() => setExcelMenuOpen((x) => !x)} aria-expanded={excelMenuOpen} aria-haspopup="menu">
+              ▦ {tx(language, "Excel ve Rapor", "Excel and Reports", "Excel û Rapor")} <span aria-hidden="true">⌄</span>
+            </button>
+            {excelMenuOpen && (
+              <div className="excelMenu" role="menu">
+                {!readOnly && (
+                  <button type="button" role="menuitem" onClick={() => { setExcelMenuOpen(false); importFileRef.current?.click(); }}>
+                    <i aria-hidden="true">⇧</i>
+                    <span><b>{tx(language, "Excel ekle", "Import Excel", "Excel têxe")}</b><small>{tx(language, "Bu tablonun biçimindeki .xlsx dosyasını kayıt olarak ekler", "Adds an .xlsx file in this table's format as records", "Pelê .xlsx wekî qeyd zêde dike")}</small></span>
+                  </button>
+                )}
+                <button type="button" role="menuitem" onClick={() => { setExcelMenuOpen(false); exportExcel(); }}>
+                  <i aria-hidden="true">⇩</i>
+                  <span><b>{tx(language, "Excel'e çıkar", "Export to Excel", "Derxe Excelê")}</b><small>{tx(language, "Görünen kayıtları .xlsx olarak indirir", "Downloads the visible records as .xlsx", "Qeydên xuya wekî .xlsx dadixe")}</small></span>
+                </button>
+                {!readOnly && (
+                  <button type="button" role="menuitem" onClick={() => { setExcelMenuOpen(false); onGoUpload?.(); }}>
+                    <i aria-hidden="true">▤</i>
+                    <span><b>{tx(language, "Rapor yükle", "Upload report", "Raporê barke")}</b><small>{tx(language, "Excel raporunu çalışma alanı ve kasa seçerek aylık kayda çevirir", "Books an Excel report into a workspace and cash account", "Raporê Excel bi hilbijartina qaseyê dike qeyd")}</small></span>
+                  </button>
+                )}
+              </div>
+            )}
+            {!readOnly && (
               <input
+                ref={importFileRef}
                 hidden
                 type="file"
                 accept=".xlsx"
@@ -2418,16 +2539,8 @@ export function Records({
                   e.target.value = "";
                 }}
               />
-            </label>
-          )}
-          <button className="light" onClick={() => exportExcel()}>
-            ⇩ {tx(language, "Excel'e Çıkar", "Export to Excel", "Derxe Excelê")}
-          </button>
-          {!readOnly && (
-            <button className="light" onClick={onGoUpload} title={tx(language, "Excel raporunu çalışma alanı ve kasa seçerek yükleyin (Rapor Hazırla / Yükle sayfası)", "Upload an Excel report into a workspace and cash account (Prepare / Upload Report page)", "Raporeke Excel bi hilbijartina qada xebatê û qaseyê barke (rûpela Amadekirin / Barkirina Raporê)")}>
-              ⇧ {tx(language, "Rapor Yükle", "Upload Report", "Raporê Barke")}
-            </button>
-          )}
+            )}
+          </div>
           {kasaSplitActive && (
             <button className="light" onClick={() => setKasaResultOpen(true)}>
               📊 {tx(language, "Sonuç Oluştur", "Create Result", "Encamê Biafirîne")}
@@ -2579,6 +2692,42 @@ export function Records({
           }}
         />
       )}
+      {boardMode && (
+        <KasaBoard
+          language={language}
+          workspaces={cashWorkspaces.map((w) => ({ key: w.key, name: w.name, color: w.color, kasas: w.kasas, subs: w.subs.map((x) => ({ key: x.key, name: x.name, color: x.color, kasas: x.kasas })) }))}
+          cashAccounts={cashAccounts}
+          allRecords={allRecords}
+          exchangeRates={exchangeRates}
+          summary={{ total: overallByCurrency, inBy: overallInOut.inBy, outBy: overallInOut.outBy }}
+          onOpen={(name) => { setSource(name); setActiveKasa(""); setShowAllLists(false); }}
+          actionsFor={boardActions}
+          onShare={(account) => setShareTarget(account)}
+          canManage={isSuperAdmin && !readOnly}
+          onReorder={saveOrder}
+          onEditGroup={editWorkspaceOrSection}
+          onAddSection={(parentKey) => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceParent(parentKey); setNewWorkspaceOpen(true); }}
+          onAddKasa={(groupKey) => onAdd("cash", undefined, groupKey)}
+          onAddWorkspace={() => { setNewWorkspaceName(""); setNewWorkspaceError(""); setNewWorkspaceParent(""); setNewWorkspaceOpen(true); }}
+        />
+      )}
+      {detailMode && (
+        <div className="kbDetailHead">
+          <button type="button" className="kbBack" onClick={() => { setSource("Tümü"); setActiveKasa(""); setActiveWs(null); setShowAllLists(false); setSelectedIds(new Set()); }}>
+            ← {tx(language, "Tüm kasalar", "All cash accounts", "Hemû qase")}
+          </button>
+          <div className="kbDetailTitle">
+            <h3>{localizeData(source, language)}</h3>
+            <small>{detailKasa ? `${detailKasa.w.name} · ` : ""}{tx(language, "Bakiye", "Balance", "Balans")}: <b>{moneyBreakdown(detailKasa?.k.totalByCurrency ?? {})}</b></small>
+          </div>
+          <div className="kbDetailActions">
+            {kasaActions(source, true)}
+            {(() => { const acc = cashAccounts.find((a) => a.name === source); return acc ? <button type="button" className="light compact" onClick={() => setShareTarget(acc)}>🔗 {tx(language, "Paylaş", "Share", "Parve bike")}</button> : null; })()}
+            {!readOnly && <button type="button" className="light compact" onClick={() => openCardRecord("source", source, "cash")}>🗂 {tx(language, "Kasa kaydı", "Cash entry", "Tomara qaseyê")}</button>}
+          </div>
+        </div>
+      )}
+      {!(boardMode || detailMode) && (
       <div className="groups">
         <button
           className={source === "Tümü" && !showAllLists && !activeKasa && (activeWs === null || activeWs === "__all") && !activeIeWorkspace ? "selected" : ""}
@@ -2759,6 +2908,7 @@ export function Records({
           </>
         )}
       </div>
+      )}
       {kind !== "cash" && activeIeWorkspace && (
         <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeIeWorkspace.color}` }}>
           {activeIeWorkspace.kasas.map((k) => (
@@ -2887,8 +3037,8 @@ export function Records({
             ))}
         </div>
       )}
-      {kind === "cash" && activeWs && (
-        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#287b98"}` }}>
+      {kind === "cash" && activeWs && !(boardMode || detailMode) && (
+        <div className="groups workspaceGroups" style={{ borderLeft: `4px solid ${activeWorkspace?.color ?? "#315fe8"}` }}>
           {activeWorkspace?.subs.map((s) => (
             <div className="groupCard subSectionCard" key={s.key}>
               <button
@@ -2939,7 +3089,7 @@ export function Records({
           )}
         </div>
       )}
-      {kind === "cash" && activeSubObj && (
+      {kind === "cash" && activeSubObj && !(boardMode || detailMode) && (
         <div className="groups workspaceGroups subGroups" style={{ borderLeft: `4px solid ${activeSubObj.color}` }}>
           <small className="subGroupsTitle">{activeSubObj.name}</small>
           {activeSubObj.kasas.map((g) => renderKasaCard(g, { background: `${activeSubObj.color}14`, borderColor: `${activeSubObj.color}66` }))}
@@ -2948,6 +3098,7 @@ export function Records({
           )}
         </div>
       )}
+      {!boardMode && (
       <div className="search">
         <span>⌕</span>
         {kind === "cash" && (
@@ -2986,7 +3137,8 @@ export function Records({
           {rows.length} {recordWord}
         </small>
       </div>
-      {filtersOpen && (
+      )}
+      {filtersOpen && !boardMode && (
         <div className="filterPanel">
           <label>
             {tx(language, "Başlangıç Tarihi", "From Date", "Ji Tarîxê")}
@@ -3024,7 +3176,7 @@ export function Records({
           </button>
         </div>
       )}
-      {selectedRows.length > 0 && (
+      {selectedRows.length > 0 && !boardMode && (
         <div className="selectionBar">
           <strong>{selectedRows.length} {tx(language, "kayıt seçili", "records selected", "tomar hatine hilbijartin")}</strong>
           <span className="selectionTotals">
@@ -3064,6 +3216,7 @@ export function Records({
           }}
         />
       )}
+      {!boardMode && (
       <div className={kind === "cash" && !kasaSplitActive ? "" : "recordsGrid"}>
         {kasaSplitActive ? (
           <div className="kasaResultSplit">
@@ -3074,8 +3227,13 @@ export function Records({
                   <h3>
                     {tx(language, "Gelirler", "Income", "Dahat")}
                     <strong className="positive">
-                      {moneyBreakdown(combineByCurrency([{ rows: kasaIncomeRows }]))}
+                      {moneyBreakdown(combineByCurrency([{ rows: kasaIncomeRows.filter((x) => !isDebtLeg(x)) }]))}
                     </strong>
+                    {Object.keys(kasaDebt).length > 0 && (
+                      <strong className="negative kasaDebtTag" title={tx(language, "Bu kasanın başka kasalara kalan borcu (Borç Detay sayfasına bakın)", "Outstanding debt of this kasa to other kasas (see Debt Details)", "Deynê mayî yê vê qaseyê (Hûrguliyên Deynê bibîne)")}>
+                        {tx(language, "Borç Tutarı", "Debt Amount", "Mêjera Deynê")}: {moneyBreakdown(kasaDebt)}
+                      </strong>
+                    )}
                   </h3>
                   <small>
                     {kasaIncomeRows.length} {recordWord}
@@ -3096,7 +3254,7 @@ export function Records({
                   <h3>
                     {tx(language, "Giderler", "Expenses", "Mesref")}
                     <strong className="negative">
-                      {moneyBreakdown(combineByCurrency([{ rows: kasaExpenseRows }]))}
+                      {moneyBreakdown(combineByCurrency([{ rows: kasaExpenseRows.filter((x) => x.debtRole !== "repay") }]))}
                     </strong>
                   </h3>
                   <small>
@@ -3117,6 +3275,24 @@ export function Records({
         )}
         {(kind !== "cash" || kasaSplitActive) && (
           <aside className={`latestRecords ${kasaSplitActive ? "cash" : kind}`}>
+            {viewTarget ? (
+              <RecordViewPanel
+                inline
+                language={language}
+                record={viewTarget}
+                sectionName={viewTarget.sectionId ? sections.find((sec) => sec.id === viewTarget.sectionId)?.name ?? "" : ""}
+                canEdit={!readOnly}
+                onClose={() => setViewTarget(null)}
+                onEdit={() => { const item = viewTarget; setViewTarget(null); onEdit(item); }}
+                onMessages={() => { const item = viewTarget; setViewTarget(null); setCommentTarget(item); }}
+                onOpenTable={() => { const item = viewTarget; setViewTarget(null); setDetailViewTarget(item); }}
+              />
+            ) : kasaSplitActive ? (
+              <p className="latestNotesEmpty">
+                {tx(language, "Bir Gelir veya Gider adına tıklayın; içeriği burada görünsün.", "Click an income or expense name to see its content here.", "Li navê Dahat an Mesrefekê bitikîne; naverok li vir xuya dibe.")}
+              </p>
+            ) : (
+            <>
             <div className="latestHead">
               <span>{kasaSplitActive ? "⇄" : kind === "income" ? "↗" : "↘"}</span>
               <div>
@@ -3174,9 +3350,12 @@ export function Records({
                 </div>
               </>
             )}
+            </>
+            )}
           </aside>
         )}
       </div>
+      )}
       {deleteTarget && (
         <DeleteConfirmModal
           language={language}
@@ -3792,9 +3971,65 @@ function ExcelAttachmentModal({ language, attachment, onClose }: { language: Lan
   );
 }
 
+// Gelir/Gider görünüm kartı: kaydın içeriği düzenleme açılmadan sağ üstte küçük bir kartta okunur.
+function RecordViewPanel({ language, record: x, sectionName, canEdit, inline, onClose, onEdit, onMessages, onOpenTable }: { inline?: boolean; language: Language; record: RecordItem; sectionName: string; canEdit: boolean; onClose: () => void; onEdit: () => void; onMessages: () => void; onOpenTable: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const kindLabel = x.kind === "income" ? tx(language, "Gelir", "Income", "Dahat") : x.kind === "expense" ? tx(language, "Gider", "Expense", "Mesref") : tx(language, "Kasa", "Cash", "Qase");
+  const tableRows = (x.detailTable?.length ?? 0) > 1 ? x.detailTable!.length - 1 : 0;
+  const rows: [string, string][] = [
+    [tx(language, "Kasa", "Cash account", "Qase"), x.kind === "cash" ? x.source : x.cashAccount],
+    [tx(language, "Bölüm", "Section", "Beş"), sectionName],
+    [tx(language, "Kişi", "Person", "Kes"), x.person],
+    [tx(language, "Birim", "Unit", "Yekîne"), x.project],
+    [tx(language, "Liste", "List", "Lîste"), x.listName],
+    [tx(language, "Etiketler", "Tags", "Etîket"), (x.tags ?? []).join(", ")],
+  ].filter(([, v]) => v && v.trim()) as [string, string][];
+  return (
+    <aside className={inline ? "noteDrawer recordView recordViewInline" : "noteDrawer recordView"} role="dialog" aria-label={x.source}>
+      <header>
+        <div>
+          <span className={`noteDrawerStatus recordViewKind ${x.kind}`}>{kindLabel}{x.debtRole ? ` · ${tx(language, "Borç", "Debt", "Deyn")}` : ""}</span>
+          <h2>{localizeData(x.source, language)}</h2>
+          <small>{date(x.date, language)}</small>
+        </div>
+        <button type="button" onClick={onClose} aria-label={tx(language, "Kapat", "Close", "Bigire")}>×</button>
+      </header>
+      <div className="noteDrawerBody">
+        <div className={`recordViewAmount ${x.kind === "expense" ? "negative" : "positive"}`}>{x.kind === "expense" ? "−" : ""}{money(x.amount, x.currency)}</div>
+        {rows.map(([label, value]) => (
+          <p key={label} className="noteDrawerRow"><b>{label}</b><span>{localizeData(value, language)}</span></p>
+        ))}
+        {x.detail && <div className="noteDrawerSection"><b>{tx(language, "Detay", "Detail", "Hûragahî")}</b><div className="noteDrawerContent">{x.detail}</div></div>}
+        {x.note && <div className="noteDrawerSection"><b>{tx(language, "Not", "Note", "Nîşe")}</b><div className="noteDrawerContent">{x.note}</div></div>}
+        {((x.attachments?.length ?? 0) > 0 || tableRows > 0) && (
+          <div className="noteDrawerSection">
+            <b>{tx(language, "Belgeler", "Documents", "Belge")}</b>
+            <div className="noteAttachments">
+              {(x.attachments ?? []).map((doc, i) => (
+                <a key={`${doc.name}-${i}`} className="noteAttachmentChip" href={doc.data} download={doc.name} title={doc.name}>📎 <span>{doc.name}</span></a>
+              ))}
+              {tableRows > 0 && (
+                <button type="button" className="noteAttachmentChip" onClick={onOpenTable}>▦ <span>{tx(language, "Gider detayı", "Expense details", "Hûrguliyên mesrefê")} ({tableRows})</span></button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <footer>
+        <button type="button" className="light" onClick={onMessages}>💬 {tx(language, "Mesajlar", "Messages", "Peyam")}</button>
+        {canEdit && <button type="button" className="primary" onClick={onEdit}>✎ {tx(language, "Düzenle", "Edit", "Biguherîne")}</button>}
+      </footer>
+    </aside>
+  );
+}
+
 export function RecordModal({
   language,
-  kind,
+  kind: kindProp,
   initial,
   prefillCashAccount,
   prefillWorkspaceKey,
@@ -3823,6 +4058,8 @@ export function RecordModal({
   users: UserAccount[];
   onTransfersChanged: () => void;
 }) {
+  // Yeni Gelir/Gider/Borç kaydında tür, pencerenin içinden değiştirilebilir.
+  const [kind, setKindState] = useState<Kind>(kindProp);
   const defaultNoteRelation: NoteRelation =
     kind === "cash" ? "cash" : kind === "income" ? "income" : "expense";
   const [financeNote, setFinanceNote] = useState("");
@@ -3874,10 +4111,40 @@ export function RecordModal({
   // translated string back to the database, breaking cashAccount name
   // matching and silently corrupting data across languages.
   const [form, setForm] = useState<Omit<RecordItem, "id">>(base);
+  const debtModeNow = form.debtMode ?? "";
+  const tone: "cash" | "in" | "out" | "debt" = kind === "cash" ? "cash" : kind === "income" ? "in" : debtModeNow !== "" ? "debt" : "out";
+  function switchType(next: "in" | "out" | "debt") {
+    const nextKind: Kind = next === "in" ? "income" : "expense";
+    setKindState(nextKind);
+    setSectionId(null);
+    setFinanceNoteRelation(nextKind);
+    setForm((f) => ({ ...f, kind: nextKind, debtMode: next === "debt" ? (f.debtMode || "lent") : "", debtCashAccountId: null }));
+  }
   // "Liste Kasası": işaretlenen kasa Listeler sayfasında otomatik çalışma alanı olur ve Kasalar'daki Liste Kasaları bölümüne gelir.
   const [sectionId, setSectionId] = useState<number | null>(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).sectionId : kind === "cash" ? cashAccounts?.find((a) => a.name === base.source)?.sectionId ?? null : (base as RecordItem).sectionId ?? null));
   const [rjKasa, setRjKasa] = useState(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).rjKasa : kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isRjKasa)));
   const [listKasa, setListKasa] = useState(() => (prefillWorkspaceKey && !initial && kind === "cash" ? workspaceState(prefillWorkspaceKey, { rjKasa: false, listKasa: false }).listKasa : kind === "cash" && !!cashAccounts?.some((a) => a.name === base.source && a.isListWorkspace)));
+  // Gider eklerken "Borç" işareti: lent = başka bir kasaya borç veriyorum, repay = borcumu ödüyorum (karşı kasa seçilir).
+  const [allKasas, setAllKasas] = useState<{ id: number; name: string }[]>([]);
+  const debtMode = form.debtMode ?? "";
+  useEffect(() => {
+    if (kind !== "expense" || initial || debtMode !== "lent" || allKasas.length) return;
+    fetch("/api/cash-accounts/all").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.cashAccounts) setAllKasas(d.cashAccounts); }).catch(() => {});
+  }, [kind, initial, debtMode, allKasas.length]);
+  const ownKasaId = cashAccounts.find((a) => a.name === form.cashAccount)?.id;
+  // Borcumu öderken: bu kasanın borcu olduğu (seçili para biriminde kalan borcu bulunan) alacaklı kasalar.
+  const repayOptions = debtPairs(records).filter((p) => p.debtorName === form.cashAccount && p.currency === form.currency && p.outstanding > 0.004);
+  const lentOptions = allKasas.filter((k) => k.id !== ownKasaId);
+  const pickDebtKasa = (idText: string) => {
+    const id = idText ? Number(idText) : null;
+    let amount = form.amount;
+    if (debtMode === "repay" && id) {
+      const remaining = repayOptions.find((p) => p.creditorId === id)?.outstanding ?? 0;
+      // Ödeme tutarı kalan borca göre otomatik düzenlenir.
+      if (remaining > 0 && (!amount || amount > remaining)) amount = remaining;
+    }
+    setForm({ ...form, debtCashAccountId: id, amount });
+  };
   // Kasa formundan, seçili çalışma alanının içinde hızlıca yeni bölüm oluşturur ve onu seçer.
   const [inlineSectionOpen, setInlineSectionOpen] = useState(false);
   const [inlineSectionName, setInlineSectionName] = useState("");
@@ -4066,55 +4333,51 @@ export function RecordModal({
     }
     onSave(kind === "cash" ? { ...form, listKasa, rjKasa, sectionId } : { ...form, sectionId }, initial?.id);
   }
-  return (
-    <div className="overlay overlayScrollThrough">
-      <form
-        className="modal recordModal"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const duplicate = records.find((x) => x.id !== initial?.id && x.kind === kind && x.date === form.date && x.amount === form.amount && x.currency === form.currency && (x.cashAccount || "") === (form.cashAccount || "") && x.source === form.source);
-          if (duplicate) {
-            setDuplicateConfirmOpen(true);
-            return;
-          }
-          commitSave();
-        }}
-      >
-        <div className="modalHead">
-          <div>
-            <h2>
-              {initial
-                ? tx(
-                    language,
-                    "Kaydı Düzenle",
-                    "Edit Record",
-                    "Qeydê Biguherîne",
-                  )
-                : tx(language, "Yeni Kayıt", "New Record", "Qeyda Nû")}
-            </h2>
-            <p>
-              {initial
-                ? tx(
-                    language,
-                    "Eski hali otomatik olarak Arşiv bölümünde saklanacaktır.",
-                    "The previous version will be stored automatically in Archive.",
-                    "Rewşa berê dê bixweber di Arşîvê de were parastin.",
-                  )
-                : tx(
-                    language,
-                    "Daha önce kullanılan bilgiler alanlarda öneri olarak görünür.",
-                    "Previously used information appears as suggestions.",
-                    "Agahiyên berê hatine bikaranîn wek pêşniyar xuya dibin.",
-                  )}
-            </p>
-          </div>
-          <button type="button" onClick={onClose}>
-            ×
-          </button>
+  const rfHero = (
+    <div className="wide rfHero">
+      <div className="rfAmt">
+        <span>{kind === "cash" ? tx(language, "Açılış bakiyesi", "Opening balance", "Bakiya destpêkê") : tx(language, "Tutar", "Amount", "Meblağ")}</span>
+        <div>
+          <i aria-hidden="true">{form.currency === "USD" ? "$" : form.currency === "EUR" ? "€" : form.currency === "TRY" ? "₺" : form.currency}</i>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            inputMode="decimal"
+            placeholder="0,00"
+            value={form.amount || ""}
+            onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+            aria-label={tx(language, "Tutar", "Amount", "Meblağ")}
+          />
         </div>
-        <div className="formGrid">
-          <label className="wide">
-            {kind === "cash"
+      </div>
+      <div className="rfCur" role="group" aria-label={tx(language, "Para birimi", "Currency", "Yekeya Pere")}>
+        {["USD", "EUR", "IQD", "SYP", "TRY"].map((c) => (
+          <button key={c} type="button" className={form.currency === c ? "on" : ""} aria-pressed={form.currency === c} onClick={() => setForm({ ...form, currency: c })}>{c}</button>
+        ))}
+      </div>
+    </div>
+  );
+  const sec = (text: string) => <div className="wide rfSec"><span>{text}</span></div>;
+  // Kasa seçimi: Çalışma Alanı › Bölüm başlıkları altında gruplanır.
+  const rfWsOptions = workspaceOptions(sections, language);
+  const rfWsOf = (name: string) => {
+    const a = cashAccounts.find((x) => x.name === name);
+    const key = a ? workspaceKeyOf({ sectionId: a.sectionId ?? null, rjKasa: !!a.isRjKasa, listKasa: !!a.isListWorkspace }, sections) : "genel";
+    return rfWsOptions.find((o) => o.key === key)?.label || tx(language, "Diğer", "Other", "Yên din");
+  };
+  const kasaGroups = (() => {
+    const names = [...new Set([...records.filter((x) => x.kind === "cash").map((x) => x.source), ...cashAccounts.map((a) => a.name), form.cashAccount || ""].filter(Boolean))];
+    const map = new Map<string, string[]>();
+    for (const n of names) { const g = rfWsOf(n); map.set(g, [...(map.get(g) ?? []), n]); }
+    const order = rfWsOptions.map((o) => o.label);
+    return [...map.entries()]
+      .sort((x, y) => (order.indexOf(x[0]) + 1 || 999) - (order.indexOf(y[0]) + 1 || 999))
+      .map(([label, list]) => ({ label, names: list.sort((p, q) => p.localeCompare(q)) }));
+  })();
+  const toneLabel = tone === "in" ? tx(language, "Gelir", "Income", "Dahat") : tone === "out" ? tx(language, "Gider", "Expense", "Mesref") : tone === "debt" ? tx(language, "Borç", "Debt", "Deyn") : tx(language, "Kasa", "Cash account", "Qase");
+  const rfSource = (          <label>
+            <span>{kind === "cash"
               ? tx(language, "Kasa Adı", "Cash Account", "Navê Qaseyê")
               : kind === "income"
                 ? tx(
@@ -4128,7 +4391,7 @@ export function RecordModal({
                     "Gider Ana Başlığı",
                     "Expense Category",
                     "Sernavê Mesrefê",
-                  )}
+                  )} <b className="rfReq">*</b></span>
             <SuggestInput
               required
               value={form.source}
@@ -4136,7 +4399,8 @@ export function RecordModal({
               options={previous("source")}
             />
           </label>
-          <label>
+);
+  const rfDate = (          <label>
             {tx(language, "Tarih", "Date", "Tarîx")}
             <input
               type="date"
@@ -4144,7 +4408,8 @@ export function RecordModal({
               onChange={(e) => setForm({ ...form, date: e.target.value })}
             />
           </label>
-          <label>
+);
+  const rfPerson = (          <label>
             {tx(language, "Kişi", "Person", "Kes")}
             <SuggestInput
               value={form.person}
@@ -4152,7 +4417,8 @@ export function RecordModal({
               options={previous("person")}
             />
           </label>
-          <label>
+);
+  const rfUnit = (          <label>
             {tx(language, "Birim Adı", "Unit Name", "Navê Yekîneyê")}
             <SuggestInput
               value={form.project}
@@ -4160,62 +4426,16 @@ export function RecordModal({
               options={previous("project")}
             />
           </label>
-          <label>
-            {tx(language, "Miktar", "Amount", "Meblağ")}
-            <input
-              type="number"
-              min="0"
-              value={form.amount}
-              onChange={(e) =>
-                setForm({ ...form, amount: Number(e.target.value) })
-              }
-            />
-          </label>
-          <label>
-            {tx(language, "Para Birimi", "Currency", "Yekeya Pere")}
-            <select
-              value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
-            >
-              <option>USD</option>
-              <option>IQD</option>
-              <option>SYP</option>
-              <option>TRY</option>
-              <option>EUR</option>
-            </select>
-          </label>
-          {kind !== "cash" && (
-            <label>
-              {tx(language, "Kasa Seç", "Select Cash Account", "Qase Hilbijêre")}
-              <select
-                required
-                value={form.cashAccount || ""}
-                onChange={(e) => setForm({ ...form, cashAccount: e.target.value })}
-              >
-                <option value="" disabled>
-                  {tx(language, "Kasa seçin (zorunlu)", "Select a cash account (required)", "Qaseyekê hilbijêre (mecbûrî)")}
-                </option>
-                {[...new Set([...records.filter((x) => x.kind === "cash").map((x) => x.source), ...cashAccounts.map((a) => a.name), form.cashAccount || ""].filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{localizeData(name, language)}</option>)}
-              </select>
-            </label>
-          )}
-          {kind !== "cash" && sections.some((x) => x.scope === kind) && (
-            <label>
-              {tx(language, "Bölüm", "Section", "Beş")}
-              <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">{tx(language, "Bölümsüz", "No section", "Bê beş")}</option>
-                {sections.filter((x) => x.scope === kind).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
-              </select>
-            </label>
-          )}
-          <label>
+);
+  const rfDetail = (          <label>
             {tx(language, "Detay", "Detail", "Hûragahî")}
             <input
               value={form.detail}
               onChange={(e) => setForm({ ...form, detail: e.target.value })}
             />
           </label>
-          <label>
+);
+  const rfTags = (          <label>
             {tx(language, "Etiketler", "Tags", "Etîket")}
             <TagsInput
               tags={form.tags}
@@ -4229,6 +4449,122 @@ export function RecordModal({
               )}
             />
           </label>
+);
+  const rfKasa = kind !== "cash" && (
+            <label>
+              <span>{tx(language, "Kasa", "Cash account", "Qase")} <b className="rfReq">*</b></span>
+              <select
+                required
+                value={form.cashAccount || ""}
+                onChange={(e) => setForm({ ...form, cashAccount: e.target.value })}
+              >
+                <option value="" disabled>
+                  {tx(language, "Kasa seçin (zorunlu)", "Select a cash account (required)", "Qaseyekê hilbijêre (mecbûrî)")}
+                </option>
+                {kasaGroups.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.names.map((name) => <option key={name} value={name}>{localizeData(name, language)}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          );
+  const rfDebt = kind === "expense" && !initial && debtMode !== "" && (
+            <div className="wide debtBlock">
+              {(
+                <div className="debtBlockBody">
+                  <label>
+                    {tx(language, "Borç türü", "Debt type", "Cureyê deynê")}
+                    <select value={debtMode} onChange={(e) => setForm({ ...form, debtMode: e.target.value as "lent" | "repay", debtCashAccountId: null })}>
+                      <option value="lent">{tx(language, "Borç veriyorum (başka kasaya)", "I am lending (to another kasa)", "Deyn didim (ji qaseyeke din re)")}</option>
+                      <option value="repay">{tx(language, "Borcumu ödüyorum", "I am repaying a debt", "Deynê xwe didim")}</option>
+                    </select>
+                  </label>
+                  <label>
+                    {debtMode === "lent" ? tx(language, "Borç verilen kasa", "Kasa lent to", "Qaseya deyn lê hat dayîn") : tx(language, "Borcun ödeneceği kasa", "Kasa to repay", "Qaseya deyn lê tê dayîn")}
+                    <select required value={form.debtCashAccountId ?? ""} onChange={(e) => pickDebtKasa(e.target.value)}>
+                      <option value="" disabled>{tx(language, "Kasa seçin", "Select a kasa", "Qaseyekê hilbijêre")}</option>
+                      {debtMode === "lent"
+                        ? lentOptions.map((k) => <option key={k.id} value={k.id}>{localizeData(k.name, language)}</option>)
+                        : repayOptions.map((p) => <option key={p.creditorId} value={p.creditorId}>{localizeData(p.creditorName, language)} — {tx(language, "kalan", "remaining", "mayî")} {money(p.outstanding, p.currency)}</option>)}
+                    </select>
+                  </label>
+                  {debtMode === "repay" && repayOptions.length === 0 && (
+                    <small className="debtHint">{tx(language, "Bu kasanın seçili para biriminde kalan borcu yok.", "This kasa has no outstanding debt in the selected currency.", "Vê qaseyê bi vê diravê deynê mayî tune.")}</small>
+                  )}
+                  <small className="debtHint">
+                    {debtMode === "lent"
+                      ? tx(language, "Tutar bu kasanın giderinde görünür; borç alan kasaya otomatik giriş yazılır ve orada “Borç Tutarı” olarak görünür.", "The amount is shown as this kasa's expense; the borrowing kasa automatically gets an entry and shows it as “Debt Amount”.", "Mêjer wekî mesrefa vê qaseyê xuya dibe; qaseya deyn digire bixwe tê tomarkirin.")
+                      : tx(language, "Ödeme, borç alan kasanın giderinde görünür; borç miktarı ve borç veren kasanın verdiği gider ödeme kadar otomatik azalır.", "The payment appears in this kasa's expenses; the debt and the lender's lent expense decrease automatically by the amount paid.", "Dravdan di mesrefa vê qaseyê de xuya dibe; deyn û mesrefa qaseya deyn daye bixwe kêm dibin.")}
+                  </small>
+                </div>
+              )}
+            </div>
+          );
+  const rfSection = kind !== "cash" && sections.some((x) => x.scope === kind) && (
+            <label>
+              {tx(language, "Bölüm", "Section", "Beş")}
+              <select value={sectionId ?? ""} onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{tx(language, "Bölümsüz", "No section", "Bê beş")}</option>
+                {sections.filter((x) => x.scope === kind).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+              </select>
+            </label>
+          );
+  return (
+    <div className="overlay overlayScrollThrough">
+      <form
+        className={`modal recordModal rf-${tone}`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const duplicate = records.find((x) => x.id !== initial?.id && x.kind === kind && x.date === form.date && x.amount === form.amount && x.currency === form.currency && (x.cashAccount || "") === (form.cashAccount || "") && x.source === form.source);
+          if (duplicate) {
+            setDuplicateConfirmOpen(true);
+            return;
+          }
+          commitSave();
+        }}
+      >
+        <div className="modalHead rfHead">
+          <span className={`rfIcon ${tone}`} aria-hidden="true">{tone === "in" ? "↗" : tone === "out" ? "↘" : tone === "debt" ? "⇄" : "▣"}</span>
+          <div className="rfTitle">
+            <h2>
+              {initial
+                ? tx(language, "Kaydı Düzenle", "Edit Record", "Qeydê Biguherîne")
+                : kind === "cash"
+                  ? tx(language, "Yeni kasa", "New cash account", "Qaseya nû")
+                  : `${toneLabel} ${tx(language, "ekle", "add", "zêde bike")}`}
+            </h2>
+            <p>
+              {initial
+                ? tx(language, "Eski hali otomatik olarak Arşiv bölümünde saklanacaktır.", "The previous version will be stored automatically in Archive.", "Rewşa berê dê bixweber di Arşîvê de were parastin.")
+                : tx(language, "Daha önce kullanılan bilgiler alanlarda öneri olarak görünür.", "Previously used information appears as suggestions.", "Agahiyên berê hatine bikaranîn wek pêşniyar xuya dibin.")}
+            </p>
+          </div>
+          {!initial && kind !== "cash" && (
+            <div className="rfType" role="tablist" aria-label={tx(language, "Kayıt türü", "Record type", "Cureyê qeydê")}>
+              {([["in", tx(language, "Gelir", "Income", "Dahat")], ["out", tx(language, "Gider", "Expense", "Mesref")], ["debt", tx(language, "Borç", "Debt", "Deyn")]] as const).map(([id, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={tone === id} className={`${id}${tone === id ? " on" : ""}`} onClick={() => switchType(id)}>{label}</button>
+              ))}
+            </div>
+          )}
+          <button type="button" className="rfClose" onClick={onClose} aria-label={tx(language, "Kapat", "Close", "Bigire")}>
+            ×
+          </button>
+        </div>
+        <div className="formGrid">
+          {kind !== "cash" && rfHero}
+          {sec(kind === "cash" ? tx(language, "KASA", "CASH ACCOUNT", "QASE") : tx(language, "NEREYE", "WHERE", "KU"))}
+          {kind === "cash" ? rfSource : rfKasa}
+          {rfDate}
+          {rfDebt}
+          {rfSection}
+          {kind === "cash" && rfHero}
+          {sec(kind === "cash" ? tx(language, "AYRINTILAR", "DETAILS", "HÛRGULÎ") : tx(language, "NE İÇİN", "WHAT FOR", "BI ÇI"))}
+          {kind !== "cash" && rfSource}
+          {rfPerson}
+          {rfUnit}
+          {rfDetail}
+          {rfTags}
           {kind === "cash" && (
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</legend>
@@ -4270,9 +4606,13 @@ export function RecordModal({
             )}
           </fieldset>
           )}
+          {sec(tx(language, "EK BİLGİ", "EXTRA", "ZÊDE"))}
           <label className="wide">
-            {tx(language, "Ek Dosyalar (Excel/Office/PDF)", "Attachments (Excel/Office/PDF)", "Peldankên Pêvekirî (Excel/Office/PDF)")}
-            <div className="attachmentField">
+            {tx(language, "Belgeler", "Documents", "Belge")}
+            <div className="rfDrop">
+              <b aria-hidden="true">⇪</b>
+              <span>{tx(language, "Dosyayı sürükleyip bırakın veya ", "Drag a file here or ", "Pelê bikişîne vir an ")}<u>{tx(language, "bilgisayardan seçin", "browse", "hilbijêre")}</u></span>
+              <small>{tx(language, "Excel, Office, PDF · en fazla 5 dosya · her biri 6 MB", "Excel, Office, PDF · up to 5 files · 6 MB each", "Excel, Office, PDF · heta 5 pel · her yek 6 MB")}</small>
               <input
                 type="file"
                 multiple
@@ -4538,7 +4878,7 @@ export function RecordModal({
           <button type="button" className="light" onClick={onClose}>
             {tx(language, "Vazgeç", "Cancel", "Betal")}
           </button>
-          <button className="primary" disabled={readingFiles > 0} title={readingFiles > 0 ? tx(language, "Dosya okunuyor, lütfen bekleyin", "Reading file, please wait", "Pel tê xwendin, ji kerema xwe bisekine") : undefined}>
+          <button className={`primary rfSave ${tone}`} disabled={readingFiles > 0} title={readingFiles > 0 ? tx(language, "Dosya okunuyor, lütfen bekleyin", "Reading file, please wait", "Pel tê xwendin, ji kerema xwe bisekine") : undefined}>
             {readingFiles > 0
               ? tx(language, "⏳ Dosya yükleniyor…", "⏳ Loading file…", "⏳ Pel tê barkirin…")
               : initial
@@ -4548,7 +4888,9 @@ export function RecordModal({
                   "Save Changes",
                   "Guherînan Tomar Bike",
                 )
-              : tx(language, "Kaydet", "Save", "Tomar Bike")}
+              : kind === "cash"
+              ? tx(language, "Kasayı kaydet", "Save cash account", "Qaseyê tomar bike")
+              : `${toneLabel} ${tx(language, "kaydet", "save", "tomar bike")}`}
           </button>
         </div>
       </form>

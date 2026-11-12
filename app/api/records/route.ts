@@ -10,6 +10,7 @@ import { cashAccounts } from "../../../db/schema";
 import type { Kind } from "../_lib/types";
 import { parseBody, recordInputSchema } from "../_lib/validate";
 import { formatAmount, logActivity } from "../_lib/activity";
+import { kasaName, outstandingDebt, reduceLentExpenses, type DebtMeta } from "../_lib/debts";
 
 const RECORD_KINDS: Kind[] = ["cash", "income", "expense"];
 
@@ -77,9 +78,31 @@ export const POST = withErrorHandling(async (request: Request) => {
     // Kasa kaydında seçilen "kasa bölümü" kasaya yazılır (boş = Genel Kasa).
     if (payload.kind === "cash" && payload.sectionId !== undefined && link.cashAccountId != null) await tx.update(cashAccounts).set({ sectionId: payload.sectionId }).where(eq(cashAccounts.id, link.cashAccountId));
 
+    // Gider eklerken borç işareti: lent (borç veriyorum) ya da repay (borcumu ödüyorum).
+    const debtMode = payload.kind === "expense" ? payload.debtMode : undefined;
+    let debtOther: { id: number; name: string } | null = null;
+    let debtMeta: DebtMeta = [];
+    if (debtMode) {
+      if (!payload.debtCashAccountId) return { badDebt: "Borç için karşı kasayı seçin" };
+      if (link.cashAccountId == null || payload.debtCashAccountId === link.cashAccountId) return { badDebt: "Karşı kasa, giderin kasasından farklı olmalıdır" };
+      const otherName = await kasaName(payload.debtCashAccountId, tx);
+      if (!otherName) return { badDebt: "Karşı kasa bulunamadı" };
+      debtOther = { id: payload.debtCashAccountId, name: otherName };
+      if (payload.amount <= 0) return { badDebt: "Borç tutarı sıfırdan büyük olmalıdır" };
+      if (debtMode === "repay") {
+        const remaining = await outstandingDebt(link.cashAccountId, debtOther.id, payload.currency, tx);
+        if (remaining <= 0) return { badDebt: `Bu kasanın ${debtOther.name} kasasına ${payload.currency} cinsinden borcu yok` };
+        if (payload.amount > remaining + 0.001) return { badDebt: `Ödeme kalan borçtan büyük olamaz (kalan: ${remaining} ${payload.currency})` };
+        debtMeta = await reduceLentExpenses(debtOther.id, link.cashAccountId, payload.currency, payload.amount, tx);
+      }
+    }
+
     const [insertedRecord] = await tx
       .insert(records)
       .values({
+        debtRole: debtMode ?? "",
+        debtCashAccountId: debtOther?.id ?? null,
+        debtMeta,
         kind: payload.kind,
         date: payload.date,
         source: payload.source,
@@ -101,9 +124,34 @@ export const POST = withErrorHandling(async (request: Request) => {
       })
       .returning();
 
-    return { forbidden: false as const, record: insertedRecord, ensuredCash: link.ensuredCashRecord };
+    // Borç verildiyse borç alan kasaya otomatik "Borç Alındı" girişi yazılır; iki kayıt birbirine bağlanır.
+    let record = insertedRecord;
+    if (debtMode === "lent" && debtOther && link.cashAccountId != null) {
+      const [twin] = await tx
+        .insert(records)
+        .values({
+          kind: "income",
+          date: payload.date,
+          source: "Borç Alındı",
+          detail: `Borç alındı ← ${payload.cashAccount}`,
+          note: payload.note,
+          person: payload.cashAccount,
+          amount: payload.amount,
+          currency: payload.currency,
+          cashAccount: debtOther.name,
+          cashAccountId: debtOther.id,
+          debtRole: "borrowed",
+          debtCashAccountId: link.cashAccountId,
+          debtLinkId: insertedRecord.id,
+        })
+        .returning();
+      [record] = await tx.update(records).set({ debtLinkId: twin.id }).where(eq(records.id, insertedRecord.id)).returning();
+    }
+
+    return { forbidden: false as const, record, ensuredCash: link.ensuredCashRecord };
   });
 
+  if ("badDebt" in result) return json({ error: result.badDebt }, { status: 400 });
   if (result.forbidden) return json({ error: "Forbidden" }, { status: 403 });
   const created = result.record;
   await logActivity(session.user, {

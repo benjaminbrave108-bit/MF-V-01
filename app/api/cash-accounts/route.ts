@@ -31,6 +31,7 @@ export const GET = withErrorHandling(async (request: Request) => {
         isListWorkspace: cashAccounts.isListWorkspace,
         isRjKasa: cashAccounts.isRjKasa,
         sectionId: cashAccounts.sectionId,
+        sortOrder: cashAccounts.sortOrder,
       })
       .from(cashAccounts)
       .leftJoin(users, eq(cashAccounts.ownerUserId, users.id))
@@ -70,6 +71,7 @@ export const GET = withErrorHandling(async (request: Request) => {
         isListWorkspace: cashAccounts.isListWorkspace,
         isRjKasa: cashAccounts.isRjKasa,
         sectionId: cashAccounts.sectionId,
+        sortOrder: cashAccounts.sortOrder,
       })
       .from(cashAccounts)
       .leftJoin(users, eq(cashAccounts.ownerUserId, users.id)),

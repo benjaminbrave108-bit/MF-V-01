@@ -54,7 +54,7 @@ export function Users({
   const adminCount = users.filter((u) => u.isAdmin).length;
   const superAdminCount = users.filter((u) => u.isSuperAdmin).length;
   const selected = typeof selectedId === "number" ? users.find((u) => u.id === selectedId) ?? null : null;
-  const cardColors = ["#4f7d0f", "#f2c61b", "#1f6f87", "#7b52bf", "#d85a30", "#d4537e", "#0f6e56", "#5f5e5a"];
+  const cardColors = ["#4f7d0f", "#f2c61b", "#315fe8", "#7b52bf", "#d85a30", "#d4537e", "#0f6e56", "#5f5e5a"];
 
   async function unlock(u: UserAccount) {
     try {
@@ -98,7 +98,7 @@ export function Users({
               : `${u.permissions.length} ${tx(language, "yetki", "permissions", "destûr")}`;
           return (
             <button key={u.id} type="button" className={`userCard${selectedId === u.id ? " selected" : ""}`} onClick={() => setSelectedId(selectedId === u.id ? null : u.id)}>
-              <b style={{ background: cardColors[index % cardColors.length], color: cardColors[index % cardColors.length] === "#f2c61b" ? "#1f2e33" : "#fff" }}>{u.name.slice(0, 2).toUpperCase()}</b>
+              <b style={{ background: cardColors[index % cardColors.length], color: cardColors[index % cardColors.length] === "#f2c61b" ? "#1f2733" : "#fff" }}>{u.name.slice(0, 2).toUpperCase()}</b>
               <span>
                 <strong>{u.name}</strong>
                 <small>@{u.username} · {access}</small>

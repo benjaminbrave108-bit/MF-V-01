@@ -2,12 +2,12 @@ import type { CSSProperties } from "react";
 import type { TypographyKey, TypographySettings } from "./types";
 
 export const defaultTypography: TypographySettings = {
-  pageTitle: { size: 22, font: "Arial", color: "#20313b" },
-  sectionTitle: { size: 17, font: "Arial", color: "#20313b" },
-  cardTitle: { size: 12, font: "Arial", color: "#20313b" },
-  body: { size: 11, font: "Arial", color: "#53676f" },
-  tableHeader: { size: 9, font: "Arial", color: "#60736b" },
-  formText: { size: 10, font: "Arial", color: "#586b72" },
+  pageTitle: { size: 24, font: "Segoe UI", color: "#182738" },
+  sectionTitle: { size: 16, font: "Segoe UI", color: "#182738" },
+  cardTitle: { size: 13, font: "Segoe UI", color: "#182738" },
+  body: { size: 13, font: "Segoe UI", color: "#4a5a70" },
+  tableHeader: { size: 11, font: "Segoe UI", color: "#637186" },
+  formText: { size: 13, font: "Segoe UI", color: "#182738" },
 };
 
 export const typographyNames: Record<TypographyKey, [string, string, string]> = {

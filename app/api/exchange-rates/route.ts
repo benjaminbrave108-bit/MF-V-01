@@ -9,7 +9,7 @@ import { logActivity } from "../_lib/activity";
 import { readRatesInfo } from "../_lib/live-rates";
 
 // Kurlar "1 USD = X birim" biçiminde tutulur (ör. EUR 0.92, SYP 13000). USD karşılığı = tutar / kur.
-const CURRENCIES = ["EUR", "TRY", "IQD", "SYP"] as const;
+const CURRENCIES = ["EUR", "TRY", "IQD", "SYP", "AED"] as const;
 const bodySchema = z.object({
   rates: z
     .record(z.string(), z.number().positive().max(1e12))

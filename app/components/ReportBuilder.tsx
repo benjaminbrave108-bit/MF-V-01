@@ -216,9 +216,18 @@ function ReportBuilderModal({
   onSave: (report: PreparedReport) => void;
 }) {
   const knownCashAccounts = useMemo(() => [...new Set(records.filter((x) => x.kind === "cash").map((x) => x.source).filter(Boolean))], [records]);
-  const [cashAccount, setCashAccount] = useState(initial?.cashAccount ?? "");
-  // Rapor için bir kasa seçilmişse "seç" listeleri yalnızca o kasanın kayıtlarını sunar; zaten seçilmiş satırlar ve toplamlar değişmez.
-  const ofKasa = (x: RecordItem) => !cashAccount || x.cashAccount === cashAccount || x.source === cashAccount;
+  // Birden fazla kasa seçilebilir; hiçbiri seçili değilse tüm kasalar listelenir. Rapora "Kasa1, Kasa2" olarak yazılır.
+  const [kasas, setKasas] = useState<Set<string>>(
+    () => new Set(initial?.cashAccount ? knownCashAccounts.filter((n) => initial.cashAccount.split(/\s*,\s*/).includes(n)) : []),
+  );
+  const cashAccount = [...kasas].join(", ");
+  const toggleKasa = (name: string) => setKasas((cur) => { const n = new Set(cur); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLocaleLowerCase("tr");
+  const ofKasa = (x: RecordItem) => !kasas.size || (x.kind === "cash" ? kasas.has(x.source) : kasas.has(x.cashAccount || ""));
+  const visibleFilter = (x: RecordItem) => ofKasa(x) && (!from || x.date >= from) && (!to || x.date <= to) && (!q || [x.source, x.detail, x.person, x.cashAccount].join(" ").toLocaleLowerCase("tr").includes(q));
   const incomeRecords = useMemo(() => records.filter((x) => x.kind === "income" || x.kind === "cash").sort((a, b) => b.date.localeCompare(a.date)), [records]);
   const expenseRecords = useMemo(() => records.filter((x) => x.kind === "expense").sort((a, b) => b.date.localeCompare(a.date)), [records]);
   const lineMatches = (line: ReportLine, record: RecordItem) => line.date === record.date && line.title === record.source && line.amount === record.amount;
@@ -245,6 +254,7 @@ function ReportBuilderModal({
   const [meAmount, setMeAmount] = useState(0);
   const [meCurrency, setMeCurrency] = useState("USD");
 
+  const setMany = (setter: (f: (c: Set<number>) => Set<number>) => void, ids: number[], on: boolean) => setter((cur) => { const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id); } return n; });
   const toggleIncome = (id: number) => setIncomeIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const toggleExpense = (id: number) => setExpenseIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const totalIncome = sumBy(incomeRecords.filter((x) => incomeIds.has(x.id)));
@@ -283,8 +293,8 @@ function ReportBuilderModal({
       >
         <div className="modalHead">
           <div>
-            <h2>{initial ? tx(language, "Raporu Düzenle", "Edit Report", "Raporê Biguherîne") : tx(language, "Yeni Rapor Hazırla", "Prepare New Report", "Rapora Nû Amade Bike")}</h2>
-            <p>{tx(language, "Mevcut Kasa, Gelir ve Gider kayıtlarından seçim yaparak rapor oluşturun.", "Create a report by selecting from existing Cash, Income and Expense records.", "Ji qeydên heyî yên Qase, Dahat û Mesrefê hilbijêre û raporê çêke.")}</p>
+            <h2>{initial ? tx(language, "Raporu Düzenle", "Edit Report", "Raporê Biguherîne") : tx(language, "Yeni rapor hazırla", "Prepare new report", "Rapora nû amade bike")}</h2>
+            <p>{tx(language, "Bir veya birden fazla kasa seçin, ardından Gelir ve Gider kayıtlarından istediklerinizi işaretleyin.", "Create a report by selecting from existing Cash, Income and Expense records.", "Ji qeydên heyî yên Qase, Dahat û Mesrefê hilbijêre û raporê çêke.")}</p>
           </div>
           <button type="button" onClick={onClose}>×</button>
         </div>
@@ -292,13 +302,6 @@ function ReportBuilderModal({
           <label>
             {tx(language, "Tarih Ekle", "Add Date", "Tarîxê Zêde Bike")}
             <input type="date" required value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
-          </label>
-          <label>
-            {tx(language, "Kasa Seç", "Select Cash Account", "Qase Hilbijêre")}
-            <select value={cashAccount} onChange={(e) => setCashAccount(e.target.value)}>
-              <option value="">{tx(language, "— Seçiniz —", "— Select —", "— Hilbijêre —")}</option>
-              {knownCashAccounts.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
           </label>
           <label className="wide">
             {tx(language, "Rapor Başlığı", "Report Title", "Sernavê Raporê")}
@@ -312,74 +315,84 @@ function ReportBuilderModal({
             {tx(language, "Detay Bilgi", "Detail Information", "Agahiya Hûrgulî")}
             <textarea rows={2} value={detail} onChange={(e) => setDetail(e.target.value)} />
           </label>
-          <div className="wide reportBuilderPickerGrid">
-            <div>
-              <div className="reportBuilderPickerHead"><b>{tx(language, "Gelir Seç", "Select Income", "Dahat Hilbijêre")}</b><small>{moneyBreakdown(totalIncome)}</small></div>
-              <select
-                value=""
-                onChange={(e) => { if (e.target.value) toggleIncome(Number(e.target.value)); }}
-              >
-                <option value="">{tx(language, "— Gelirden seçin —", "— Select from income —", "— Ji dahatê hilbijêre —")}</option>
-                {incomeRecords.filter((item) => !incomeIds.has(item.id) && ofKasa(item)).map((item) => (
-                  <option key={item.id} value={item.id}>{item.source || "—"} · {date(item.date, language)} · {money(item.amount, item.currency)}</option>
-                ))}
-              </select>
-              <div className="reportBuilderPickerList">
-                {incomeRecords.filter((item) => incomeIds.has(item.id)).map((item) => (
-                  <div key={item.id} className="reportBuilderPickerRow reportBuilderManualRow">
-                    <span className="reportBuilderPickerInfo"><b>{item.source || "—"}</b><small>{date(item.date, language)}</small></span>
-                    <span className="typeIncome">{money(item.amount, item.currency)}</span>
-                    <button type="button" aria-label={tx(language, "Satırı sil", "Remove row", "Rêzê jêbibe")} onClick={() => toggleIncome(item.id)}>×</button>
-                  </div>
-                ))}
-                {!incomeIds.size && <div className="reportBuilderPickerEmpty">{tx(language, "Henüz gelir seçilmedi.", "No income selected yet.", "Hîn dahat nehatiye hilbijartin.")}</div>}
-              </div>
+          <div className="wide rbKasas">
+            <div className="rbKasaHead">
+              <b>{tx(language, "Kasalar", "Cash accounts", "Qase")}</b>
+              <small>{kasas.size ? `${kasas.size} ${tx(language, "kasa seçili", "selected", "hilbijartî")}` : tx(language, "Seçim yok: tüm kasalar", "None selected: all cash accounts", "Tune: hemû qase")}</small>
+              <span>
+                <button type="button" className="light compact" onClick={() => setKasas(new Set(knownCashAccounts))}>{tx(language, "Tümünü seç", "Select all", "Hemûyan hilbijêre")}</button>
+                <button type="button" className="light compact" onClick={() => setKasas(new Set())}>{tx(language, "Temizle", "Clear", "Paqij bike")}</button>
+              </span>
             </div>
-            <div>
-              <div className="reportBuilderPickerHead"><b>{tx(language, "Gider Seç", "Select Expense", "Mesref Hilbijêre")}</b><small>{moneyBreakdown(totalExpense)}</small></div>
-              <select
-                value=""
-                onChange={(e) => { if (e.target.value) toggleExpense(Number(e.target.value)); }}
-              >
-                <option value="">{tx(language, "— Giderden seçin —", "— Select from expenses —", "— Ji mesrefê hilbijêre —")}</option>
-                {expenseRecords.filter((item) => !expenseIds.has(item.id) && ofKasa(item)).map((item) => (
-                  <option key={item.id} value={item.id}>{item.source || "—"} · {date(item.date, language)} · {money(item.amount, item.currency)}</option>
-                ))}
-              </select>
-              <div className="reportBuilderPickerList">
-                {expenseRecords.filter((item) => expenseIds.has(item.id)).map((item) => (
-                  <div key={item.id} className="reportBuilderPickerRow reportBuilderManualRow">
-                    <span className="reportBuilderPickerInfo"><b>{item.source || "—"}</b><small>{date(item.date, language)}</small></span>
-                    <span className="typeExpense">{money(item.amount, item.currency)}</span>
-                    <button type="button" aria-label={tx(language, "Satırı sil", "Remove row", "Rêzê jêbibe")} onClick={() => toggleExpense(item.id)}>×</button>
+            <div className="rbChips">
+              {knownCashAccounts.map((name) => (
+                <button key={name} type="button" className={kasas.has(name) ? "on" : ""} aria-pressed={kasas.has(name)} onClick={() => toggleKasa(name)}>{kasas.has(name) ? "✓ " : ""}{localizeData(name, language)}</button>
+              ))}
+            </div>
+          </div>
+          <div className="wide rbFilters">
+            <label>{tx(language, "Başlangıç", "From", "Ji")}<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+            <label>{tx(language, "Bitiş", "To", "Heta")}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+            <label className="rbSearch">{tx(language, "Ara", "Search", "Bigere")}<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tx(language, "Başlık, detay, kişi…", "Title, detail, person…", "Sernav, hûrgulî, kes…")} /></label>
+            {(from || to || query) && <button type="button" className="light compact" onClick={() => { setFrom(""); setTo(""); setQuery(""); }}>{tx(language, "Filtreyi temizle", "Clear filter", "Fîlterê paqij bike")}</button>}
+          </div>
+          <div className="wide rbPanels">
+            {([
+              { tone: "in", title: tx(language, "Gelirler", "Income", "Dahat"), list: incomeRecords.filter(visibleFilter), ids: incomeIds, setter: setIncomeIds, sum: totalIncome, toggle: toggleIncome },
+              { tone: "out", title: tx(language, "Giderler", "Expenses", "Mesref"), list: expenseRecords.filter(visibleFilter), ids: expenseIds, setter: setExpenseIds, sum: totalExpense, toggle: toggleExpense },
+            ] as const).map((p) => {
+              const visibleIds = p.list.map((x) => x.id);
+              const allOn = visibleIds.length > 0 && visibleIds.every((id) => p.ids.has(id));
+              return (
+                <section key={p.tone} className={`rbPanel ${p.tone}`}>
+                  <header>
+                    <b>{p.title}</b>
+                    <span className="rbCount">{p.ids.size + (p.tone === "out" ? manualExpenses.length : 0)} {tx(language, "seçili", "selected", "hilbijartî")}</span>
+                    <strong className={p.tone === "in" ? "typeIncome" : "typeExpense"}>{moneyBreakdown(p.sum)}</strong>
+                  </header>
+                  <div className="rbTools">
+                    <label className="rbAll"><input type="checkbox" checked={allOn} onChange={(e) => setMany(p.setter, visibleIds, e.target.checked)} /> {tx(language, `Görünenlerin tümü (${visibleIds.length})`, `All visible (${visibleIds.length})`, `Hemû yên xuya (${visibleIds.length})`)}</label>
                   </div>
-                ))}
-                {manualExpenses.map((line, index) => (
-                  <div key={`manual-${index}`} className="reportBuilderPickerRow reportBuilderManualRow">
-                    <span className="reportBuilderPickerInfo"><b>{line.title}</b><small>{date(line.date, language)}{line.detail ? ` · ${line.detail}` : ""}</small></span>
-                    <span className="typeExpense">{money(line.amount, lineCurrency(line))}</span>
-                    <button type="button" aria-label={tx(language, "Satırı sil", "Remove row", "Rêzê jêbibe")} onClick={() => setManualExpenses((current) => current.filter((_, i) => i !== index))}>×</button>
+                  <div className="rbList">
+                    {p.list.map((item) => (
+                      <label key={item.id} className={`rbRow${p.ids.has(item.id) ? " on" : ""}`}>
+                        <input type="checkbox" checked={p.ids.has(item.id)} onChange={() => p.toggle(item.id)} />
+                        <span className="rbInfo"><b>{item.source || "—"}</b><small>{date(item.date, language)}{item.cashAccount ? ` · ${localizeData(item.cashAccount, language)}` : ""}{item.person ? ` · ${item.person}` : ""}</small></span>
+                        <em className={p.tone === "in" ? "typeIncome" : "typeExpense"}>{money(item.amount, item.currency)}</em>
+                      </label>
+                    ))}
+                    {!p.list.length && <div className="reportBuilderPickerEmpty">{tx(language, "Bu filtreye uyan kayıt yok.", "No records match this filter.", "Qeyda li gorî fîlterê tune.")}</div>}
                   </div>
-                ))}
-                {!expenseIds.size && !manualExpenses.length && <div className="reportBuilderPickerEmpty">{tx(language, "Henüz gider seçilmedi.", "No expense selected yet.", "Hîn mesref nehatiye hilbijartin.")}</div>}
-                {addingManualExpense ? (
-                  <div className="reportBuilderManualForm">
-                    <input aria-label="Tarih" type="date" value={meDate} onChange={(e) => setMeDate(e.target.value)} />
-                    <input aria-label="Gider" placeholder={tx(language, "Gider", "Expense", "Mesref")} value={meTitle} onChange={(e) => setMeTitle(e.target.value)} />
-                    <input aria-label="Detay" placeholder={tx(language, "Detay", "Detail", "Hûragahî")} value={meDetail} onChange={(e) => setMeDetail(e.target.value)} />
-                    <input aria-label="Not" placeholder={tx(language, "Not", "Note", "Nîşe")} value={meNote} onChange={(e) => setMeNote(e.target.value)} />
-                    <input aria-label="Miktar" type="number" min="0" placeholder={tx(language, "Miktar", "Amount", "Meblağ")} value={meAmount || ""} onChange={(e) => setMeAmount(Number(e.target.value))} />
-                    <select aria-label="Para birimi" value={meCurrency} onChange={(e) => setMeCurrency(e.target.value)}>{["USD", "SYP", "IQD", "TRY", "EUR"].map((c) => <option key={c}>{c}</option>)}</select>
-                    <div className="reportBuilderManualFormActions">
-                      <button type="button" className="light" onClick={() => setAddingManualExpense(false)}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
-                      <button type="button" className="primary compact" onClick={addManualExpense}>{tx(language, "Ekle", "Add", "Zêde Bike")}</button>
+                  {p.tone === "out" && (
+                    <div className="rbManual">
+                      {manualExpenses.map((line, index) => (
+                        <div key={`manual-${index}`} className="reportBuilderPickerRow reportBuilderManualRow">
+                          <span className="reportBuilderPickerInfo"><b>{line.title}</b><small>{date(line.date, language)}{line.detail ? ` · ${line.detail}` : ""}</small></span>
+                          <span className="typeExpense">{money(line.amount, lineCurrency(line))}</span>
+                          <button type="button" aria-label={tx(language, "Satırı sil", "Remove row", "Rêzê jêbibe")} onClick={() => setManualExpenses((current) => current.filter((_, i) => i !== index))}>×</button>
+                        </div>
+                      ))}
+                      {addingManualExpense ? (
+                        <div className="reportBuilderManualForm">
+                          <input aria-label="Tarih" type="date" value={meDate} onChange={(e) => setMeDate(e.target.value)} />
+                          <input aria-label="Gider" placeholder={tx(language, "Gider", "Expense", "Mesref")} value={meTitle} onChange={(e) => setMeTitle(e.target.value)} />
+                          <input aria-label="Detay" placeholder={tx(language, "Detay", "Detail", "Hûragahî")} value={meDetail} onChange={(e) => setMeDetail(e.target.value)} />
+                          <input aria-label="Not" placeholder={tx(language, "Not", "Note", "Nîşe")} value={meNote} onChange={(e) => setMeNote(e.target.value)} />
+                          <input aria-label="Miktar" type="number" min="0" step="any" placeholder={tx(language, "Miktar", "Amount", "Meblağ")} value={meAmount || ""} onChange={(e) => setMeAmount(Number(e.target.value))} />
+                          <select aria-label="Para birimi" value={meCurrency} onChange={(e) => setMeCurrency(e.target.value)}>{["USD", "SYP", "IQD", "TRY", "EUR"].map((c) => <option key={c}>{c}</option>)}</select>
+                          <div className="reportBuilderManualFormActions">
+                            <button type="button" className="light" onClick={() => setAddingManualExpense(false)}>{tx(language, "Vazgeç", "Cancel", "Betal")}</button>
+                            <button type="button" className="primary compact" onClick={addManualExpense}>{tx(language, "Ekle", "Add", "Zêde Bike")}</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="light reportBuilderAddExpense" onClick={() => setAddingManualExpense(true)}>＋ {tx(language, "Listede olmayan gider ekle", "Add an expense not in the list", "Mesrefa ne di lîsteyê de zêde bike")}</button>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <button type="button" className="light reportBuilderAddExpense" onClick={() => setAddingManualExpense(true)}>＋ {tx(language, "Gider Ekle", "Add Expense", "Mesref Zêde Bike")}</button>
-                )}
-              </div>
-            </div>
+                  )}
+                </section>
+              );
+            })}
           </div>
           <div className="wide reportResultCards reportBuilderResult">
             <div><small>{tx(language, "Toplam Gelir", "Total Income", "Dahata Giştî")}</small><b className="typeIncome">{moneyBreakdown(totalIncome)}</b></div>

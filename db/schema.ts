@@ -66,6 +66,8 @@ export const kasaSections = pgTable("kasa_sections", {
   color: text("color").notNull().default("#7b52bf"),
   // Üst çalışma alanı anahtarı (genel / liste / rj / sec-<id>): doluysa bu alan, üstündekinin içinde "bölüm" olarak görünür.
   parentKey: text("parent_key"),
+  // Kasa Kontrol Merkezi: aynı seviyedeki alan/bölümlerin elle sıralaması (küçük olan önce).
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check("kasa_sections_scope_check", sql`${table.scope} IN ('cash', 'income', 'expense')`),
@@ -93,6 +95,8 @@ export const cashAccounts = pgTable("cash_accounts", {
   isRjKasa: boolean("is_rj_kasa").notNull().default(false),
   // Yönetici tanımlı "kasa bölümü" (kasa_sections, scope=cash); boşsa Genel Kasa.
   sectionId: integer("section_id"),
+  // Kasa Kontrol Merkezi: aynı alan/bölüm içindeki kasaların elle sıralaması (küçük olan önce; 0 = sıralanmamış).
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -252,9 +256,17 @@ export const records = pgTable("records", {
   // Detay tablosunun görünümü: kullanıcının sürükleyerek ayarladığı sütun
   // genişlikleri ve satır yükseklikleri (px). { cols: number[]; rows: number[] }
   detailTableLayout: jsonb("detail_table_layout").notNull().default({}),
+  // Borç: Gider eklerken "borç" işaretlenirse. lent = borç verilen gider (alacaklı kasada), borrowed = borç alan kasadaki
+  // otomatik giriş, repay = borç ödemesi gideri (borçlu kasada). debtCashAccountId = karşı kasa; debtLinkId = lent ↔ borrowed
+  // eşi; debtMeta = ödemenin hangi "lent" giderlerini ne kadar azalttığı ([{ id, amount }], silinirse geri yüklenir).
+  debtRole: text("debt_role").notNull().default(""),
+  debtCashAccountId: integer("debt_cash_account_id"),
+  debtLinkId: integer("debt_link_id"),
+  debtMeta: jsonb("debt_meta").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
+  index("records_debt_pair_idx").on(table.debtRole, table.cashAccountId, table.debtCashAccountId),
   index("records_kind_idx").on(table.kind),
   index("records_date_idx").on(table.date),
   index("records_cash_account_id_idx").on(table.cashAccountId),
@@ -523,5 +535,7 @@ export const settings = pgTable("settings", {
   // Günlük otomatik kurlar (internetten, günde bir kez çekilir) ve çekildikleri gün (YYYY-MM-DD). Elle girilen kurlar bunların önüne geçer.
   autoExchangeRates: jsonb("auto_exchange_rates").notNull().default({}),
   autoExchangeRatesDate: text("auto_exchange_rates_date"),
+  // Kasa Kontrol Merkezi: hazır alanlar (genel/liste/rj) ve özel alanların (sec-<id>) elle sıralaması.
+  cashWorkspaceOrder: jsonb("cash_workspace_order").notNull().default([]),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
