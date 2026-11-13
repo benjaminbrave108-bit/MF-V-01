@@ -27,6 +27,8 @@ export type RecordItem = {
   currency: string;
   project: string;
   tags: string[];
+  // Kayda iliştirilen dış bağlantı (http/https); yoksa boş.
+  link?: string;
   cashAccount: string;
   listName: string;
   // Proje Aşaması 2: bağlı liste (Listeler sayfası).

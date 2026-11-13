@@ -36,6 +36,19 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format 
 const amountSchema = z.number().finite().min(0).max(999_999_999_999.99);
 const shortText = (max: number) => z.string().max(max).optional().default("");
 const tagsSchema = z.array(z.string().max(64)).max(20).optional().default([]);
+// Bağlantı: boş olabilir; doluysa http/https olmalı ("www.x.com" gelirse https:// eklenir). Geçersizse boşaltılır.
+export function normalizeLink(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(withScheme);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+const linkSchema = z.string().max(2000).transform(normalizeLink);
 // Ekli dosyalar birer base64 data URL olarak saklanıyor (bkz. db/schema.ts
 // attachments) — base64, ham baytların ~4/3'ü kadar yer kapladığı için bu
 // sınır kabaca 6MB'lık bir dosyaya karşılık gelir. Kayıt başına en fazla
@@ -83,6 +96,7 @@ export const recordInputSchema = z.object({
   currency: currencySchema.optional().default("USD"),
   project: shortText(200),
   tags: tagsSchema,
+  link: linkSchema.optional().default(""),
   cashAccount: shortText(200),
   listName: shortText(200),
   // Proje Aşaması 2: bağlı liste (varsa listName, listenin adından türetilir).
@@ -115,6 +129,7 @@ export const recordUpdateSchema = z.object({
   currency: currencySchema.optional(),
   project: z.string().max(200).optional(),
   tags: z.array(z.string().max(64)).max(20).optional(),
+  link: linkSchema.optional(),
   cashAccount: z.string().max(200).optional(),
   listName: z.string().max(200).optional(),
   listId: z.number().int().positive().nullable().optional(),

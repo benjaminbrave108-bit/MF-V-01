@@ -697,3 +697,13 @@ header { background: transparent; border-bottom: 0; min-height: 64px; padding: 1
 .notePeopleInput { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid #d6deea; border-radius: 10px; padding: 6px 8px; background: #fff; min-height: 40px; }
 .notePeopleInput:focus-within { border-color: var(--blue); }
 .notePeopleInput input { flex: 1 1 160px; border: 0 !important; outline: 0; padding: 4px !important; min-width: 120px; background: transparent; }
+
+/* ---- Kayıt formu: Link alanı ---- */
+.rfLinkRow { display: flex; align-items: center; gap: 8px; }
+.rfLinkRow input { flex: 1 1 auto; min-width: 0; }
+.rfLinkOpen { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #d6deea; border-radius: 8px; color: var(--blue); text-decoration: none; font-weight: 700; background: #fff; }
+.rfLinkOpen:hover { border-color: var(--blue); background: var(--soft); }
+.cellLinkIcon { margin-left: 6px; text-decoration: none; font-size: 12px; }
+.recordLink { color: var(--blue); word-break: break-all; }
+/* Hesap çubuğu sağ alta alınır: tutar sütunundaki alt satırlar örtülmesin, Ctrl+tıklamayla seçime devam edilebilsin. */
+.tableCalcBar { left: auto; right: 22px; bottom: 22px; transform: none; max-width: min(640px, calc(100vw - 44px)); }

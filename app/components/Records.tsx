@@ -1211,6 +1211,9 @@ export function Records({
                 {localizeData(x.source, language)}
               </button>
             )}
+            {x.link && /^https?:\/\//i.test(x.link) && (
+              <a className="cellLinkIcon" href={x.link} target="_blank" rel="noopener noreferrer" title={x.link} onClick={(e) => e.stopPropagation()}>🔗</a>
+            )}
             {ctx.pendingTransfer && (
               <small className="subNote pendingBadge">
                 ⏳ {tx(language, "Onay Bekliyor", "Awaiting Approval", "Li Benda Erêkirinê")}
@@ -4003,6 +4006,9 @@ function RecordViewPanel({ language, record: x, sectionName, canEdit, inline, on
         {rows.map(([label, value]) => (
           <p key={label} className="noteDrawerRow"><b>{label}</b><span>{localizeData(value, language)}</span></p>
         ))}
+        {x.link && /^https?:\/\//i.test(x.link) && (
+          <p className="noteDrawerRow"><b>{tx(language, "Link", "Link", "Lînk")}</b><span><a className="recordLink" href={x.link} target="_blank" rel="noopener noreferrer">🔗 {x.link.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</a></span></p>
+        )}
         {x.detail && <div className="noteDrawerSection"><b>{tx(language, "Detay", "Detail", "Hûragahî")}</b><div className="noteDrawerContent">{x.detail}</div></div>}
         {x.note && <div className="noteDrawerSection"><b>{tx(language, "Not", "Note", "Nîşe")}</b><div className="noteDrawerContent">{x.note}</div></div>}
         {((x.attachments?.length ?? 0) > 0 || tableRows > 0) && (
@@ -4099,6 +4105,7 @@ export function RecordModal({
         currency: "USD",
         project: "",
         tags: [],
+        link: "",
         cashAccount: kind === "cash" ? "" : prefillCashAccount ?? "",
         listName: "",
         attachments: [],
@@ -4450,6 +4457,26 @@ export function RecordModal({
             />
           </label>
 );
+  const linkValue = (form.link ?? "").trim();
+  const linkHref = /^https?:\/\//i.test(linkValue) ? linkValue : linkValue ? `https://${linkValue}` : "";
+  const rfLink = (
+    <label>
+      {tx(language, "Link", "Link", "Lînk")}
+      <span className="rfLinkRow">
+        <input
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          value={form.link ?? ""}
+          placeholder="https://…"
+          onChange={(e) => setForm({ ...form, link: e.target.value })}
+        />
+        {linkHref && (
+          <a className="rfLinkOpen" href={linkHref} target="_blank" rel="noopener noreferrer" title={tx(language, "Bağlantıyı yeni sekmede aç", "Open the link in a new tab", "Lînkê di tabeke nû de veke")}>↗</a>
+        )}
+      </span>
+    </label>
+  );
   const rfKasa = kind !== "cash" && (
             <label>
               <span>{tx(language, "Kasa", "Cash account", "Qase")} <b className="rfReq">*</b></span>
@@ -4565,6 +4592,7 @@ export function RecordModal({
           {rfUnit}
           {rfDetail}
           {rfTags}
+          {rfLink}
           {kind === "cash" && (
           <fieldset className="wide listFieldset">
             <legend>{tx(language, "Çalışma Alanı", "Workspace", "Qada Xebatê")}</legend>

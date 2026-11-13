@@ -229,6 +229,8 @@ export const records = pgTable("records", {
   currency: text("currency").notNull().default("USD"),
   project: text("project").notNull().default(""),
   tags: jsonb("tags").notNull().default([]),
+  // Kayda iliştirilen dış bağlantı (fatura, belge, sayfa…): yalnızca http/https; sunucu normalize eder.
+  link: text("link").notNull().default(""),
   cashAccount: text("cash_account").notNull().default(""),
   // Nullable so legacy/orphan rows (a kasa name with no matching
   // cash_accounts row, which shouldn't happen after the 0007 migration's

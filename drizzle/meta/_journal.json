@@ -330,6 +330,13 @@
       "when": 1794570801468,
       "tag": "0046_note_people",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794573873063,
+      "tag": "0047_record_link",
+      "breakpoints": true
     }
   ]
 }

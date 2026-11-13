@@ -59,6 +59,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         currency: item.currency,
         project: item.project,
         tags: item.tags,
+        link: item.link,
         cashAccount,
         cashAccountId: linkCache.get(`${item.kind}:${linkName}`) ?? null,
         listName: item.listName,

@@ -126,64 +126,83 @@ function setupResize(container: HTMLElement, id: string): () => void {
   return () => observer.disconnect();
 }
 
+// Hücre seçimi, aynı sayfadaki TÜM tablolar arasında ortaktır (ör. Kasa sayfasında Gelir tablosundan bir tutar,
+// Gider tablosundan bir başkası Ctrl+tıkla ile birlikte seçilip tek toplamda görülebilir). Hesap çubuğu, en son
+// etkileşilen tablonun altında görünür.
+const calcShared = {
+  selected: new Set<HTMLElement>(),
+  anchor: null as { table: HTMLTableElement; row: number; col: number } | null,
+  containers: new Map<HTMLElement, (s: Stats | null) => void>(),
+  owner: null as HTMLElement | null,
+};
+
+function calcStats(): Stats | null {
+  const values: { n: number; cur: string }[] = [];
+  calcShared.selected.forEach((td) => {
+    if (!td.isConnected) {
+      calcShared.selected.delete(td);
+      return;
+    }
+    // Alt alta dizilmiş para birimi hücrelerinde (MoneyStack) her satır ayrı sayı olarak hesaplanır.
+    const lines = [...td.querySelectorAll<HTMLElement>(".msLine")];
+    const texts = lines.length ? lines.map((l) => l.innerText) : [cellText(td)];
+    for (const text of texts) {
+      const n = parseCell(text);
+      if (n !== null) values.push({ n, cur: currencyOf(text) });
+    }
+  });
+  // Tek hücre seçiliyken çubuk açılmaz ama seçim korunur: kullanıcı Ctrl/Shift ile devam edebilir.
+  if (calcShared.selected.size < 2) return null;
+  const sums: Record<string, number> = {};
+  for (const v of values) sums[v.cur] = Math.round(((sums[v.cur] ?? 0) + v.n) * 100) / 100;
+  const nums = values.map((v) => v.n);
+  return {
+    cells: calcShared.selected.size,
+    count: nums.length,
+    sums,
+    min: nums.length ? Math.min(...nums) : 0,
+    max: nums.length ? Math.max(...nums) : 0,
+    avg: nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0,
+  };
+}
+
+function calcRefresh() {
+  const stats = calcStats();
+  calcShared.containers.forEach((report, c) => report(c === calcShared.owner ? stats : null));
+}
+
+function calcClearAll() {
+  calcShared.selected.forEach((td) => td.removeAttribute("data-calc-sel"));
+  calcShared.selected.clear();
+  calcShared.anchor = null;
+  calcShared.owner = null;
+  calcShared.containers.forEach((report) => report(null));
+}
+
 function setupCalc(container: HTMLElement, report: (s: Stats | null) => void): () => void {
-  const selected = new Set<HTMLElement>();
-  let anchor: { table: HTMLTableElement; row: number; col: number } | null = null;
+  const shared = calcShared;
+  shared.containers.set(container, report);
   let dragging = false;
 
-  function refresh() {
-    const values: { n: number; cur: string }[] = [];
-    selected.forEach((td) => {
-      if (!td.isConnected) {
-        selected.delete(td);
-        return;
-      }
-      // Alt alta dizilmiş para birimi hücrelerinde (MoneyStack) her satır ayrı sayı olarak hesaplanır.
-      const lines = [...td.querySelectorAll<HTMLElement>(".msLine")];
-      const texts = lines.length ? lines.map((l) => l.innerText) : [cellText(td)];
-      for (const text of texts) {
-        const n = parseCell(text);
-        if (n !== null) values.push({ n, cur: currencyOf(text) });
-      }
-    });
-    if (!selected.size) return report(null);
-    const sums: Record<string, number> = {};
-    for (const v of values) sums[v.cur] = Math.round(((sums[v.cur] ?? 0) + v.n) * 100) / 100;
-    const nums = values.map((v) => v.n);
-    report({
-      cells: selected.size,
-      count: nums.length,
-      sums,
-      min: nums.length ? Math.min(...nums) : 0,
-      max: nums.length ? Math.max(...nums) : 0,
-      avg: nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0,
-    });
-  }
   function mark(td: HTMLElement, on: boolean) {
     if (on) {
       td.setAttribute("data-calc-sel", "1");
-      selected.add(td);
+      shared.selected.add(td);
     } else {
       td.removeAttribute("data-calc-sel");
-      selected.delete(td);
+      shared.selected.delete(td);
     }
-  }
-  function clearAll() {
-    selected.forEach((td) => td.removeAttribute("data-calc-sel"));
-    selected.clear();
-    anchor = null;
-    report(null);
   }
   function cellFrom(target: EventTarget | null): HTMLTableCellElement | null {
     const td = (target as HTMLElement | null)?.closest?.("td") as HTMLTableCellElement | null;
     if (!td || !container.contains(td) || !td.closest("tbody") || td.colSpan > 1) return null;
     return td;
   }
-  function selectRange(table: HTMLTableElement, r1: number, c1: number, r2: number, c2: number, additive: boolean) {
-    if (!additive) {
-      selected.forEach((td) => td.removeAttribute("data-calc-sel"));
-      selected.clear();
-    }
+  // Aralık seçimi: additive=false ise önceki seçim (tüm tablolardaki) silinip yalnızca aralık kalır.
+  function selectRange(table: HTMLTableElement, r1: number, c1: number, r2: number, c2: number, keep: Set<HTMLElement> | null) {
+    shared.selected.forEach((td) => td.removeAttribute("data-calc-sel"));
+    shared.selected.clear();
+    keep?.forEach((td) => mark(td, true));
     const [ra, rb] = [Math.min(r1, r2), Math.max(r1, r2)];
     const [ca, cb] = [Math.min(c1, c2), Math.max(c1, c2)];
     for (let r = ra; r <= rb; r++) {
@@ -195,6 +214,8 @@ function setupCalc(container: HTMLElement, report: (s: Stats | null) => void): (
       }
     }
   }
+  // Sürükleme/Shift aralığının başlangıçta korunan (Ctrl ile önceden seçilmiş) hücreleri.
+  let keepBase: Set<HTMLElement> | null = null;
 
   const onDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -205,42 +226,50 @@ function setupCalc(container: HTMLElement, report: (s: Stats | null) => void): (
     const table = td.closest("table") as HTMLTableElement;
     const row = (td.parentElement as HTMLTableRowElement).rowIndex;
     const col = td.cellIndex;
-    if (e.ctrlKey || e.metaKey) {
-      mark(td, !selected.has(td));
-      anchor = { table, row, col };
-      refresh();
+    const additive = e.ctrlKey || e.metaKey;
+    // Ctrl/Shift+tıklamada tarayıcının kendi metin seçimi devreye girmesin.
+    if (additive || e.shiftKey) e.preventDefault();
+    shared.owner = container;
+    if (additive) {
+      mark(td, !shared.selected.has(td));
+      shared.anchor = { table, row, col };
+      keepBase = new Set(shared.selected);
+      // Ctrl basılıyken fareyi sürüklemek de seçimi genişletir.
+      dragging = shared.selected.has(td);
+      if (dragging) document.body.classList.add("noSelectDragging");
+      calcRefresh();
       return;
     }
-    if (e.shiftKey && anchor && anchor.table === table) {
-      selectRange(table, anchor.row, anchor.col, row, col, false);
-      refresh();
+    if (e.shiftKey && shared.anchor && shared.anchor.table === table) {
+      selectRange(table, shared.anchor.row, shared.anchor.col, row, col, null);
+      calcRefresh();
       return;
     }
-    anchor = { table, row, col };
+    shared.anchor = { table, row, col };
+    keepBase = null;
     dragging = true;
-    selectRange(table, row, col, row, col, false);
+    selectRange(table, row, col, row, col, null);
     document.body.classList.add("noSelectDragging");
-    refresh();
+    calcRefresh();
   };
   const onMove = (e: MouseEvent) => {
-    if (!dragging || !anchor) return;
+    if (!dragging || !shared.anchor || shared.owner !== container) return;
     const td = cellFrom(document.elementFromPoint(e.clientX, e.clientY));
-    if (!td || td.closest("table") !== anchor.table) return;
-    selectRange(anchor.table, anchor.row, anchor.col, (td.parentElement as HTMLTableRowElement).rowIndex, td.cellIndex, false);
-    refresh();
+    if (!td || td.closest("table") !== shared.anchor.table) return;
+    selectRange(shared.anchor.table, shared.anchor.row, shared.anchor.col, (td.parentElement as HTMLTableRowElement).rowIndex, td.cellIndex, keepBase);
+    calcRefresh();
   };
   const onUp = () => {
     if (dragging) document.body.classList.remove("noSelectDragging");
     dragging = false;
-    // Tek hücreye tıklamak hesap çubuğu açmasın: yalnızca birden çok hücre seçiliyse göster.
-    if (selected.size === 1) clearAll();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") clearAll();
+    if (e.key === "Escape") calcClearAll();
   };
   const onOutside = (e: MouseEvent) => {
     const t = e.target as HTMLElement;
-    if (!container.contains(t) && !t.closest(".tableCalcBar")) clearAll();
+    const inAny = [...shared.containers.keys()].some((c) => c.contains(t));
+    if (!inAny && !t.closest(".tableCalcBar")) calcClearAll();
   };
 
   container.addEventListener("mousedown", onDown);
@@ -248,14 +277,17 @@ function setupCalc(container: HTMLElement, report: (s: Stats | null) => void): (
   window.addEventListener("mouseup", onUp);
   window.addEventListener("keydown", onKey);
   window.addEventListener("mousedown", onOutside);
-  (container as HTMLElement & { __calcClear?: () => void }).__calcClear = clearAll;
   return () => {
     container.removeEventListener("mousedown", onDown);
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("mousedown", onOutside);
-    clearAll();
+    // Bu tablodaki hücreler DOM'dan gidiyor: ortak seçimden çıkar, diğer tabloların seçimi korunur.
+    shared.selected.forEach((td) => { if (container.contains(td)) { td.removeAttribute("data-calc-sel"); shared.selected.delete(td); } });
+    shared.containers.delete(container);
+    if (shared.owner === container) shared.owner = null;
+    calcRefresh();
   };
 }
 
@@ -306,7 +338,7 @@ export function TableTools({
             type="button"
             className="tcbClose"
             title="Esc"
-            onClick={() => (ref.current as (HTMLDivElement & { __calcClear?: () => void }) | null)?.__calcClear?.()}
+            onClick={() => calcClearAll()}
           >
             ✕
           </button>

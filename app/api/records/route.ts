@@ -113,6 +113,7 @@ export const POST = withErrorHandling(async (request: Request) => {
         currency: payload.currency,
         project: payload.project,
         tags: payload.tags,
+        link: payload.link,
         cashAccount: payload.kind === "cash" ? payload.source : (payload.cashAccount || fallbackKasaNameFor(payload.kind)),
         cashAccountId: link.cashAccountId,
         sectionId: payload.kind === "cash" ? null : payload.sectionId ?? null,
