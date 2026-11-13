@@ -410,6 +410,9 @@ export const financeNotes = pgTable("finance_notes", {
   // yerine basit bir id dizisi — bir kullanıcı silinirse dizide kalan id
   // sessizce göz ardı edilir (bkz. app/api/notes/route.ts'teki isim eşleme).
   assignedUserIds: jsonb("assigned_user_ids").notNull().default([]),
+  // Sistem kullanıcısı olmayan, serbest metinle girilen ilgili kişiler (müşteri, tedarikçi, çalışan…) —
+  // Notlar sayfasındaki kişi süzgecinin esası. Ad dizisi; eşleştirme büyük/küçük harf duyarsızdır.
+  people: jsonb("people").notNull().default([]),
   // "Arşivle" — elle tetiklenen bir eylem; arşivlenen not Notlar panosundan
   // kaybolup Arşiv > Notlar Arşivi bölümünde kalıcı olarak görünür kalır.
   // Bu, panonun zamanla birikip kalabalıklaşmasını (kullanıcının bahsettiği

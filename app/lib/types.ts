@@ -88,6 +88,8 @@ export type FinanceNote = {
   // atanmamışsa boş dizi.
   assignedUserIds: number[];
   assignedUserNames?: string[];
+  // Sistem kullanıcısı olmayan, serbest girilen ilgili kişiler (Notlar kişi süzgeci).
+  people?: string[];
   // Ekli belgelerin adları (içerik tıklanınca /api/notes/:id/attachments/:index ile gelir) ve mesaj sayısı.
   attachmentNames?: string[];
   commentCount?: number;

@@ -204,6 +204,7 @@ export const noteInputSchema = z.object({
   relation: noteRelationSchema.optional().default("none"),
   relationDetail: shortText(300),
   assignedUserIds: z.array(z.number().int().positive()).max(50).optional().default([]),
+  people: z.array(z.string().trim().min(1).max(80)).max(30).optional().default([]),
   isArchived: z.boolean().optional().default(false),
   // Belgeler: yeni eklenenler tam veriyle gelir; mevcutlardan kaldırılacaklar sıra numarasıyla bildirilir.
   addAttachments: attachmentsSchema,

@@ -4,6 +4,7 @@ import { archive, financeNotes, preparedReports, records, settings } from "../..
 import { requireAdmin } from "../../_lib/auth";
 import { json, withErrorHandling } from "../../_lib/http";
 import { databaseImportSchema, parseBody } from "../../_lib/validate";
+import { dedupePeople } from "../../_lib/notes";
 
 const SETTINGS_ID = 1;
 
@@ -58,6 +59,7 @@ export const POST = withErrorHandling(async (request: Request) => {
           status: n.status,
           relation: n.relation,
           relationDetail: n.relationDetail,
+          people: dedupePeople(n.people),
         })),
       );
     }

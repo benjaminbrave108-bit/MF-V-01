@@ -2,7 +2,7 @@ import { getDb } from "../../../db";
 import { financeNotes } from "../../../db/schema";
 import { requirePermission } from "../_lib/auth";
 import { json, withErrorHandling } from "../_lib/http";
-import { listClientNotes, resolveNoteStatus } from "../_lib/notes";
+import { dedupePeople, listClientNotes, resolveNoteStatus } from "../_lib/notes";
 import { noteInputSchema, parseBody } from "../_lib/validate";
 import { logActivity } from "../_lib/activity";
 
@@ -32,6 +32,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       relation: payload.relation,
       relationDetail: payload.relationDetail,
       assignedUserIds: payload.assignedUserIds,
+      people: dedupePeople(payload.people),
       attachments: payload.addAttachments,
     })
     .returning();

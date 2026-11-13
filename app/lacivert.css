@@ -672,3 +672,28 @@ header { background: transparent; border-bottom: 0; min-height: 64px; padding: 1
 .appShell .kbTipMonths th { background: transparent; text-align: left; color: var(--muted); font-weight: 600; padding: 6px 4px 2px 0; }
 .appShell .kbTipMonths th:first-child, .appShell .kbTipMonths td:first-child { width: 44px; }
 .appShell .kbTipMonths td { font-size: 10.5px; padding: 2px 4px 2px 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* ---- Notlar: kişi süzgeci ve kişi etiketleri ---- */
+.noteFilters { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 14px; padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 5px 20px rgba(18, 36, 60, 0.035); }
+.noteFilterRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.noteFilterRow .noteSearch { flex: 1 1 240px; min-width: 180px; }
+.noteFilterRow input, .noteFilterRow select { border: 1px solid #d6deea; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; background: #fff; color: var(--ink); font-family: inherit; }
+.noteFilterCount { font-size: 12px; color: var(--muted); margin-left: auto; }
+.notePeopleRow { display: flex; align-items: flex-start; gap: 12px; }
+.notePeopleRow > b { font-size: 12px; color: var(--muted); padding-top: 6px; flex: 0 0 auto; }
+.notePeopleChips { display: flex; flex-wrap: wrap; gap: 7px; }
+.notePerson { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d6deea; background: #fff; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 550; cursor: pointer; font-family: inherit; color: var(--ink); }
+.notePerson em { font-style: normal; color: var(--muted); font-weight: 400; font-size: 11px; }
+.notePerson:hover { border-color: var(--blue); }
+.notePerson.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.notePerson.on em { color: #dbe5ff; }
+.notePerson.more, .notePerson.none { border-style: dashed; color: var(--muted); }
+.notePeopleTags { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+.notePersonTag { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #d6deea; background: var(--soft); color: var(--blue); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.notePersonTag.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.notePersonTag.editable { cursor: default; padding-right: 4px; }
+.notePersonTag.editable button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.notePeopleField { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.notePeopleInput { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid #d6deea; border-radius: 10px; padding: 6px 8px; background: #fff; min-height: 40px; }
+.notePeopleInput:focus-within { border-color: var(--blue); }
+.notePeopleInput input { flex: 1 1 160px; border: 0 !important; outline: 0; padding: 4px !important; min-width: 120px; background: transparent; }

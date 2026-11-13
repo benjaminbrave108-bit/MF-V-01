@@ -93,6 +93,20 @@ export function toClientNote(
   };
 }
 
+// Kişi adlarını kırpar ve büyük/küçük harf duyarsız tekilleştirir (ilk yazılış korunur).
+export function dedupePeople(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim().replace(/\s+/g, " ");
+    const key = name.toLocaleLowerCase("tr");
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
 // Yalnızca atanmış kullanıcılar ve yöneticiler nota mesaj yazabilir.
 export function canPostNoteComment(
   user: { id: number; isAdmin: boolean; isSuperAdmin: boolean },

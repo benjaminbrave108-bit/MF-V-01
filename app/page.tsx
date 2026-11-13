@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSetup, Login } from "./components/Login";
 import { ProfileModal } from "./components/ProfileModal";
 import { Dashboard } from "./components/Dashboard";
@@ -338,6 +338,7 @@ export default function Home() {
   }, [signedIn, page, profile]);
 
   async function saveRecord(next: Omit<RecordItem, "id">, id?: number) {
+    markWrite();
     try {
       const response = await fetch(id ? `/api/records/${id}` : "/api/records", {
         method: id ? "PUT" : "POST",
@@ -358,6 +359,7 @@ export default function Home() {
         return;
       }
       const data = await response.json();
+      markWrite();
       setRecords((r) => {
         const next = id ? r.map((x) => (x.id === id ? data.record : x)) : [data.record, ...r];
         return data.ensuredCash ? [data.ensuredCash, ...next] : next;
@@ -370,81 +372,68 @@ export default function Home() {
       alert(tx(language, "Kayıt kaydedilemedi. Lütfen tekrar deneyin.", "The record could not be saved. Please try again.", "Qeyd nehat tomarkirin. Ji kerema xwe dîsa biceribîne."));
     }
   }
+  // Arka plan yenilemesi için ortak çekici. İki şeyi engeller:
+  //  1) Veri değişmemişse (yanıt metni bir öncekiyle aynı) state'e dokunulmaz → her 5 sn'de tüm uygulamanın
+  //     yeniden çizilmesi (Chrome'da yazarken/kaydederken takılma) olmaz.
+  //  2) İstek uçuştayken yerelde bir kayıt/güncelleme yapıldıysa (writeEpoch değişti) eski yanıt atılır → kaydedilen
+  //     değişiklik eski veriyle ezilmez, ekran geri sıçramaz.
+  const lastSig = useRef<Record<string, string>>({});
+  const writeEpoch = useRef(0);
+  const markWrite = () => { writeEpoch.current += 1; };
+  async function fetchChanged(key: string, url: string): Promise<Record<string, unknown> | null> {
+    const epoch = writeEpoch.current;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const text = await response.text();
+      if (epoch !== writeEpoch.current) return null;
+      if (lastSig.current[key] === text) return null;
+      lastSig.current[key] = text;
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
   async function refreshSections() {
-    try {
-      const response = await fetch("/api/sections");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.sections)) setSections(data.sections);
-    } catch {}
-    try {
-      const response = await fetch("/api/cash-order");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.workspaceOrder)) setWorkspaceOrder(data.workspaceOrder);
-    } catch {}
+    const data = await fetchChanged("sections", "/api/sections");
+    if (data && Array.isArray(data.sections)) setSections(data.sections as KasaSection[]);
+    const order = await fetchChanged("cash-order", "/api/cash-order");
+    if (order && Array.isArray(order.workspaceOrder)) setWorkspaceOrder(order.workspaceOrder as string[]);
   }
   async function refreshCashAccounts() {
-    try {
-      const response = await fetch("/api/cash-accounts");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.cashAccounts)) setCashAccounts(data.cashAccounts);
-    } catch {}
+    const data = await fetchChanged("cash-accounts", "/api/cash-accounts");
+    if (data && Array.isArray(data.cashAccounts)) setCashAccounts(data.cashAccounts as CashAccountSummary[]);
   }
   async function refreshRecords() {
-    try {
-      const response = await fetch("/api/records");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.records)) setRecords(data.records.map(normalizeRecord));
-    } catch {}
+    const data = await fetchChanged("records", "/api/records");
+    if (data && Array.isArray(data.records)) setRecords((data.records as RecordItem[]).map(normalizeRecord));
   }
   async function refreshCashTransfers() {
-    try {
-      const response = await fetch("/api/cash-transfers");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.cashTransfers)) setCashTransfers(data.cashTransfers);
-    } catch {}
+    const data = await fetchChanged("cash-transfers", "/api/cash-transfers");
+    if (data && Array.isArray(data.cashTransfers)) setCashTransfers(data.cashTransfers as CashTransfer[]);
   }
   async function refreshAfterCashTransfer() {
     await Promise.all([refreshRecords(), refreshCashAccounts(), refreshCashTransfers()]);
   }
   async function refreshExchangeRates() {
-    try {
-      const response = await fetch("/api/exchange-rates");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (data.rates) setExchangeRates(data.rates);
-      setRateInfo({ manual: data.manual ?? {}, auto: data.auto ?? {}, date: data.date ?? null });
-    } catch {}
+    const data = await fetchChanged("exchange-rates", "/api/exchange-rates") as { rates?: Record<string, number>; manual?: Record<string, number>; auto?: Record<string, number>; date?: string | null } | null;
+    if (!data) return;
+    if (data.rates) setExchangeRates(data.rates);
+    setRateInfo({ manual: data.manual ?? {}, auto: data.auto ?? {}, date: data.date ?? null });
   }
   async function refreshNoteColumns() {
-    try {
-      const response = await fetch("/api/note-columns");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.columns)) setNoteColumns(data.columns);
-    } catch {}
+    const data = await fetchChanged("note-columns", "/api/note-columns");
+    if (data && Array.isArray(data.columns)) setNoteColumns(data.columns as NoteColumn[]);
   }
   async function refreshNotes() {
-    try {
-      const response = await fetch("/api/notes");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.notes)) setNotes(data.notes);
-    } catch {}
+    const data = await fetchChanged("notes", "/api/notes");
+    if (data && Array.isArray(data.notes)) setNotes(data.notes as FinanceNote[]);
   }
   async function refreshArchive() {
-    try {
-      const response = await fetch("/api/archive");
-      if (!response.ok) return;
-      const data = await response.json();
-      if (Array.isArray(data.archive)) {
-        setArchive(data.archive.map((x: ArchiveItem) => ({ ...x, old: normalizeRecord(x.old) })));
-      }
-    } catch {}
+    const data = await fetchChanged("archive", "/api/archive");
+    if (data && Array.isArray(data.archive)) {
+      setArchive((data.archive as ArchiveItem[]).map((x) => ({ ...x, old: normalizeRecord(x.old) })));
+    }
   }
   // Başka bir kullanıcının yaptığı değişikliklerin manuel "yenile" olmadan
   // kendiliğinden görünmesi için: oturum açıkken ana veriler düzenli
@@ -453,24 +442,43 @@ export default function Home() {
   // state değişimi yapar, sayfa hiçbir zaman elle yenilenmek zorunda kalmaz.
   useEffect(() => {
     if (!signedIn) return;
-    const sync = () => {
-      if (document.hidden) return;
-      refreshRecords();
-      refreshCashAccounts();
-      refreshCashTransfers();
-      refreshSections();
-      refreshNotes();
-      refreshNoteColumns();
-      refreshExchangeRates();
-      refreshArchive();
+    // Chrome aynı sunucuya en fazla 6 eşzamanlı bağlantı açar. Önceden 8 istek aynı anda çıkıp kullanıcının
+    // "Kaydet/Güncelle" isteğini kuyruğa sokuyordu (takılma). Şimdi istekler SIRAYLA gider (tek bağlantı), sık değişenler
+    // her turda, nadir değişenler (bölümler, sütunlar, kurlar, arşiv) 6 turda bir yenilenir; çakışan turlar atlanır.
+    let running = false;
+    let tick = 0;
+    let lastRun = 0;
+    const sync = async (force = false) => {
+      if (document.hidden || running) return;
+      const now = Date.now();
+      // focus + visibilitychange art arda tetiklenir; 2 sn içinde ikinci tur çalıştırılmaz.
+      if (!force && now - lastRun < 2000) return;
+      running = true;
+      lastRun = now;
+      try {
+        await refreshRecords();
+        await refreshCashAccounts();
+        await refreshCashTransfers();
+        await refreshNotes();
+        if (tick % 6 === 0) {
+          await refreshSections();
+          await refreshNoteColumns();
+          await refreshExchangeRates();
+          await refreshArchive();
+        }
+        tick += 1;
+      } finally {
+        running = false;
+      }
     };
-    const interval = setInterval(sync, 5000);
-    document.addEventListener("visibilitychange", sync);
-    window.addEventListener("focus", sync);
+    const interval = setInterval(() => { void sync(true); }, 5000);
+    const onWake = () => { void sync(false); };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", sync);
-      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn]);
@@ -489,6 +497,7 @@ export default function Home() {
     }
   }
   async function removeRecord(item: RecordItem, reason: string) {
+    markWrite();
     try {
       const response = await fetch(`/api/records/${item.id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
       if (!response.ok) {
@@ -535,6 +544,7 @@ export default function Home() {
 
   const noteSaveError = tx(language, "Not kaydedilemedi.", "The note could not be saved.", "Nîşe nehat tomarkirin.");
   async function createNote(input: Partial<FinanceNote>) {
+    markWrite();
     try {
       const response = await fetch("/api/notes", {
         method: "POST",
@@ -543,12 +553,14 @@ export default function Home() {
       });
       if (!response.ok) return alert(noteSaveError);
       const data = await response.json();
+      markWrite();
       setNotes((n) => [data.note, ...n]);
     } catch {
       alert(noteSaveError);
     }
   }
   async function updateNote(note: FinanceNote & { addAttachments?: RecordAttachment[]; removeAttachmentIndexes?: number[] }) {
+    markWrite();
     try {
       const response = await fetch(`/api/notes/${note.id}`, {
         method: "PUT",
@@ -557,12 +569,14 @@ export default function Home() {
       });
       if (!response.ok) return alert(noteSaveError);
       const data = await response.json();
+      markWrite();
       setNotes((n) => n.map((x) => (x.id === note.id ? data.note : x)));
     } catch {
       alert(noteSaveError);
     }
   }
   async function deleteNote(id: number, reason: string) {
+    markWrite();
     try {
       const response = await fetch(`/api/notes/${id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
       if (!response.ok) return alert(noteSaveError);

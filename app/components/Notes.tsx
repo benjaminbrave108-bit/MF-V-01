@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Title } from "./shared";
 import { tx, noteRelationLabel } from "../lib/i18n";
@@ -15,6 +15,9 @@ const DEFAULT_COLUMNS = (language: Language): NoteColumn[] => [
   { id: 3, key: "pending", label: tx(language, "Bekleyen Notlar", "Pending Notes", "Nîşeyên Li Bendê"), color: "#5b86f0" },
   { id: 4, key: "completed", label: tx(language, "Tamamlanmış Notlar", "Completed Notes", "Nîşeyên Qediyayî"), color: "#38a477" },
 ];
+
+const pKey = (name: string) => name.trim().toLocaleLowerCase("tr");
+const NO_PERSON = "__none__";
 
 const MAX_NOTE_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
@@ -115,12 +118,58 @@ export function Notes({
 
   const columns = noteColumns && noteColumns.length ? noteColumns : DEFAULT_COLUMNS(language);
   const firstKey = columns[0].key;
+  // Süzgeçler: kişiler (çoklu seçim, herhangi biri), serbest arama, atanan kullanıcı ve ilişkili bölüm.
+  const [pickedPeople, setPickedPeople] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [userFilter, setUserFilter] = useState("");
+  const [relationFilter, setRelationFilter] = useState("");
+  const [peopleExpanded, setPeopleExpanded] = useState(false);
+  const togglePerson = (key: string) => setPickedPeople((cur) => { const next = new Set(cur); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   // Arşivlenen notlar panoda görünmez (bkz. Arşiv > Notlar Arşivi). Silinmiş bir sütunun
   // anahtarını taşıyan not (olağan dışı) ilk sütunda gösterilir.
   const activeNotes = notes.filter((note) => !note.isArchived);
   const columnKeys = new Set(columns.map((c) => c.key));
+  // Tüm notlardaki (arşiv dahil) kişi adları: öneri listesi. Etkin notlardakiler: süzgeç çipleri (not sayısıyla).
+  const knownPeople = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const n of notes) for (const p of n.people ?? []) if (!seen.has(pKey(p))) seen.set(pKey(p), p);
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, "tr"));
+  }, [notes]);
+  const peopleStats = useMemo(() => {
+    const stats = new Map<string, { name: string; count: number }>();
+    for (const n of notes) {
+      if (n.isArchived) continue;
+      for (const p of n.people ?? []) {
+        const cur = stats.get(pKey(p));
+        if (cur) cur.count += 1; else stats.set(pKey(p), { name: p, count: 1 });
+      }
+    }
+    return [...stats.entries()].map(([key, v]) => ({ key, ...v })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"));
+  }, [notes]);
+  const noPersonCount = activeNotes.filter((n) => !(n.people ?? []).length).length;
+  const q = query.trim().toLocaleLowerCase("tr");
+  const filtersOn = pickedPeople.size > 0 || q !== "" || userFilter !== "" || relationFilter !== "";
+  const matches = (note: FinanceNote) => {
+    if (pickedPeople.size > 0) {
+      const keys = (note.people ?? []).map(pKey);
+      const ok = (pickedPeople.has(NO_PERSON) && keys.length === 0) || keys.some((k) => pickedPeople.has(k));
+      if (!ok) return false;
+    }
+    if (userFilter && !note.assignedUserIds.includes(Number(userFilter))) return false;
+    if (relationFilter && note.relation !== relationFilter) return false;
+    if (q) {
+      const hay = [note.title, note.content, note.relationDetail, ...(note.people ?? []), ...(note.assignedUserNames ?? [])].join(" ").toLocaleLowerCase("tr");
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  };
+  const shownTotal = activeNotes.filter(matches).length;
+  const clearFilters = () => { setPickedPeople(new Set()); setQuery(""); setUserFilter(""); setRelationFilter(""); };
+  const CHIP_LIMIT = 14;
+  const chipList = peopleExpanded ? peopleStats : peopleStats.slice(0, CHIP_LIMIT);
   const visibleNotes = (status: NoteStatus) =>
     activeNotes
+      .filter(matches)
       .filter((note) => (columnKeys.has(note.status) ? note.status === status : status === firstKey))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const moveNote = (id: number, status: NoteStatus) => {
@@ -134,6 +183,38 @@ export function Notes({
           title={tx(language, "Mali Özel Notları", "Private Finance Notes", "Nîşeyên Taybet ên Darayî")}
           sub={tx(language, "Kasa, gelir ve giderlerle ilgili özel açıklamalar", "Private notes about cash, income and expenses", "Daxuyaniyên taybet derbarê qase, dahat û mesrefan")}
         />
+      </div>
+      <div className="noteFilters">
+        <div className="noteFilterRow">
+          <input type="search" className="noteSearch" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tx(language, "Ara: başlık, içerik, kişi…", "Search: title, content, person…", "Bigere: sernav, naverok, kes…")} />
+          <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)} aria-label={tx(language, "Atanan kullanıcı", "Assigned user", "Bikarhênerê hatiye diyarkirin")}>
+            <option value="">{tx(language, "Tüm kullanıcılar", "All users", "Hemû bikarhêner")}</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select value={relationFilter} onChange={(e) => setRelationFilter(e.target.value)} aria-label={tx(language, "İlişkili bölüm", "Linked section", "Beşa girêdayî")}>
+            <option value="">{tx(language, "Tüm bölümler", "All sections", "Hemû beş")}</option>
+            {(["cash", "income", "expense", "reports", "archive", "other"] as NoteRelation[]).map((r) => <option key={r} value={r}>{noteRelationLabel(r, language)}</option>)}
+          </select>
+          <span className="noteFilterCount">{filtersOn ? `${shownTotal} / ${activeNotes.length}` : activeNotes.length} {tx(language, "not", "notes", "nîşe")}</span>
+          {filtersOn && <button type="button" className="light compact" onClick={clearFilters}>{tx(language, "Süzgeci temizle", "Clear filters", "Parzûnê paqij bike")}</button>}
+        </div>
+        {(peopleStats.length > 0 || noPersonCount > 0) && (
+          <div className="notePeopleRow">
+            <b>{tx(language, "Kişiler", "People", "Kes")}</b>
+            <div className="notePeopleChips">
+              <button type="button" className={`notePerson${pickedPeople.size === 0 ? " on" : ""}`} onClick={() => setPickedPeople(new Set())}>{tx(language, "Tümü", "All", "Hemû")} <em>{activeNotes.length}</em></button>
+              {chipList.map((p) => (
+                <button type="button" key={p.key} className={`notePerson${pickedPeople.has(p.key) ? " on" : ""}`} onClick={() => togglePerson(p.key)}>{p.name} <em>{p.count}</em></button>
+              ))}
+              {peopleStats.length > CHIP_LIMIT && (
+                <button type="button" className="notePerson more" onClick={() => setPeopleExpanded((v) => !v)}>{peopleExpanded ? tx(language, "Daha az", "Less", "Kêmtir") : `+${peopleStats.length - CHIP_LIMIT} ${tx(language, "kişi daha", "more", "kesên din")}`}</button>
+              )}
+              {noPersonCount > 0 && peopleStats.length > 0 && (
+                <button type="button" className={`notePerson none${pickedPeople.has(NO_PERSON) ? " on" : ""}`} onClick={() => togglePerson(NO_PERSON)}>{tx(language, "Kişisiz", "No person", "Bê kes")} <em>{noPersonCount}</em></button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <div className="noteBoard" style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(220px, 1fr))` }}>
         {columns.map((column) => (
@@ -182,6 +263,13 @@ export function Notes({
                         ))}
                       </div>
                     )}
+                    {note.people && note.people.length > 0 && (
+                      <div className="notePeopleTags">
+                        {note.people.map((p) => (
+                          <button type="button" key={p} className={`notePersonTag${pickedPeople.has(pKey(p)) ? " on" : ""}`} title={tx(language, "Bu kişiye göre süz", "Filter by this person", "Li gorî vê kesê parzûn bike")} onClick={() => togglePerson(pKey(p))}>🧑 {p}</button>
+                        ))}
+                      </div>
+                    )}
                     {note.assignedUserNames && note.assignedUserNames.length > 0 && (
                       <small className="noteAssigned">👤 {note.assignedUserNames.join(", ")}{assignedToMe ? ` (${tx(language, "siz", "you", "tu")})` : ""}</small>
                     )}
@@ -198,8 +286,8 @@ export function Notes({
           </section>
         ))}
       </div>
-      {addingTo && <NoteModal language={language} initialStatus={addingTo} users={users} columns={columns} onClose={() => setAddingTo(null)} onSave={(note) => { onCreateNote(note); setAddingTo(null); }} />}
-      {editingNote && <NoteModal language={language} initialStatus={editingNote.status} initialNote={editingNote} users={users} columns={columns} onClose={() => setEditingNote(null)} onSave={(updated) => { onUpdateNote(updated); setEditingNote(null); }} />}
+      {addingTo && <NoteModal language={language} initialStatus={addingTo} users={users} knownPeople={knownPeople} columns={columns} onClose={() => setAddingTo(null)} onSave={(note) => { onCreateNote(note); setAddingTo(null); }} />}
+      {editingNote && <NoteModal language={language} initialStatus={editingNote.status} initialNote={editingNote} users={users} knownPeople={knownPeople} columns={columns} onClose={() => setEditingNote(null)} onSave={(updated) => { onUpdateNote(updated); setEditingNote(null); }} />}
       {detailNote && createPortal(
         <NoteDetailPanel
           language={language}
@@ -249,6 +337,9 @@ function NoteDetailPanel({ language, note, columns, onClose, onEdit, onMessages 
               ))}
             </div>
           </div>
+        )}
+        {note.people && note.people.length > 0 && (
+          <p className="noteDrawerRow"><b>{tx(language, "Kişiler", "People", "Kes")}</b><span>🧑 {note.people.join(", ")}</span></p>
         )}
         {note.assignedUserNames && note.assignedUserNames.length > 0 && (
           <p className="noteDrawerRow"><b>{tx(language, "Atanan", "Assigned", "Hatiye diyarkirin")}</b><span>👤 {note.assignedUserNames.join(", ")}</span></p>
@@ -354,13 +445,27 @@ function NoteMessagesModal({ language, note, onClose }: { language: Language; no
   );
 }
 
-function NoteModal({ language, initialStatus, initialNote, initialRelation, initialRelationDetail, users, columns, onClose, onSave }: { language: Language; initialStatus: NoteStatus; initialNote?: FinanceNote; initialRelation?: NoteRelation; initialRelationDetail?: string; users: UserAccount[]; columns: NoteColumn[]; onClose: () => void; onSave: (note: NoteSave) => void }) {
+function NoteModal({ language, initialStatus, initialNote, initialRelation, initialRelationDetail, users, knownPeople, columns, onClose, onSave }: { language: Language; initialStatus: NoteStatus; initialNote?: FinanceNote; initialRelation?: NoteRelation; initialRelationDetail?: string; users: UserAccount[]; knownPeople: string[]; columns: NoteColumn[]; onClose: () => void; onSave: (note: NoteSave) => void }) {
   const [title, setTitle] = useState(initialNote?.title ?? "");
   const [content, setContent] = useState(initialNote?.content ?? "");
   const [status, setStatus] = useState<NoteStatus>(initialStatus);
   const [relation, setRelation] = useState<NoteRelation>(initialNote?.relation ?? initialRelation ?? "none");
   const [relationDetail, setRelationDetail] = useState(initialNote?.relationDetail ?? initialRelationDetail ?? "");
   const [assignedUserIds, setAssignedUserIds] = useState<number[]>(initialNote?.assignedUserIds ?? []);
+  const [people, setPeople] = useState<string[]>(initialNote?.people ?? []);
+  const [personDraft, setPersonDraft] = useState("");
+  const splitNames = (raw: string) => raw.split(",").map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
+  const mergePeople = (cur: string[], names: string[]) => {
+    const next = [...cur];
+    for (const n of names) if (!next.some((x) => pKey(x) === pKey(n))) next.push(n);
+    return next;
+  };
+  function addPeople(raw: string) {
+    const names = splitNames(raw);
+    if (!names.length) return;
+    setPeople((cur) => mergePeople(cur, names));
+    setPersonDraft("");
+  }
   // Mevcut belgeler (adlar) — kaldırılacaklar işaretlenir; yeni belgeler tam veriyle eklenir.
   const existingNames = initialNote?.attachmentNames ?? [];
   const [removedIdx, setRemovedIdx] = useState<number[]>([]);
@@ -400,7 +505,7 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
       reader.readAsDataURL(file);
     }
   }
-  return <div className="overlay"><form className="modal noteModal" onSubmit={(event) => { event.preventDefault(); const now = new Date().toISOString(); if (title.trim() && content.trim()) onSave({ id: initialNote?.id ?? Date.now(), title: title.trim(), content: content.trim(), status, relation, relationDetail: relation === "none" ? "" : relationDetail.trim(), assignedUserIds, assignedUserNames: users.filter((u) => assignedUserIds.includes(u.id)).map((u) => u.name), isArchived: initialNote?.isArchived ?? false, archivedAt: initialNote?.archivedAt ?? null, createdAt: initialNote?.createdAt ?? now, updatedAt: now, addAttachments: newFiles, removeAttachmentIndexes: removedIdx }); }}>
+  return <div className="overlay"><form className="modal noteModal" onSubmit={(event) => { event.preventDefault(); const now = new Date().toISOString(); if (title.trim() && content.trim()) onSave({ id: initialNote?.id ?? Date.now(), title: title.trim(), content: content.trim(), status, relation, relationDetail: relation === "none" ? "" : relationDetail.trim(), assignedUserIds, people: mergePeople(people, splitNames(personDraft)), assignedUserNames: users.filter((u) => assignedUserIds.includes(u.id)).map((u) => u.name), isArchived: initialNote?.isArchived ?? false, archivedAt: initialNote?.archivedAt ?? null, createdAt: initialNote?.createdAt ?? now, updatedAt: now, addAttachments: newFiles, removeAttachmentIndexes: removedIdx }); }}>
     <div className="modalHead"><div><h2>{initialNote ? tx(language, "Mali Notu Düzenle", "Edit Finance Note", "Nîşeya Darayî Biguherîne") : tx(language, "Yeni Mali Not", "New Finance Note", "Nîşeya Darayî ya Nû")}</h2><p>{tx(language, "Not bilgilerini ve bağlantılı olduğu bölümü belirleyin.", "Set the note details and its linked section.", "Agahiyên nîşeyê û beşa girêdayî diyar bikin.")}</p></div><button type="button" onClick={onClose}>×</button></div>
     <div className="formGrid"><label>{tx(language, "Not Başlığı", "Note Title", "Sernavê Nîşeyê")}<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>{tx(language, "Not Durumu", "Note Status", "Rewşa Nîşeyê")}<select value={status} onChange={(event) => setStatus(event.target.value as NoteStatus)}>{columns.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}</select></label><label>{tx(language, "İlişkili Bölüm", "Linked Section", "Beşa Girêdayî")}<select value={relation} onChange={(event) => setRelation(event.target.value as NoteRelation)}>{relationOptions.map((option) => <option key={option} value={option}>{noteRelationLabel(option, language)}</option>)}</select></label><label>{tx(language, "İlişki Detayı", "Link Detail", "Hûrguliya Girêdanê")}<input value={relationDetail} disabled={relation === "none"} onChange={(event) => setRelationDetail(event.target.value)} placeholder={tx(language, "Örn. Ağustos 2026 veya kasa adı", "E.g. August 2026 or cash account", "Mînak: Tebax 2026 an navê qaseyê")} /></label>
       <label className="wide">
@@ -423,6 +528,24 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
         )}
         <small className="listKasaHint">{tx(language, "Atanan kullanıcılar bu nota mesaj yazabilir.", "Assigned users can write messages on this note.", "Bikarhênerên diyarkirî dikarin li ser vê nîşeyê peyam binivîsin.")}</small>
       </label>
+      <div className="wide notePeopleField">
+        <span>{tx(language, "İlgili Kişiler (kullanıcı olmayanlar da yazılabilir)", "People Involved (non-users can be typed too)", "Kesên Têkildar (ne-bikarhêner jî dikarin werin nivîsandin)")}</span>
+        <div className="notePeopleInput">
+          {people.map((p) => (
+            <span className="notePersonTag editable" key={p}>🧑 {p}<button type="button" aria-label={tx(language, "Kaldır", "Remove", "Rake")} onClick={() => setPeople((cur) => cur.filter((x) => x !== p))}>×</button></span>
+          ))}
+          <input
+            list="notePeopleList"
+            value={personDraft}
+            placeholder={people.length ? "" : tx(language, "Ad yazıp Enter tuşuna basın (örn. Ahmet Yılmaz)", "Type a name and press Enter (e.g. Ahmet Yilmaz)", "Nav binivîse û Enter bike")}
+            onChange={(e) => { const v = e.target.value; if (v.includes(",")) addPeople(v); else setPersonDraft(v); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPeople(personDraft); } else if (e.key === "Backspace" && !personDraft && people.length) setPeople((cur) => cur.slice(0, -1)); }}
+            onBlur={() => addPeople(personDraft)}
+          />
+          <datalist id="notePeopleList">{knownPeople.filter((k) => !people.some((x) => pKey(x) === pKey(k))).map((k) => <option key={k} value={k} />)}</datalist>
+        </div>
+        <small className="listKasaHint">{tx(language, "Notlar sayfasında bu kişilere göre süzebilirsiniz.", "You can filter notes by these people on the Notes page.", "Hûn dikarin li ser rûpela Nîşeyan li gorî van kesan parzûn bikin.")}</small>
+      </div>
       <label className="wide">{tx(language, "İçerik", "Description", "Naverok")}<textarea rows={6} value={content} onChange={(event) => setContent(event.target.value)} placeholder={tx(language, "Notun ayrıntılarını yazın…", "Write the note details…", "Hûrguliyên nîşeyê binivîse…")} /></label>
       <label className="wide">
         {tx(language, "Belgeler (Excel/Office/PDF/Resim)", "Documents (Excel/Office/PDF/Image)", "Belge (Excel/Office/PDF/Wêne)")}

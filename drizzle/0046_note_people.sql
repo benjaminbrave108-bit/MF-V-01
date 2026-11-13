@@ -1,0 +1,1 @@
+ALTER TABLE "finance_notes" ADD COLUMN "people" jsonb DEFAULT '[]'::jsonb NOT NULL;
