@@ -33,6 +33,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       relationDetail: payload.relationDetail,
       assignedUserIds: payload.assignedUserIds,
       people: dedupePeople(payload.people),
+      link: payload.link,
       attachments: payload.addAttachments,
     })
     .returning();

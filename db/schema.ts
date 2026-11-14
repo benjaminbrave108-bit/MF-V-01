@@ -415,6 +415,8 @@ export const financeNotes = pgTable("finance_notes", {
   // Sistem kullanıcısı olmayan, serbest metinle girilen ilgili kişiler (müşteri, tedarikçi, çalışan…) —
   // Notlar sayfasındaki kişi süzgecinin esası. Ad dizisi; eşleştirme büyük/küçük harf duyarsızdır.
   people: jsonb("people").notNull().default([]),
+  // Nota iliştirilen dış bağlantı (http/https; sunucu normalize eder).
+  link: text("link").notNull().default(""),
   // "Arşivle" — elle tetiklenen bir eylem; arşivlenen not Notlar panosundan
   // kaybolup Arşiv > Notlar Arşivi bölümünde kalıcı olarak görünür kalır.
   // Bu, panonun zamanla birikip kalabalıklaşmasını (kullanıcının bahsettiği

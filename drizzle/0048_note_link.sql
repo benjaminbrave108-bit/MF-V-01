@@ -1,0 +1,1 @@
+ALTER TABLE "finance_notes" ADD COLUMN "link" text DEFAULT '' NOT NULL;

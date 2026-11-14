@@ -61,6 +61,7 @@ export const POST = withErrorHandling(async (request: Request) => {
           relation: n.relation,
           relationDetail: n.relationDetail,
           people: dedupePeople(n.people),
+          link: n.link,
         })),
       );
     }

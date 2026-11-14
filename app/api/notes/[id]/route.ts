@@ -43,6 +43,7 @@ export const PUT = withErrorHandling<{ params: Promise<{ id: string }> }>(async 
       relationDetail: payload.relationDetail,
       assignedUserIds: payload.assignedUserIds,
       people: dedupePeople(payload.people),
+      link: payload.link,
       attachments,
       isArchived,
       archivedAt: isArchived === old.isArchived ? old.archivedAt : isArchived ? new Date() : null,

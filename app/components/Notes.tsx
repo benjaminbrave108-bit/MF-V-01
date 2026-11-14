@@ -18,6 +18,8 @@ const DEFAULT_COLUMNS = (language: Language): NoteColumn[] => [
 
 const pKey = (name: string) => name.trim().toLocaleLowerCase("tr");
 const NO_PERSON = "__none__";
+const isHttp = (u?: string) => Boolean(u && /^https?:\/\//i.test(u));
+const shortLink = (u: string) => u.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
 
 const MAX_NOTE_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
@@ -263,6 +265,9 @@ export function Notes({
                         ))}
                       </div>
                     )}
+                    {isHttp(note.link) && (
+                      <a className="noteLinkChip" href={note.link} target="_blank" rel="noopener noreferrer" title={note.link} onClick={(e) => e.stopPropagation()}>🔗 <span>{shortLink(note.link!)}</span></a>
+                    )}
                     {note.people && note.people.length > 0 && (
                       <div className="notePeopleTags">
                         {note.people.map((p) => (
@@ -337,6 +342,9 @@ function NoteDetailPanel({ language, note, columns, onClose, onEdit, onMessages 
               ))}
             </div>
           </div>
+        )}
+        {isHttp(note.link) && (
+          <p className="noteDrawerRow"><b>{tx(language, "Link", "Link", "Lînk")}</b><span><a className="recordLink" href={note.link} target="_blank" rel="noopener noreferrer">🔗 {shortLink(note.link!)}</a></span></p>
         )}
         {note.people && note.people.length > 0 && (
           <p className="noteDrawerRow"><b>{tx(language, "Kişiler", "People", "Kes")}</b><span>🧑 {note.people.join(", ")}</span></p>
@@ -453,6 +461,8 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
   const [relationDetail, setRelationDetail] = useState(initialNote?.relationDetail ?? initialRelationDetail ?? "");
   const [assignedUserIds, setAssignedUserIds] = useState<number[]>(initialNote?.assignedUserIds ?? []);
   const [people, setPeople] = useState<string[]>(initialNote?.people ?? []);
+  const [link, setLink] = useState(initialNote?.link ?? "");
+  const linkHref = link.trim() ? (/^https?:\/\//i.test(link.trim()) ? link.trim() : `https://${link.trim()}`) : "";
   const [personDraft, setPersonDraft] = useState("");
   const splitNames = (raw: string) => raw.split(",").map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
   const mergePeople = (cur: string[], names: string[]) => {
@@ -505,7 +515,7 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
       reader.readAsDataURL(file);
     }
   }
-  return <div className="overlay"><form className="modal noteModal" onSubmit={(event) => { event.preventDefault(); const now = new Date().toISOString(); if (title.trim() && content.trim()) onSave({ id: initialNote?.id ?? Date.now(), title: title.trim(), content: content.trim(), status, relation, relationDetail: relation === "none" ? "" : relationDetail.trim(), assignedUserIds, people: mergePeople(people, splitNames(personDraft)), assignedUserNames: users.filter((u) => assignedUserIds.includes(u.id)).map((u) => u.name), isArchived: initialNote?.isArchived ?? false, archivedAt: initialNote?.archivedAt ?? null, createdAt: initialNote?.createdAt ?? now, updatedAt: now, addAttachments: newFiles, removeAttachmentIndexes: removedIdx }); }}>
+  return <div className="overlay"><form className="modal noteModal" onSubmit={(event) => { event.preventDefault(); const now = new Date().toISOString(); if (title.trim() && content.trim()) onSave({ id: initialNote?.id ?? Date.now(), title: title.trim(), content: content.trim(), status, relation, relationDetail: relation === "none" ? "" : relationDetail.trim(), assignedUserIds, people: mergePeople(people, splitNames(personDraft)), link: link.trim(), assignedUserNames: users.filter((u) => assignedUserIds.includes(u.id)).map((u) => u.name), isArchived: initialNote?.isArchived ?? false, archivedAt: initialNote?.archivedAt ?? null, createdAt: initialNote?.createdAt ?? now, updatedAt: now, addAttachments: newFiles, removeAttachmentIndexes: removedIdx }); }}>
     <div className="modalHead"><div><h2>{initialNote ? tx(language, "Mali Notu Düzenle", "Edit Finance Note", "Nîşeya Darayî Biguherîne") : tx(language, "Yeni Mali Not", "New Finance Note", "Nîşeya Darayî ya Nû")}</h2><p>{tx(language, "Not bilgilerini ve bağlantılı olduğu bölümü belirleyin.", "Set the note details and its linked section.", "Agahiyên nîşeyê û beşa girêdayî diyar bikin.")}</p></div><button type="button" onClick={onClose}>×</button></div>
     <div className="formGrid"><label>{tx(language, "Not Başlığı", "Note Title", "Sernavê Nîşeyê")}<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>{tx(language, "Not Durumu", "Note Status", "Rewşa Nîşeyê")}<select value={status} onChange={(event) => setStatus(event.target.value as NoteStatus)}>{columns.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}</select></label><label>{tx(language, "İlişkili Bölüm", "Linked Section", "Beşa Girêdayî")}<select value={relation} onChange={(event) => setRelation(event.target.value as NoteRelation)}>{relationOptions.map((option) => <option key={option} value={option}>{noteRelationLabel(option, language)}</option>)}</select></label><label>{tx(language, "İlişki Detayı", "Link Detail", "Hûrguliya Girêdanê")}<input value={relationDetail} disabled={relation === "none"} onChange={(event) => setRelationDetail(event.target.value)} placeholder={tx(language, "Örn. Ağustos 2026 veya kasa adı", "E.g. August 2026 or cash account", "Mînak: Tebax 2026 an navê qaseyê")} /></label>
       <label className="wide">
@@ -546,6 +556,13 @@ function NoteModal({ language, initialStatus, initialNote, initialRelation, init
         </div>
         <small className="listKasaHint">{tx(language, "Notlar sayfasında bu kişilere göre süzebilirsiniz.", "You can filter notes by these people on the Notes page.", "Hûn dikarin li ser rûpela Nîşeyan li gorî van kesan parzûn bikin.")}</small>
       </div>
+      <label className="wide">
+        {tx(language, "Link (isteğe bağlı)", "Link (optional)", "Lînk (bijarte)")}
+        <span className="rfLinkRow">
+          <input type="text" inputMode="url" autoComplete="off" value={link} placeholder="https://…" onChange={(e) => setLink(e.target.value)} />
+          {linkHref && <a className="rfLinkOpen" href={linkHref} target="_blank" rel="noopener noreferrer" title={tx(language, "Bağlantıyı yeni sekmede aç", "Open the link in a new tab", "Lînkê di tabeke nû de veke")}>↗</a>}
+        </span>
+      </label>
       <label className="wide">{tx(language, "İçerik", "Description", "Naverok")}<textarea rows={6} value={content} onChange={(event) => setContent(event.target.value)} placeholder={tx(language, "Notun ayrıntılarını yazın…", "Write the note details…", "Hûrguliyên nîşeyê binivîse…")} /></label>
       <label className="wide">
         {tx(language, "Belgeler (Excel/Office/PDF/Resim)", "Documents (Excel/Office/PDF/Image)", "Belge (Excel/Office/PDF/Wêne)")}
